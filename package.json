@@ -1,0 +1,77 @@
+{
+  "name": "snappy-prerender",
+  "version": "0.1.0",
+  "description": "Drop-in prerendering for existing single-page apps. Renders your built app in a real browser, writes static HTML per route, and fails the build on React hydration mismatches.",
+  "type": "module",
+  "license": "MIT",
+  "author": "sayakmukherjee080",
+  "homepage": "https://github.com/sayakmukherjee080/snappy-prerender#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sayakmukherjee080/snappy-prerender.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sayakmukherjee080/snappy-prerender/issues"
+  },
+  "keywords": [
+    "prerender",
+    "prerendering",
+    "ssg",
+    "static-site",
+    "spa",
+    "react",
+    "vite",
+    "hydration",
+    "seo",
+    "playwright"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./core": "./src/core/index.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "snappy-prerender": "./src/cli.js"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "test": "node scripts/run-tests.mjs tests/unit",
+    "test:integration": "node scripts/run-tests.mjs tests/integration",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "prepublishOnly": "npm run lint && npm test && npm run test:integration"
+  },
+  "dependencies": {
+    "@puppeteer/browsers": "3.2.3",
+    "parse5": "8.0.0",
+    "playwright-core": "1.63.0",
+    "sirv": "3.0.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.0.0",
+    "@vitejs/plugin-react": "5.0.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "7.3.6"
+  },
+  "workspaces": [
+    "tests/fixtures/react18-app"
+  ],
+  "peerDependencies": {
+    "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}

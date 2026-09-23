@@ -1,1 +1,7 @@
 /reference
+node_modules
+/temp
+/coverage
+/tests/fixtures/*/dist
+*.log
+.DS_Store

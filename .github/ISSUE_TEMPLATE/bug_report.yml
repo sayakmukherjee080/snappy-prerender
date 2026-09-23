@@ -1,0 +1,47 @@
+name: Bug report
+description: Something prerendered incorrectly, failed, or crashed
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: snappy-prerender version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version, OS, and whether Vite plugin or CLI was used
+      placeholder: Node 22.13, Windows 11, Vite plugin
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Plugin or CLI options in use, with anything sensitive redacted
+      render: js
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Include the full command output. Re-run with --log-level debug if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: A repository or a short description of the app that reproduces it
+    validations:
+      required: false

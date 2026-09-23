@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { normaliseHtml } from '../../src/core/normalize.js';
+
+const PAGE = [
+  '<!DOCTYPE html>',
+  '<html lang="en">',
+  '<head>',
+  '<meta charset="UTF-8">',
+  '<style id="snappy-freeze">* { animation: none !important; }</style>',
+  '<style>.button { color: red; }</style>',
+  '<style>.button { color: red; }</style>',
+  '<style>.unique { color: blue; }</style>',
+  '</head>',
+  '<body>',
+  '<div id="root"><h1>Hello</h1><span data-prerender-remove>debug</span></div>',
+  '<script type="module" src="/assets/app.js"></script>',
+  '</body>',
+  '</html>',
+].join('');
+
+describe('normaliseHtml', () => {
+  it('removes the injected animation-freezing style', () => {
+    const { html } = normaliseHtml(PAGE);
+    assert.equal(html.includes('snappy-freeze'), false);
+  });
+
+  it('removes elements marked with data-prerender-remove', () => {
+    const { html, stats } = normaliseHtml(PAGE);
+    assert.equal(html.includes('data-prerender-remove'), false);
+    assert.equal(html.includes('debug'), false);
+    assert.equal(stats.removedElements, 2);
+  });
+
+  it('drops duplicate style tags but keeps unique ones', () => {
+    const { html, stats } = normaliseHtml(PAGE);
+    assert.equal(stats.dedupedStyles, 1);
+    assert.equal(html.split('.button { color: red; }').length - 1, 1);
+    assert.equal(html.includes('.unique { color: blue; }'), true);
+  });
+
+  it('preserves the doctype, app markup and module scripts', () => {
+    const { html } = normaliseHtml(PAGE);
+    assert.equal(html.startsWith('<!DOCTYPE html>'), true);
+    assert.equal(html.includes('<h1>Hello</h1>'), true);
+    assert.equal(html.includes('type="module"'), true);
+    assert.equal(html.includes('/assets/app.js'), true);
+  });
+
+  it('removes marked elements inside template content', () => {
+    const page =
+      '<!DOCTYPE html><html><body><template><p data-prerender-remove>tmp</p></template></body></html>';
+    const { html, stats } = normaliseHtml(page);
+    assert.equal(html.includes('data-prerender-remove'), false);
+    assert.equal(html.includes('tmp'), false);
+    assert.equal(stats.removedElements, 1);
+  });
+
+  it('does not dedupe identical styles outside the head', () => {
+    const page =
+      '<!DOCTYPE html><html><head></head><body><style>.x{}</style><style>.x{}</style></body></html>';
+    const { stats } = normaliseHtml(page);
+    assert.equal(stats.dedupedStyles, 0);
+  });
+});
