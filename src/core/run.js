@@ -66,7 +66,10 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     }
   } finally {
     if (browser) await browser.close();
-    await server.close();
+    const stopped = await server.close();
+    if (stopped === false) {
+      log.warn('serveCmd process did not exit after SIGKILL and may still be running');
+    }
   }
 
   report.durationMs = Date.now() - startedAt;

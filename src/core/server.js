@@ -84,7 +84,7 @@ export async function startCommandServer({ command, url, timeout, shutdownTimeou
       return exited ? new Error('process exited before responding') : null;
     });
   } catch (error) {
-    await stopChild(child, shutdownTimeout);
+    await stopProcessTree(child, shutdownTimeout);
     const tail = output.join('').trim();
     throw new Error(
       `serveCmd did not become reachable at ${url}: ${error.message}${tail ? `\n${tail}` : ''}`,
@@ -94,7 +94,7 @@ export async function startCommandServer({ command, url, timeout, shutdownTimeou
   return {
     origin: new URL(url).origin,
     async close() {
-      await stopChild(child, shutdownTimeout);
+      return stopProcessTree(child, shutdownTimeout);
     },
   };
 }
@@ -120,40 +120,90 @@ async function waitForUrl(url, timeout, failure) {
 }
 
 /**
- * Terminates the server process tree: SIGTERM first, then SIGKILL if the process is
- * still alive after the configured shutdown timeout. Windows uses taskkill /T /F
- * because detached process groups are not available there.
+ * Terminates a spawned server process tree. Windows uses taskkill /T /F because
+ * detached process groups are not available there. On POSIX the whole process group
+ * is signalled so shell wrappers and grandchildren die too, escalating to SIGKILL
+ * after the grace period. The child must have been spawned with `detached: true` on
+ * POSIX so it leads its own group; liveness is judged by the group, never by the
+ * direct child's exit, because a shell can die while the server it launched lives on.
+ * Returns false when the tree is still detectable at the end of the deadline.
  */
-async function stopChild(child, shutdownTimeout) {
-  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise((resolve) => child.once('exit', resolve));
+export async function stopProcessTree(child, shutdownTimeout, io = defaultProcessIo) {
+  if (!child.pid) return true;
 
-  if (process.platform === 'win32') {
-    await runTaskkill(child.pid);
-  } else {
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      child.kill('SIGTERM');
-    }
+  if (io.platform === 'win32') {
+    if (io.hasExited(child)) return true;
+    await io.runTaskkill(child.pid);
+    return waitForChildExit(child, shutdownTimeout, io);
   }
 
-  const timedOut = await Promise.race([
-    exited.then(() => false),
-    new Promise((resolve) => setTimeout(() => resolve(true), shutdownTimeout)),
-  ]);
-  if (!timedOut) return;
+  if (!io.isGroupAlive(child.pid)) return true;
 
-  if (process.platform === 'win32') {
-    await runTaskkill(child.pid);
-  } else {
+  io.signalGroup(child.pid, 'SIGTERM');
+  if (await waitForGroupExit(child.pid, shutdownTimeout, io)) return true;
+
+  io.signalGroup(child.pid, 'SIGKILL');
+  return waitForGroupExit(child.pid, shutdownTimeout, io);
+}
+
+// Platform primitives used by stopProcessTree. Injectable so the POSIX escalation
+// path can be exercised from any host, including Windows.
+const defaultProcessIo = {
+  platform: process.platform,
+  hasExited,
+  isGroupAlive,
+  signalGroup,
+  runTaskkill,
+};
+
+// Reports whether the spawned child has already been reaped.
+function hasExited(child) {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
+// Reports whether any process in the child's process group still exists.
+function isGroupAlive(pid) {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
+// Signals the whole process group, falling back to the direct child when the group
+// is already gone or cannot be signalled.
+function signalGroup(pid, signal) {
+  try {
+    process.kill(-pid, signal);
+  } catch {
     try {
-      process.kill(-child.pid, 'SIGKILL');
+      process.kill(pid, signal);
     } catch {
-      child.kill('SIGKILL');
+      // Nothing left to signal.
     }
   }
-  await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, shutdownTimeout))]);
+}
+
+// Polls until the direct child is reaped, covering the gap between taskkill
+// returning and the exit event being observed.
+async function waitForChildExit(child, timeout, io) {
+  const startedAt = Date.now();
+  while (!io.hasExited(child)) {
+    if (Date.now() - startedAt > timeout) return false;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return true;
+}
+
+// Polls until the process group disappears or the deadline passes.
+async function waitForGroupExit(pid, timeout, io) {
+  const startedAt = Date.now();
+  while (io.isGroupAlive(pid)) {
+    if (Date.now() - startedAt > timeout) return false;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return true;
 }
 
 // Force-kills a process tree on Windows, resolving regardless of taskkill's outcome.
