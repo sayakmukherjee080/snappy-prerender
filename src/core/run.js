@@ -110,9 +110,11 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   }
 
   report.durationMs = Date.now() - startedAt;
+  const reRendered = report.verification?.modes['re-rendered'] ?? 0;
   report.ok =
     !(config.failOnError && (report.errors.length > 0 || report.truncated !== null)) &&
-    !(config.failOnHydrationError && report.verification && !report.verification.ok);
+    !(config.failOnHydrationError && report.verification && !report.verification.ok) &&
+    !(config.failOnRerender && reRendered > 0);
   return report;
 }
 
@@ -348,17 +350,29 @@ function logFileSummary(report, log) {
   log.info(parts.join(', ') + failed);
 }
 
-// Reports verification results per route, or the pass summary when clean.
+// Reports verification results per route, or the pass summary when clean, and warns
+// when routes discarded their prerendered markup on boot.
 function logVerification(verification, log) {
   if (verification.ok) {
     log.success(`Hydration verified for ${verification.routes.length} route(s)`);
-    return;
+  } else {
+    for (const entry of verification.routes.filter((route) => !route.ok)) {
+      log.error(`Hydration failed on ${entry.route}:`);
+      for (const message of entry.hydrationErrors) log.error(`  ${message.split('\n')[0]}`);
+    }
+    for (const error of verification.errors) {
+      log.error(`Verification could not run on ${error.route}: ${error.message}`);
+    }
   }
-  for (const entry of verification.routes.filter((route) => !route.ok)) {
-    log.error(`Hydration failed on ${entry.route}:`);
-    for (const message of entry.hydrationErrors) log.error(`  ${message.split('\n')[0]}`);
-  }
-  for (const error of verification.errors) {
-    log.error(`Verification could not run on ${error.route}: ${error.message}`);
+
+  const reRendered = verification.routes.filter((entry) => entry.mode === 're-rendered');
+  if (reRendered.length > 0) {
+    const sample = reRendered
+      .slice(0, 5)
+      .map((entry) => entry.route)
+      .join(', ');
+    log.warn(
+      `${reRendered.length} route(s) re-rendered instead of hydrating, so the prerendered markup was discarded on boot: ${sample}${reRendered.length > 5 ? ', …' : ''}`,
+    );
   }
 }

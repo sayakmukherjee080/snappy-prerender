@@ -55,7 +55,24 @@ npx snappy-prerender dist --inline-css critical --minify-html --preload-manifest
 4. Freezes CSS animations, blocks third-party requests, and records the resources the page used.
 5. Serialises the DOM, then post-processes it: removes the freeze style and `data-prerender-remove` elements, de-duplicates head styles, drops dead blob stylesheets, adds link hints, optionally inlines CSS, removes or marks scripts, optionally minifies.
 6. Writes `route/index.html` (or a screenshot), leaving identical files untouched.
-7. Reloads every written file with the real client bundle and reports React hydration errors.
+7. Reloads every written file with the real client bundle, reports React hydration errors, and records whether each route hydrated or re-rendered.
+
+## Hydration verification
+
+After writing the output, every route is loaded again with the real client bundle in a fresh browser context. The pass reports two things:
+
+**Hydration errors.** React mismatch messages, text mismatches and the minified production codes (`#418`, `#423`, `#425`) fail the build with the route and the message, because that is markup that breaks the moment the app attaches.
+
+**How the app booted.** A probe installed before the app's scripts run remembers the first prerendered node in the container and checks whether it survived:
+
+| Mode | Meaning |
+| --- | --- |
+| `hydrated` | The app adopted the prerendered markup, which is the goal. |
+| `re-rendered` | The app discarded it and rendered from scratch. |
+| `undetected` | No React root was found on the container, so the mode could not be judged. |
+| `unknown` | The prerendered node was never seen, for example a container outside the usual ids. |
+
+`re-rendered` matters because an app calling `createRoot` instead of `hydrateRoot` throws the prerendered DOM away on boot — and because `createRoot` cannot raise a hydration error, nothing else would ever tell you. It is reported per route as `verification.routes[].mode` and summarised in `verification.modes`, with a warning in the log. Set `failOnRerender: true` to make it fail the build as well.
 
 ## Ready contract
 
@@ -261,6 +278,7 @@ The built output is copied to the destination first, so assets sit beside the ge
 | `saveAs` | `html` | `html`, `png` or `jpeg` |
 | `verify` | `true` | Run the hydration verification pass |
 | `failOnHydrationError` | `true` | Fail the run on hydration errors |
+| `failOnRerender` | `false` | Fail the run when a route re-renders instead of hydrating |
 | `failOnError` | `true` | Fail the run on route render errors |
 | `dryRun` | `false` | Render and report without writing |
 | `logLevel` | `info` | `silent`, `error`, `warn`, `info`, `debug` |
@@ -282,7 +300,7 @@ if (!report.ok) {
 }
 ```
 
-The report exposes `routes`, `files` (with per-route `status`), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `verification`, `preloadManifest`, and `ok`.
+The report exposes `routes`, `files` (with per-route `status`), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `verification` (per-route `mode` plus a `modes` summary), `preloadManifest`, `truncated`, and `ok`.
 
 ## Differences from react-snap
 

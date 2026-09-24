@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isHydrationError } from '../../src/core/verify.js';
+import { classifyBoot, isHydrationError } from '../../src/core/verify.js';
 
 describe('isHydrationError', () => {
   it('detects React 18 and 19 hydration messages', () => {
@@ -40,5 +40,23 @@ describe('isHydrationError', () => {
   it('ignores generic mismatch wording from non-React sources', () => {
     assert.equal(isHydrationError('Origin does not match the allowed list'), false);
     assert.equal(isHydrationError('CSP header does not match policy'), false);
+  });
+});
+
+describe('classifyBoot', () => {
+  it('reports hydrated when the app keeps the prerendered markup', () => {
+    assert.equal(classifyBoot({ markupPreserved: true, frameworkMounted: true }), 'hydrated');
+  });
+
+  it('reports re-rendered when the markup is discarded', () => {
+    assert.equal(classifyBoot({ markupPreserved: false, frameworkMounted: true }), 're-rendered');
+  });
+
+  it('reports undetected when no React root attached to the container', () => {
+    assert.equal(classifyBoot({ markupPreserved: true, frameworkMounted: false }), 'undetected');
+  });
+
+  it('reports unknown when the prerendered child was never seen', () => {
+    assert.equal(classifyBoot({ markupPreserved: null, frameworkMounted: true }), 'unknown');
   });
 });

@@ -124,6 +124,14 @@ describe('prerender integration: react 19 app', () => {
     assert.equal(report.ok, false);
   });
 
+  it('reports the boot mode for the clean routes', () => {
+    const byRoute = new Map(report.verification.routes.map((entry) => [entry.route, entry]));
+    assert.equal(byRoute.get('/').mode, 'hydrated');
+    assert.equal(byRoute.get('/about').mode, 'hydrated');
+    assert.equal(byRoute.get('/').markupPreserved, true);
+    assert.equal(report.verification.modes.hydrated >= 2, true);
+  });
+
   it('leaves deterministic output untouched on a second run', async () => {
     const second = await prerender({ sourceDir, logLevel: 'silent' });
     const stable = second.files.filter((file) => file.route !== '/mismatch');
@@ -145,6 +153,27 @@ describe('prerender integration: react 18 app', () => {
     assert.equal(report.ok, true);
     const about = await fs.readFile(path.join(sourceDir, 'about', 'index.html'), 'utf8');
     assert.match(about, /About page/);
+  });
+});
+
+describe('prerender integration: re-rendering apps', () => {
+  it('detects an app that discards the prerendered markup instead of hydrating', async () => {
+    const sourceDir = await buildFixture('react19-rerender-app');
+
+    const tolerated = await prerender({ sourceDir, logLevel: 'silent' });
+
+    assert.deepEqual([...tolerated.routes], ['/']);
+    assert.equal(tolerated.verification.routes[0].markupPreserved, false);
+    assert.equal(tolerated.verification.routes[0].mode, 're-rendered');
+    assert.equal(tolerated.verification.modes['re-rendered'], 1);
+    // createRoot cannot raise a hydration error, so this is reported rather than failed.
+    assert.equal(tolerated.verification.ok, true);
+    assert.equal(tolerated.ok, true);
+
+    const enforced = await prerender({ sourceDir, logLevel: 'silent', failOnRerender: true });
+
+    assert.equal(enforced.verification.modes['re-rendered'], 1);
+    assert.equal(enforced.ok, false);
   });
 });
 
