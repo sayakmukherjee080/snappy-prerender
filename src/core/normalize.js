@@ -12,7 +12,7 @@ const REMOVE_ATTRIBUTE = 'data-prerender-remove';
  */
 export function normaliseHtml(html, options = {}) {
   const document = parse(html);
-  const stats = { removedElements: 0, dedupedStyles: 0, hints: 0 };
+  const stats = { removedElements: 0, dedupedStyles: 0, hints: 0, textSeparators: 0 };
   const seenStyles = new Set();
   cleanChildren(document, stats, seenStyles, false, options);
 
@@ -24,7 +24,8 @@ export function normaliseHtml(html, options = {}) {
   return { html: serialize(document), stats };
 }
 
-// Rebuilds a node's child list, dropping removed nodes and duplicate head styles.
+// Rebuilds a node's child list, dropping removed nodes, separating adjacent text nodes
+// and de-duplicating head styles.
 function cleanChildren(parent, stats, seenStyles, inHead, options) {
   const children = parent.childNodes ?? [];
   const kept = [];
@@ -35,9 +36,24 @@ function cleanChildren(parent, stats, seenStyles, inHead, options) {
     if (options.asyncScriptTags && child.tagName === 'script') markScriptAsync(child);
     cleanChildren(child, stats, seenStyles, childInHead, options);
     if (child.content) cleanChildren(child.content, stats, seenStyles, childInHead, options);
+    if (isText(kept[kept.length - 1]) && isText(child)) {
+      kept.push(createComment());
+      stats.textSeparators += 1;
+    }
     kept.push(child);
   }
   parent.childNodes = kept;
+}
+
+// Reports whether a node is a text node.
+function isText(node) {
+  return node?.nodeName === '#text';
+}
+
+// Builds the comment node that keeps two text siblings apart, matching what React's
+// own server rendering emits so hydration finds the same node boundaries.
+function createComment() {
+  return { nodeName: '#comment', data: ' ', parentNode: null };
 }
 
 // Reports whether a node is removed for any of the configured reasons.

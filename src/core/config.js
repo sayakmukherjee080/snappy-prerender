@@ -89,7 +89,7 @@ export const DEFAULTS = Object.freeze({
   flatOutput: false,
   notFoundRoute: '/404',
   verify: true,
-  failOnHydrationError: true,
+  failOnHydrationError: false,
   failOnRerender: false,
   failOnError: true,
   dryRun: false,

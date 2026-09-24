@@ -27,6 +27,7 @@ Options:
       --browser-download-hash <sha256>  Pin the fallback download to a SHA-256 digest
       --storage-state <file>  Playwright storage state for authenticated routes
       --no-verify             Skip the hydration verification pass
+      --fail-on-hydration-error  Fail the build when hydration errors are found
       --fail-on-rerender      Fail when a route re-renders instead of hydrating
       --no-block-third-party  Allow third-party requests during rendering
       --allowed-hosts <hosts>  Third-party hosts to allow while blocking the rest, comma separated
@@ -85,6 +86,7 @@ async function main() {
       'browser-download-hash': { type: 'string' },
       'storage-state': { type: 'string' },
       'no-verify': { type: 'boolean' },
+      'fail-on-hydration-error': { type: 'boolean' },
       'fail-on-rerender': { type: 'boolean' },
       'no-block-third-party': { type: 'boolean' },
       'allowed-hosts': { type: 'string', multiple: true },
@@ -164,6 +166,7 @@ function cliOptions({ values, positionals }) {
   }
   if (values['storage-state'] !== undefined) options.storageState = values['storage-state'];
   if (values['no-verify']) options.verify = false;
+  if (values['fail-on-hydration-error']) options.failOnHydrationError = true;
   if (values['fail-on-rerender']) options.failOnRerender = true;
   if (values['no-block-third-party']) options.blockThirdParty = false;
   if (values['allowed-hosts'] !== undefined)

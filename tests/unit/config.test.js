@@ -15,7 +15,7 @@ describe('resolveConfig', () => {
     assert.deepEqual(config.include, ['/']);
     assert.equal(config.timeout, DEFAULTS.timeout);
     assert.equal(config.verify, true);
-    assert.equal(config.failOnHydrationError, true);
+    assert.equal(config.failOnHydrationError, false);
     assert.equal(config.scrollStepDelay, DEFAULTS.scrollStepDelay);
     assert.equal(config.shutdownTimeout, DEFAULTS.shutdownTimeout);
     assert.equal(config.includeProvided, false);

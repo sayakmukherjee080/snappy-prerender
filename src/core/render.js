@@ -6,6 +6,7 @@ import { createResourceCollector } from './resources.js';
 import { toAppRoute, toServerUrl } from './routes.js';
 import { captureRuntimeStyles } from './runtime-styles.js';
 import { freezeAnimations, scrollThroughPage, settlePage, trackNetwork } from './settle.js';
+import { separateTextNodes } from './text-separators.js';
 
 /**
  * Renders one route in a fresh browser context and returns the serialised DOM plus
@@ -50,6 +51,7 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
     await injectCapturedState(page, collector.json);
     if (config.freezeAnimations) await freezeAnimations(page);
     if (config.scrollToBottom) await scrollThroughPage(page, config);
+    await separateTextNodes(page);
 
     const links = await collectLinks(page, config.base, origin);
 

@@ -10,7 +10,7 @@ import { normaliseHtml } from './normalize.js';
 import { findOutputCollisions, routeToScreenshotFile, writeRouteHtml } from './output.js';
 import { buildPreloadManifest } from './preload-manifest.js';
 import { renderRoute } from './render.js';
-import { crawlRoots, filterRoutes, toPublicPath, withinDepth } from './routes.js';
+import { crawlRoots, filterRoutes, normaliseRoute, toPublicPath, withinDepth } from './routes.js';
 import { createPool } from './scheduler.js';
 import { startCommandServer, startStaticServer } from './server.js';
 import { verifyRoutes } from './verify.js';
@@ -75,6 +75,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
 
     const verifiable = await writeAllRoutes({ rendered, outputDir, config, log, report });
     logFileSummary(report, log);
+    logNotFoundNotice(report, config, log);
 
     if (report.truncated) {
       log.error(
@@ -99,7 +100,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
         routes: verifiable.sort(),
         config,
       });
-      logVerification(report.verification, log);
+      logVerification(report.verification, config, log);
     }
   } finally {
     if (browser) await browser.close();
@@ -304,9 +305,14 @@ async function writeRouteOutput({ route, result, outputDir, config, log }) {
       ? [...result.collector.images].sort().map((image) => toPublicPath(image, config.base))
       : [],
   });
-  if (stats.removedElements > 0 || stats.dedupedStyles > 0 || stats.hints > 0) {
+  if (
+    stats.removedElements > 0 ||
+    stats.dedupedStyles > 0 ||
+    stats.hints > 0 ||
+    stats.textSeparators > 0
+  ) {
     log.debug(
-      `  cleaned ${route}: ${stats.removedElements} element(s) removed, ${stats.dedupedStyles} duplicate style(s), ${stats.hints} hint(s)`,
+      `  cleaned ${route}: ${stats.removedElements} element(s) removed, ${stats.dedupedStyles} duplicate style(s), ${stats.hints} hint(s), ${stats.textSeparators} text separator(s)`,
     );
   }
 
@@ -334,6 +340,17 @@ async function writePreloadManifest({ manifestEntries, outputDir, config, log })
   return { file, routes: manifest.length };
 }
 
+// Notes when a not-found route is configured but was never rendered, so no 404.html
+// was written and a static host would serve its own default page instead.
+function logNotFoundNotice(report, config, log) {
+  if (!config.notFoundRoute || config.dryRun || config.saveAs !== 'html') return;
+  const notFoundRoute = normaliseRoute(config.notFoundRoute);
+  if (report.routes.includes(notFoundRoute)) return;
+  log.warn(
+    `no 404.html was written: the notFoundRoute (${notFoundRoute}) was not prerendered. Add it to include, or point notFoundRoute at a route you do prerender.`,
+  );
+}
+
 // Prints the write outcome counts, including a dedicated dry-run wording.
 function logFileSummary(report, log) {
   const written = report.files.filter((file) => file.status === 'written').length;
@@ -350,18 +367,24 @@ function logFileSummary(report, log) {
   log.info(parts.join(', ') + failed);
 }
 
-// Reports verification results per route, or the pass summary when clean, and warns
-// when routes discarded their prerendered markup on boot.
-function logVerification(verification, log) {
+// Reports verification results per route, warns when routes discarded their prerendered
+// markup, and notes when hydration failures were reported but not enforced.
+function logVerification(verification, config, log) {
   if (verification.ok) {
     log.success(`Hydration verified for ${verification.routes.length} route(s)`);
   } else {
-    for (const entry of verification.routes.filter((route) => !route.ok)) {
-      log.error(`Hydration failed on ${entry.route}:`);
-      for (const message of entry.hydrationErrors) log.error(`  ${message.split('\n')[0]}`);
+    const failed = verification.routes.filter((route) => !route.ok);
+    for (const entry of failed) {
+      log.warn(`Hydration failed on ${entry.route}:`);
+      for (const message of entry.hydrationErrors) log.warn(`  ${message.split('\n')[0]}`);
     }
     for (const error of verification.errors) {
-      log.error(`Verification could not run on ${error.route}: ${error.message}`);
+      log.warn(`Verification could not run on ${error.route}: ${error.message}`);
+    }
+    if (failed.length > 0 && !config.failOnHydrationError) {
+      log.warn(
+        `Hydration failures are reported, not enforced, so the prerendered HTML still shipped. Set failOnHydrationError to fail the build instead.`,
+      );
     }
   }
 

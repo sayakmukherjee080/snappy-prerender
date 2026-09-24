@@ -1,12 +1,12 @@
 # snappy-prerender
 
-Drop-in prerendering for existing single-page apps. It serves your built output, renders every route in a real browser, writes static HTML per route, and then reloads each page with your client bundle to prove React hydration still succeeds. It also optimises the result: critical CSS, link hints, cached AJAX state, optional minification.
+Drop-in prerendering for existing single-page apps. It renders every route in a real browser and writes static HTML — content, titles, meta tags and preconnect hints — so search engines and social crawlers see the full page without running JavaScript. Then it reloads each page with the client bundle and reports how it booted.
 
 No SSR entry, no framework migration, no app changes. React 18 and React 19, Vite 6/7/8, or any static build directory.
 
 ## Why
 
-Search engines and social crawlers still read HTML, not client-rendered DOM. `react-snap` solved this for webpack-era SPAs and has been unmaintained since 2019, leaving React 18 hydration mismatches to be discovered in production. `snappy-prerender` is a fresh implementation for current toolchains with the missing piece built in: **hydration verification**. If the prerendered HTML does not hydrate cleanly, the build fails with the exact route and React error.
+Search engines and social crawlers still read HTML, not client-rendered DOM: a client-only SPA is an empty body and a generic title to them, whatever the page shows in a browser. Prerendering fixes that, because the HTML a crawler reads is the HTML the browser rendered. `react-snap` did this for webpack-era SPAs and has been unmaintained since 2019. `snappy-prerender` is a fresh implementation for current toolchains, with a hydration report attached: it tells you how each page booted, so a mismatch is visible without being a blocker.
 
 ## Requirements
 
@@ -59,9 +59,9 @@ npx snappy-prerender dist --inline-css critical --minify-html --preload-manifest
 
 ## Hydration verification
 
-After writing the output, every route is loaded again with the real client bundle in a fresh browser context. The pass reports two things:
+After writing the output, every route is loaded again with the real client bundle in a fresh browser context. The pass reports two things, and by default neither fails the build: the static HTML that crawlers read is already written and is unaffected by what the client does afterwards. Set `failOnHydrationError: true` (or pass `--fail-on-hydration-error`) when you want hydration treated as a build gate.
 
-**Hydration errors.** React mismatch messages, text mismatches and the minified production codes (`#418`, `#423`, `#425`) fail the build with the route and the message, because that is markup that breaks the moment the app attaches.
+**Hydration errors.** React mismatch messages, text mismatches and the minified production codes (`#418`, `#423`, `#425`) are reported with the route and the message. They mean the client re-renders that page instead of adopting the markup, which costs the user some work on load but leaves the static output — search engines and social crawlers still read the prerendered HTML. Enforce them with `failOnHydrationError: true` when you want the stricter gate.
 
 **How the app booted.** A probe installed before the app's scripts run remembers the first prerendered node in the container and checks whether it survived:
 
@@ -274,10 +274,10 @@ The built output is copied to the destination first, so assets sit beside the ge
 | `removeScriptTags` | `false` | Strip every script tag from the output |
 | `asyncScriptTags` | `false` | Mark external scripts async |
 | `flatOutput` | `false` | Write `about.html` instead of `about/index.html` |
-| `notFoundRoute` | `/404` | Route emitted as `404.html` |
+| `notFoundRoute` | `/404` | Route emitted as `404.html`; a notice is logged when it is never prerendered |
 | `saveAs` | `html` | `html`, `png` or `jpeg` |
 | `verify` | `true` | Run the hydration verification pass |
-| `failOnHydrationError` | `true` | Fail the run on hydration errors |
+| `failOnHydrationError` | `false` | Fail the run on hydration errors; off by default, where they are reported instead |
 | `failOnRerender` | `false` | Fail the run when a route re-renders instead of hydrating |
 | `failOnError` | `true` | Fail the run on route render errors |
 | `dryRun` | `false` | Render and report without writing |
@@ -314,6 +314,7 @@ Dropped: `sourceMaps` (declared but never referenced in react-snap's code), `fix
 
 - **Build-time data is a snapshot.** Anything fetched during rendering is frozen into the HTML until the next build. Use `cacheAjaxRequests` and `snapSaveState` so the client replays the same data.
 - **Hydration mismatches are your app's to fix.** The verifier tells you exactly which route and which React error. Common causes: `Date.now()`, `Math.random()`, `localStorage` reads during render, viewport-dependent markup, and CSS-in-JS that re-injects styles on hydration.
+- **Markup that depends on load state cannot hydrate.** A component that swaps a placeholder for real content once an image or widget loads renders one thing during prerendering (where the network has settled) and another on the client's first render. The verifier reports those routes as `re-rendered`. Render deterministic markup instead — a plain `<img loading="lazy">` rather than a JS placeholder swap — or accept the re-render.
 - **Authenticated routes need `storageState`.** Never prerender personal data into static HTML without deciding to.
 - **Runtime-only routes** (heavy API dependence, real-time data) are better served by `serveCmd` or left client-rendered.
 - Route query strings are ignored; routes are deduplicated without them.

@@ -98,7 +98,14 @@ describe('prerender integration: react 19 app', () => {
   });
 
   it('crawls same-origin links from the root route', () => {
-    assert.deepEqual([...report.routes].sort(), ['/', '/about', '/mismatch']);
+    assert.deepEqual([...report.routes].sort(), [
+      '/',
+      '/about',
+      '/adjacent-text',
+      '/inline-style',
+      '/mismatch',
+      '/suspense',
+    ]);
   });
 
   it('writes static HTML per route containing the rendered markup', async () => {
@@ -116,12 +123,19 @@ describe('prerender integration: react 19 app', () => {
     assert.deepEqual(byRoute.get('/').hydrationErrors, []);
   });
 
-  it('detects the deliberate hydration mismatch and fails the run', () => {
+  it('reports the deliberate hydration mismatch without failing the run', () => {
     const mismatch = report.verification.routes.find((entry) => entry.route === '/mismatch');
     assert.equal(mismatch.ok, false);
     assert.equal(mismatch.hydrationErrors.length > 0, true);
     assert.equal(report.verification.ok, false);
-    assert.equal(report.ok, false);
+    // Reported, not enforced: the static HTML is unchanged and crawlers read it either way.
+    assert.equal(report.ok, true);
+  });
+
+  it('fails the run on hydration errors when enforcement is requested', async () => {
+    const enforced = await prerender({ sourceDir, logLevel: 'silent', failOnHydrationError: true });
+    assert.equal(enforced.verification.ok, false);
+    assert.equal(enforced.ok, false);
   });
 
   it('reports the boot mode for the clean routes', () => {
@@ -130,6 +144,18 @@ describe('prerender integration: react 19 app', () => {
     assert.equal(byRoute.get('/about').mode, 'hydrated');
     assert.equal(byRoute.get('/').markupPreserved, true);
     assert.equal(report.verification.modes.hydrated >= 2, true);
+  });
+
+  it('keeps adjacent text nodes hydratable', () => {
+    const adjacent = report.verification.routes.find((entry) => entry.route === '/adjacent-text');
+    assert.equal(adjacent.ok, true);
+    assert.equal(adjacent.mode, 'hydrated');
+  });
+
+  it('keeps inline style props hydratable', () => {
+    const styled = report.verification.routes.find((entry) => entry.route === '/inline-style');
+    assert.equal(styled.ok, true);
+    assert.equal(styled.mode, 'hydrated');
   });
 
   it('leaves deterministic output untouched on a second run', async () => {
@@ -144,15 +170,27 @@ describe('prerender integration: react 19 app', () => {
 });
 
 describe('prerender integration: react 18 app', () => {
+  let sourceDir;
+  let report;
+
+  before(async () => {
+    sourceDir = await buildFixture('react18-app');
+    report = await prerender({ sourceDir, logLevel: 'silent' });
+  });
+
   it('renders and verifies cleanly', async () => {
-    const sourceDir = await buildFixture('react18-app');
-    const report = await prerender({ sourceDir, logLevel: 'silent' });
-    assert.deepEqual([...report.routes].sort(), ['/', '/about']);
+    assert.deepEqual([...report.routes].sort(), ['/', '/about', '/inline-style']);
     assert.equal(report.errors.length, 0);
     assert.equal(report.verification.ok, true);
     assert.equal(report.ok, true);
     const about = await fs.readFile(path.join(sourceDir, 'about', 'index.html'), 'utf8');
     assert.match(about, /About page/);
+  });
+
+  it('keeps inline style props hydratable', () => {
+    const styled = report.verification.routes.find((entry) => entry.route === '/inline-style');
+    assert.equal(styled.ok, true);
+    assert.equal(styled.mode, 'hydrated');
   });
 });
 
@@ -314,6 +352,37 @@ describe('prerender integration: static sites', () => {
       report.files.some((file) => file.file === '404.html'),
       true,
     );
+  });
+
+  it('notes when the not-found route was never prerendered', async () => {
+    const messages = [];
+    const log = {
+      level: 'info',
+      debug: () => {},
+      info: (message) => messages.push(message),
+      warn: (message) => messages.push(message),
+      error: (message) => messages.push(message),
+      success: (message) => messages.push(message),
+    };
+
+    const withoutNotFound = await makeStaticSite({ 'index.html': page('Home page', []) });
+    await prerender({ sourceDir: withoutNotFound, logLevel: 'silent', verify: false }, { log });
+    assert.equal(
+      messages.some((message) => /no 404\.html was written/.test(message)),
+      true,
+    );
+
+    messages.length = 0;
+    const withNotFound = await makeStaticSite({
+      'index.html': page('Home page', ['/404']),
+      '404/index.html': page('404 page', []),
+    });
+    await prerender({ sourceDir: withNotFound, logLevel: 'silent', verify: false }, { log });
+    assert.equal(
+      messages.some((message) => /no 404\.html was written/.test(message)),
+      false,
+    );
+    assert.equal(await exists(path.join(withNotFound, '404.html')), true);
   });
 
   it('fails with a clear message when sourceDir does not exist', async () => {
