@@ -18,14 +18,17 @@ Options:
       --exclude <routes>      Routes to skip, comma separated, repeatable
       --no-crawl              Disable link crawling, render only included routes
       --max-depth <n>         Crawl depth limit, 0 renders roots only (default: unlimited)
+      --max-routes <n>        Stop after this many routes and fail the run (default: unlimited)
       --concurrency <n>       Parallel browser pages (default: derived from CPU count)
       --timeout <ms>          Per-route timeout (default: 30000)
       --wait-for <selector>   Wait for a selector on every route before capture
       --browser <choice>      auto | chrome | msedge | chromium | path (default: auto)
       --no-browser-download   Refuse the Chrome for Testing fallback download
+      --browser-download-hash <sha256>  Pin the fallback download to a SHA-256 digest
       --storage-state <file>  Playwright storage state for authenticated routes
       --no-verify             Skip the hydration verification pass
       --no-block-third-party  Allow third-party requests during rendering
+      --allowed-hosts <hosts>  Third-party hosts to allow while blocking the rest, comma separated
       --no-freeze-animations  Do not neutralise CSS animations before capture
       --no-capture-runtime-styles  Do not fold CSSOM-only styles into the output
       --no-capture-form-state  Do not sync checked and selected into the output
@@ -72,14 +75,17 @@ async function main() {
       exclude: { type: 'string', multiple: true },
       'no-crawl': { type: 'boolean' },
       'max-depth': { type: 'string' },
+      'max-routes': { type: 'string' },
       concurrency: { type: 'string' },
       timeout: { type: 'string' },
       'wait-for': { type: 'string' },
       browser: { type: 'string' },
       'no-browser-download': { type: 'boolean' },
+      'browser-download-hash': { type: 'string' },
       'storage-state': { type: 'string' },
       'no-verify': { type: 'boolean' },
       'no-block-third-party': { type: 'boolean' },
+      'allowed-hosts': { type: 'string', multiple: true },
       'no-freeze-animations': { type: 'boolean' },
       'no-capture-runtime-styles': { type: 'boolean' },
       'no-capture-form-state': { type: 'boolean' },
@@ -145,14 +151,20 @@ function cliOptions({ values, positionals }) {
   if (values.exclude !== undefined) options.exclude = splitList(values.exclude);
   if (values['no-crawl']) options.crawl = false;
   if (values['max-depth'] !== undefined) options.maxDepth = Number(values['max-depth']);
+  if (values['max-routes'] !== undefined) options.maxRoutes = Number(values['max-routes']);
   if (values.concurrency !== undefined) options.concurrency = Number(values.concurrency);
   if (values.timeout !== undefined) options.timeout = Number(values.timeout);
   if (values['wait-for'] !== undefined) options.waitFor = values['wait-for'];
   if (values.browser !== undefined) options.browser = values.browser;
   if (values['no-browser-download']) options.browserDownload = false;
+  if (values['browser-download-hash'] !== undefined) {
+    options.browserDownloadHash = values['browser-download-hash'];
+  }
   if (values['storage-state'] !== undefined) options.storageState = values['storage-state'];
   if (values['no-verify']) options.verify = false;
   if (values['no-block-third-party']) options.blockThirdParty = false;
+  if (values['allowed-hosts'] !== undefined)
+    options.allowedHosts = splitList(values['allowed-hosts']);
   if (values['no-freeze-animations']) options.freezeAnimations = false;
   if (values['no-capture-runtime-styles']) options.captureRuntimeStyles = false;
   if (values['no-capture-form-state']) options.captureFormState = false;

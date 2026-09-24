@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { routeToFile, routeToScreenshotFile, writeRouteHtml } from '../../src/core/output.js';
+import {
+  findOutputCollisions,
+  routeToFile,
+  routeToScreenshotFile,
+  writeRouteHtml,
+} from '../../src/core/output.js';
 
 const tempDirs = [];
 
@@ -51,6 +56,22 @@ describe('routeToScreenshotFile', () => {
 
   it('uses the jpeg extension when requested', () => {
     assert.equal(routeToScreenshotFile('/about', { saveAs: 'jpeg' }), 'about.jpeg');
+  });
+});
+
+describe('findOutputCollisions', () => {
+  it('flags routes that map to the same flat file', () => {
+    const collisions = findOutputCollisions(['/', '/index', '/about'], { flatOutput: true });
+    assert.deepEqual([...collisions], [['index.html', ['/', '/index']]]);
+  });
+
+  it('finds no collisions for directory output', () => {
+    assert.equal(findOutputCollisions(['/', '/index', '/about'], {}).size, 0);
+  });
+
+  it('flags routes that map to the same screenshot', () => {
+    const collisions = findOutputCollisions(['/', '/index'], { saveAs: 'png' });
+    assert.deepEqual([...collisions], [['index.png', ['/', '/index']]]);
   });
 });
 

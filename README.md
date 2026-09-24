@@ -14,7 +14,7 @@ Search engines and social crawlers still read HTML, not client-rendered DOM. `re
 - Chrome or Edge installed (detected automatically), or allow the one-time Chrome for Testing download fallback
 - `beasties` only if you use `inlineCss: 'critical'` (optional peer dependency)
 
-Browser resolution order: installed Chrome, installed Edge, a Playwright-managed browser, then a Chrome for Testing download from Google's version-pinned HTTPS bucket into `SNAPPY_BROWSER_CACHE_DIR` (defaults to the platform cache directory). Chrome for Testing publishes no checksum feed, so that archive is trusted on the strength of HTTPS and the pinned URL rather than a verified hash. Set `browserDownload: false` to forbid downloads entirely.
+Browser resolution order: installed Chrome, installed Edge, a Playwright-managed browser, then a Chrome for Testing download from Google's version-pinned HTTPS bucket into `SNAPPY_BROWSER_CACHE_DIR` (defaults to the platform cache directory). Chrome for Testing publishes no checksum feed, so that archive is trusted on the strength of HTTPS and the pinned URL unless you set `browserDownloadHash`, which makes the download fail if the SHA-256 does not match. Set `browserDownload: false` to forbid downloads entirely.
 
 ## Install
 
@@ -132,6 +132,20 @@ snappy({
 });
 ```
 
+## Third-party requests
+
+Third-party requests are **allowed by default**. Most React sites get their content from a CMS, headless API or a separate service origin, and blocking those during prerendering produces pages that render without data — so the default keeps them working, matching react-snap.
+
+```js
+snappy({ blockThirdParty: false });                    // default: allow everything
+snappy({ blockThirdParty: true });                     // abort every third-party request
+snappy({ blockThirdParty: true, allowedHosts: ['cms.example.com'] }); // block all but the CMS
+```
+
+Turning blocking on makes rendering deterministic and keeps analytics, ads and chat widgets from executing during a build. `allowedHosts` is the usual setting for a CMS-backed site: the API stays reachable while everything else is cut.
+
+Preconnect hints are generated for **every** third-party origin the page contacts — including hosts you allowlist while blocking — so the deployed page can start those connections early. Set `preconnectThirdParty: false` to turn the hints off.
+
 ## CSS-in-JS
 
 Emotion, styled-components, vanilla-extract, stitches, JSS and friends work out of the box as long as their styles end up as text inside a `<style>` tag. Three things need more than plain serialisation:
@@ -178,7 +192,7 @@ window.snapSaveState = () => ({ __APP_STATE__: store.getState() });
 // becomes: window.__APP_STATE__ = {...}
 ```
 
-Values are JSON-encoded with `<`, `>`, `/` and line separators escaped, so they cannot break out of the script tag.
+Values are JSON-encoded with `<`, `>`, `/` and line separators escaped, so state data cannot break out of the script tag. Keys and values are both escaped.
 
 ## Screenshots
 
@@ -207,6 +221,7 @@ The built output is copied to the destination first, so assets sit beside the ge
 | `exclude` | `[]` | Routes to skip, strings or RegExp |
 | `crawl` | `true` | Follow same-origin links from seeds |
 | `maxDepth` | `null` | Crawl depth limit, `null` is unlimited, `0` renders seeds only |
+| `maxRoutes` | `null` | Stop after this many routes; hitting the cap marks the run incomplete |
 | `concurrency` | derived | Parallel pages, derived from CPU count, capped at 8 |
 | `timeout` | `30000` | Per-route timeout in ms |
 | `quietPeriod` | `500` | Network must be idle this long before capture |
@@ -218,11 +233,12 @@ The built output is copied to the destination first, so assets sit beside the ge
 | `userAgent` | `SnappyPrerender` | User agent used while rendering, `null` for the browser default |
 | `browser` | `auto` | `auto`, `chrome`, `msedge`, `chromium`, or a path to an executable |
 | `browserDownload` | `true` | Allow the Chrome for Testing fallback download |
+| `browserDownloadHash` | `null` | SHA-256 digest the fallback download must match, verified before use |
 | `browserArgs` | `[]` | Extra browser launch arguments |
 | `headless` | `true` | Run the browser headless |
 | `ignoreHTTPSErrors` | `false` | Ignore TLS errors while rendering |
-| `blockThirdParty` | `true` | Abort third-party requests during rendering and verification |
-| `allowedHosts` | `[]` | Extra hosts allowed when third-party blocking is on |
+| `blockThirdParty` | `false` | Allow third-party requests so CMS and API calls work; set `true` to abort them |
+| `allowedHosts` | `[]` | Hosts kept reachable when `blockThirdParty` is on |
 | `freezeAnimations` | `true` | Neutralise animations and emulate reduced motion |
 | `scrollToBottom` | `false` | Scroll through pages to trigger lazy content |
 | `scrollStepDelay` | `100` | Delay between scroll steps when `scrollToBottom` is on |
@@ -231,7 +247,7 @@ The built output is copied to the destination first, so assets sit beside the ge
 | `inlineCss` | `false` | `'inline'`, `'critical'` (needs beasties) or `true` for `'inline'` |
 | `minifyHtml` | `false` | Minify output HTML, `true` for defaults or an html-minifier-terser options object |
 | `minifyCss` | `false` | Minify CSS with clean-css, also applied to inlined CSS |
-| `preconnectThirdParty` | `true` | Add preconnect hints for third-party origins |
+| `preconnectThirdParty` | `true` | Add preconnect hints for every third-party origin the page contacts |
 | `preloadImages` | `false` | Add preload hints for same-origin images |
 | `preloadManifest` | `false` | Write `preload-manifest.json` with Link header hints |
 | `ignoreForPreload` | `['service-worker.js']` | File names excluded from the manifest |
@@ -272,7 +288,7 @@ The report exposes `routes`, `files` (with per-route `status`), `errors`, `pageE
 
 Kept: crawling, include, concurrency, viewport, waitFor, executable path, external server, third-party skipping (now on by default), `userAgent`, `inlineCss`, `minifyHtml`, `minifyCss`, `cacheAjaxRequests`, `snapSaveState`, `preconnectThirdParty`, `preloadImages`, `removeBlobs`, `removeStyleTags`, `removeScriptTags`, `asyncScriptTags`, `destination`, `saveAs` (html/png/jpeg).
 
-Changed: `http2PushManifest` became `preloadManifest` (browsers removed HTTP/2 push), `fixInsertRule` became `captureRuntimeStyles` and also covers constructable stylesheets, `fixFormFields` became `captureFormState`, `puppeteerArgs` became `browserArgs`, `puppeteerIgnoreHTTPSErrors` became `ignoreHTTPSErrors`, `skipThirdPartyRequests` became `blockThirdParty` with the opposite default, `exclude` and `maxDepth` are new, and `notFoundRoute` replaces the `/404` include convention.
+Changed: `http2PushManifest` became `preloadManifest` (browsers removed HTTP/2 push), `fixInsertRule` became `captureRuntimeStyles` and also covers constructable stylesheets, `fixFormFields` became `captureFormState`, `puppeteerArgs` became `browserArgs`, `puppeteerIgnoreHTTPSErrors` became `ignoreHTTPSErrors`, `skipThirdPartyRequests` became `blockThirdParty` with the same default of allowing them, `exclude` and `maxRoutes` are new, and `notFoundRoute` replaces the `/404` include convention.
 
 Dropped: `sourceMaps` (declared but never referenced in react-snap's code), `fixWebpackChunksIssue` and `fixInsertRule` (webpack/Chrome-era workarounds), `port` (ephemeral loopback port instead), `puppeteer.cache`, and the preload polyfill (modulepreload is universally supported).
 
@@ -283,6 +299,9 @@ Dropped: `sourceMaps` (declared but never referenced in react-snap's code), `fix
 - **Authenticated routes need `storageState`.** Never prerender personal data into static HTML without deciding to.
 - **Runtime-only routes** (heavy API dependence, real-time data) are better served by `serveCmd` or left client-rendered.
 - Route query strings are ignored; routes are deduplicated without them.
+- Routes whose decoded path contains dot segments or backslashes are skipped, so encoded traversal cannot create stray directories.
+- Crawling is unbounded unless `maxRoutes` is set; hitting the cap marks the run as failed so incomplete output is never shipped silently. Which routes are cut is concurrency-dependent on a large site — narrow `include`/`exclude` instead when you need a deterministic set.
+- If two routes would write the same file — such as `/` and `/index` with `flatOutput` — neither is written and the run fails with a collision error.
 - Screenshots are viewport-width full-page captures, so they reflect the configured `viewport`, not a device matrix.
 
 ## License

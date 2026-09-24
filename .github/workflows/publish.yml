@@ -21,6 +21,8 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run test:integration
-      - run: npm publish --provenance --access public
+      # The checks above already ran, so skip lifecycle scripts here: they would run
+      # project and dev-dependency code inside the step that holds NPM_TOKEN.
+      - run: npm publish --provenance --access public --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

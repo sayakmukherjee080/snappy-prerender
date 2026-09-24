@@ -61,18 +61,19 @@ async function exists(target) {
 
 /**
  * Starts a throwaway HTTP server on its own origin, counting every request so tests
- * can prove third-party traffic was blocked or allowed.
+ * can prove third-party traffic was blocked or allowed. The host is configurable so a
+ * test can compare two origins that differ by host name rather than by port.
  */
-async function startThirdParty() {
+async function startThirdParty(host = '127.0.0.1') {
   let hits = 0;
   const server = http.createServer((_request, response) => {
     hits += 1;
     response.setHeader('content-type', 'text/plain');
     response.end('third-party');
   });
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => server.listen(0, host, resolve));
   return {
-    origin: `http://127.0.0.1:${server.address().port}`,
+    origin: `http://${host}:${server.address().port}`,
     hits: () => hits,
     close: () =>
       new Promise((resolve) => {
@@ -295,7 +296,7 @@ describe('prerender integration: static sites', () => {
 });
 
 describe('prerender integration: third-party requests', () => {
-  it('blocks third-party requests during both render and verification by default', async () => {
+  it('allows third-party requests by default, during render and verification', async () => {
     const thirdParty = await startThirdParty();
     try {
       const sourceDir = await makeStaticSite({
@@ -303,22 +304,58 @@ describe('prerender integration: third-party requests', () => {
       });
       const report = await prerender({ sourceDir, logLevel: 'silent' });
       assert.equal(report.verification.ok, true);
+      assert.equal(thirdParty.hits() >= 2, true);
+    } finally {
+      await thirdParty.close();
+    }
+  });
+
+  it('blocks third-party requests when blocking is switched on', async () => {
+    const thirdParty = await startThirdParty();
+    try {
+      const sourceDir = await makeStaticSite({
+        'index.html': pageWithThirdParty(thirdParty.origin),
+      });
+      await prerender({ sourceDir, logLevel: 'silent', blockThirdParty: true });
       assert.equal(thirdParty.hits(), 0);
     } finally {
       await thirdParty.close();
     }
   });
 
-  it('allows third-party requests when blocking is disabled', async () => {
-    const thirdParty = await startThirdParty();
+  it('allows only the listed hosts when blocking is on, and still hints them', async () => {
+    const allowed = await startThirdParty('127.0.0.1');
+    const blocked = await startThirdParty('localhost');
     try {
+      // Proves the blocked origin is genuinely reachable, so a flat hit count means
+      // blocking worked rather than the server being down.
+      assert.equal((await fetch(`${blocked.origin}/ping`)).status, 200);
+      const blockedBaseline = blocked.hits();
+
       const sourceDir = await makeStaticSite({
-        'index.html': pageWithThirdParty(thirdParty.origin),
+        'index.html': pageWithThirdParty(allowed.origin).replace(
+          '</body>',
+          `<img src="${blocked.origin}/pixel.png"></body>`,
+        ),
       });
-      await prerender({ sourceDir, logLevel: 'silent', verify: false, blockThirdParty: false });
-      assert.equal(thirdParty.hits() > 0, true);
+
+      await prerender({
+        sourceDir,
+        logLevel: 'silent',
+        verify: false,
+        blockThirdParty: true,
+        allowedHosts: ['127.0.0.1'],
+      });
+
+      assert.equal(allowed.hits() > 0, true);
+      assert.equal(blocked.hits(), blockedBaseline);
+
+      const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+      assert.match(html, new RegExp(`<link rel="preconnect" href="${allowed.origin}">`));
+      assert.match(html, new RegExp(`<link rel="preconnect" href="${blocked.origin}">`));
     } finally {
-      await thirdParty.close();
+      await allowed.close();
+      await blocked.close();
     }
   });
 });
@@ -397,6 +434,30 @@ describe('prerender integration: capture and optimisation options', () => {
     assert.match(html, /window\.snapStore=/);
     assert.match(html, /\\u002Fapi\\u002Fdata\.json/);
     assert.match(html, /window\["__APP_STATE__"\]=\{"count":1\}/);
+  });
+
+  it('escapes hostile state keys and values so they cannot break out of the script', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html': [
+        '<!doctype html><html><head><title>Home page</title>',
+        '<script>',
+        // Assembled at runtime, otherwise the literal close tag would terminate this
+        // inline script and the hook would never be defined.
+        "const close = '</' + 'script>';",
+        'window.snapSaveState = () => ({',
+        "  [close + '<img src=x onerror=alert(1)>']: close + '<script>alert(2)</' + 'script>',",
+        '});',
+        '</script></head><body><h1>Home page</h1></body></html>',
+      ].join(''),
+    });
+
+    await prerender({ sourceDir, logLevel: 'silent', verify: false });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    const scripts = html.match(/<script[\s\S]*?<\/script>/g) ?? [];
+    const breakouts = scripts.filter((block) => block.slice(0, -9).includes('</script'));
+    assert.equal(breakouts.length, 0);
+    assert.match(html, /window\["\\u003C\\u002Fscript/);
   });
 
   it('adds preconnect and image preload hints and writes a preload manifest', async () => {
@@ -614,6 +675,51 @@ describe('prerender integration: form state', () => {
     assert.match(html, /<input id="on" type="checkbox">/);
     assert.match(html, /<input id="off" type="checkbox" checked="">/);
     assert.equal(html.includes('selected'), false);
+  });
+});
+
+describe('prerender integration: limits and collisions', () => {
+  it('stops at maxRoutes and fails the run so incomplete output is not shipped', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html': page('Home page', ['/a']),
+      'a/index.html': page('A page', ['/b']),
+      'b/index.html': page('B page', []),
+    });
+
+    const report = await prerender({ sourceDir, logLevel: 'silent', verify: false, maxRoutes: 2 });
+
+    assert.deepEqual([...report.routes].sort(), ['/', '/a']);
+    assert.deepEqual(report.truncated, { limit: 2, routes: 2 });
+    assert.equal(report.ok, false);
+
+    const tolerated = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      maxRoutes: 2,
+      failOnError: false,
+    });
+    assert.equal(tolerated.truncated.limit, 2);
+    assert.equal(tolerated.ok, true);
+  });
+
+  it('refuses routes that would write the same file', async () => {
+    const sourceDir = await makeStaticSite({ 'index.html': page('Home page', ['/index']) });
+
+    const report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      flatOutput: true,
+    });
+
+    assert.deepEqual([...report.routes].sort(), ['/', '/index']);
+    assert.equal(report.errors.length, 2);
+    for (const error of report.errors) {
+      assert.match(error.message, /output file collision: index\.html/);
+    }
+    assert.equal(report.files.length, 0);
+    assert.equal(report.ok, false);
   });
 });
 

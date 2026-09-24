@@ -38,6 +38,28 @@ function matchesAny(route, patterns) {
   return patterns.some((pattern) => matchesPattern(route, pattern));
 }
 /**
+ * Reports whether a route is safe to map onto the output directory. Literal dot
+ * segments are already resolved, so this catches the encoded forms: percent-encoded
+ * traversal and backslashes, which would otherwise create junk directories and act
+ * as path separators on Windows.
+ */
+export function isSafeRoute(route) {
+  if (route.includes('\\')) return false;
+  const lower = route.toLowerCase();
+  const suspicious = lower.includes('%2e') || lower.includes('%2f') || lower.includes('%5c');
+  if (!suspicious) return true;
+
+  let decoded;
+  try {
+    decoded = decodeURIComponent(route);
+  } catch {
+    return false;
+  }
+  if (decoded.includes('\\')) return false;
+  return !decoded.split('/').some((segment) => segment === '..' || segment === '.');
+}
+
+/**
  * Applies include/exclude filtering and de-duplication to a list of candidate
  * routes. Include only filters when the user supplied patterns beyond the default.
  */
@@ -47,6 +69,7 @@ export function filterRoutes(routes, { include, exclude }) {
   for (const candidate of routes) {
     const route = normaliseRoute(candidate);
     if (seen.has(route)) continue;
+    if (!isSafeRoute(route)) continue;
     if (include.length > 0 && !matchesAny(route, include)) continue;
     if (exclude.length > 0 && matchesAny(route, exclude)) continue;
     seen.add(route);

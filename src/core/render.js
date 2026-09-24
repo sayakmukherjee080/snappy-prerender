@@ -93,7 +93,9 @@ async function injectCapturedState(page, cache) {
     const state = typeof window.snapSaveState === 'function' ? window.snapSaveState() : null;
     if (state && typeof state === 'object') {
       for (const [key, value] of Object.entries(state)) {
-        parts.push(`window[${JSON.stringify(key)}]=${escapeJson(value)};`);
+        // Both the key and the value are escaped: JSON.stringify alone leaves angle
+        // brackets and slashes intact, which would let a dynamic key close the tag.
+        parts.push(`window[${escapeJson(key)}]=${escapeJson(value)};`);
       }
     }
     if (parts.length === 0) return;

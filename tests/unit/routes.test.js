@@ -63,6 +63,28 @@ describe('filterRoutes', () => {
     });
     assert.deepEqual(routes, ['/blog/post']);
   });
+
+  it('drops routes that encode traversal or contain backslashes', () => {
+    const routes = filterRoutes(
+      [
+        '/about',
+        '/%2e%2e%2f%2e%2e%2fetc%2fpasswd',
+        '/..%5c..%5cwindows%5cwin.ini',
+        '/%2E%2E/secret',
+        '/a\\b',
+      ],
+      { include: [], exclude: [] },
+    );
+    assert.deepEqual(routes, ['/about']);
+  });
+
+  it('keeps routes with harmless percent-encoding', () => {
+    const routes = filterRoutes(['/caf%C3%A9', '/50%25-off', '/search?q=a%2Fb'], {
+      include: [],
+      exclude: [],
+    });
+    assert.deepEqual(routes, ['/caf%C3%A9', '/50%25-off', '/search']);
+  });
 });
 
 describe('toAppRoute', () => {

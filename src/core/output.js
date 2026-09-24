@@ -26,6 +26,24 @@ export function routeToScreenshotFile(route, { saveAs = 'png' } = {}) {
 }
 
 /**
+ * Finds routes that would write the same output file. Two routes can collide, most
+ * obviously with flatOutput where both "/" and "/index" map to index.html. Callers
+ * use this to refuse the ambiguous writes instead of letting one overwrite the other.
+ */
+export function findOutputCollisions(routes, config) {
+  const byFile = new Map();
+  const saveAs = config.saveAs ?? 'html';
+  for (const route of routes) {
+    const file =
+      saveAs === 'html' ? routeToFile(route, config) : routeToScreenshotFile(route, config);
+    const existing = byFile.get(file);
+    if (existing) existing.push(route);
+    else byFile.set(file, [route]);
+  }
+  return new Map([...byFile].filter(([, list]) => list.length > 1));
+}
+
+/**
  * Writes one rendered route into the output directory. Identical existing files are
  * left untouched, which keeps rebuilds and CI caches stable.
  */

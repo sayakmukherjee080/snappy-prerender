@@ -19,6 +19,7 @@ describe('resolveConfig', () => {
     assert.equal(config.scrollStepDelay, DEFAULTS.scrollStepDelay);
     assert.equal(config.shutdownTimeout, DEFAULTS.shutdownTimeout);
     assert.equal(config.includeProvided, false);
+    assert.equal(config.maxRoutes, null);
   });
 
   it('applies the react-snap compatible capture and optimisation defaults', () => {
@@ -26,6 +27,8 @@ describe('resolveConfig', () => {
     assert.equal(config.userAgent, 'SnappyPrerender');
     assert.equal(config.destination, null);
     assert.equal(config.ignoreHTTPSErrors, false);
+    assert.equal(config.blockThirdParty, false);
+    assert.equal(config.preconnectThirdParty, true);
     assert.deepEqual(config.browserArgs, []);
     assert.equal(config.inlineCss, false);
     assert.equal(config.minifyHtml, false);
@@ -86,6 +89,9 @@ describe('resolveConfig', () => {
     assert.throws(() => resolveConfig({ waitFor: 42 }), /waitFor/);
     assert.throws(() => resolveConfig({ notFoundRoute: 42 }), /notFoundRoute/);
     assert.throws(() => resolveConfig({ maxDepth: -2 }), /maxDepth/);
+    assert.throws(() => resolveConfig({ maxRoutes: 0 }), /maxRoutes/);
+    assert.throws(() => resolveConfig({ maxRoutes: -1 }), /maxRoutes/);
+    assert.throws(() => resolveConfig({ maxRoutes: 1.5 }), /maxRoutes/);
     assert.throws(() => resolveConfig({ storageState: 'does-not-exist.json' }), /storageState/);
     assert.throws(() => resolveConfig({ userAgent: 42 }), /userAgent/);
     assert.throws(() => resolveConfig({ destination: 42 }), /destination/);
@@ -98,6 +104,11 @@ describe('resolveConfig', () => {
     assert.throws(() => resolveConfig({ removeScriptTags: 'yes' }), /removeScriptTags/);
     assert.throws(() => resolveConfig({ captureRuntimeStyles: 'yes' }), /captureRuntimeStyles/);
     assert.throws(() => resolveConfig({ captureFormState: 'yes' }), /captureFormState/);
+    assert.throws(
+      () => resolveConfig({ browserDownloadHash: 'not-a-hash' }),
+      /browserDownloadHash/,
+    );
+    assert.throws(() => resolveConfig({ browserDownloadHash: 'abc123' }), /browserDownloadHash/);
   });
 
   it('accepts the optimisation option shapes', () => {
@@ -115,6 +126,8 @@ describe('resolveConfig', () => {
     assert.equal(config.userAgent, null);
     assert.equal(config.destination, 'out');
     assert.equal(resolveConfig({ minifyHtml: true, minifyCss: true }).minifyHtml, true);
+    const hash = 'a'.repeat(64);
+    assert.equal(resolveConfig({ browserDownloadHash: hash }).browserDownloadHash, hash);
   });
 
   it('normalises explicitly undefined optionals to null', () => {

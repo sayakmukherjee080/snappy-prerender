@@ -48,7 +48,7 @@ export async function launchBrowser(config, log) {
     );
   }
 
-  const executablePath = await downloadChrome(log);
+  const executablePath = await downloadChrome(config, log);
   return {
     browser: await launch(config, { executablePath }),
     source: `downloaded ${executablePath}`,
@@ -72,24 +72,32 @@ function firstLine(message) {
 /**
  * Downloads Chrome for Testing into the tool's own cache directory. Used only when
  * neither a system browser nor a Playwright-managed browser is available. The
- * archive comes from Google's version-pinned HTTPS bucket via @puppeteer/browsers.
- * Chrome for Testing publishes no checksum feed, so no separate hash verification is
- * performed; browserDownload can be set to false to opt out of downloads entirely.
+ * archive comes from Google's version-pinned HTTPS bucket via @puppeteer/browsers,
+ * which verifies it against browserDownloadHash when one is configured and deletes
+ * it on a mismatch. Without a configured hash the download is trusted on the
+ * strength of HTTPS alone, which is logged as a warning.
  */
-async function downloadChrome(log) {
+async function downloadChrome(config, log) {
   const cacheDir = browserCacheDir();
   const buildId = await browsers.resolveBuildId(
     browsers.Browser.CHROME,
     browsers.detectBrowserPlatform(),
     'stable',
   );
-  log.info(
-    `No system Chrome or Edge found. Downloading Chrome for Testing ${buildId} to ${cacheDir}`,
-  );
+  if (config.browserDownloadHash) {
+    log.info(
+      `Downloading Chrome for Testing ${buildId}, verifying SHA-256 against browserDownloadHash`,
+    );
+  } else {
+    log.warn(
+      `Downloading Chrome for Testing ${buildId} to ${cacheDir} without a checksum; set browserDownloadHash to pin one`,
+    );
+  }
   const installed = await browsers.install({
     browser: browsers.Browser.CHROME,
     buildId,
     cacheDir,
+    expectedHash: config.browserDownloadHash ?? undefined,
     downloadProgressCallback: (downloaded, total) =>
       log.debug(`  downloaded ${Math.round((downloaded / total) * 100)}%`),
   });

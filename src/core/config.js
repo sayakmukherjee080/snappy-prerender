@@ -18,8 +18,10 @@ const NULLABLE_KEYS = [
   'waitFor',
   'maxDepth',
   'notFoundRoute',
+  'maxRoutes',
   'userAgent',
   'destination',
+  'browserDownloadHash',
   'url',
   'serveCmd',
 ];
@@ -46,6 +48,7 @@ export const DEFAULTS = Object.freeze({
   exclude: [],
   crawl: true,
   maxDepth: null,
+  maxRoutes: null,
   concurrency: null,
   timeout: 30000,
   quietPeriod: 500,
@@ -59,10 +62,11 @@ export const DEFAULTS = Object.freeze({
   userAgent: 'SnappyPrerender',
   browser: 'auto',
   browserDownload: true,
+  browserDownloadHash: null,
   browserArgs: [],
   headless: true,
   ignoreHTTPSErrors: false,
-  blockThirdParty: true,
+  blockThirdParty: false,
   allowedHosts: [],
   freezeAnimations: true,
   scrollToBottom: false,
@@ -177,6 +181,10 @@ export function validateConfig(config) {
   for (const key of ['userAgent', 'destination']) nullableString(key);
   for (const key of BOOLEAN_KEYS) booleanOption(key);
 
+  if (config.browserDownloadHash !== null && !/^[a-f0-9]{64}$/i.test(config.browserDownloadHash)) {
+    throw new TypeError('browserDownloadHash must be a 64 character SHA-256 hex digest');
+  }
+
   if (!Number.isInteger(config.concurrency) || config.concurrency < 1) {
     throw new TypeError('concurrency must be a positive integer');
   }
@@ -193,6 +201,9 @@ export function validateConfig(config) {
   }
   if (config.maxDepth !== null && (!Number.isInteger(config.maxDepth) || config.maxDepth < 0)) {
     throw new TypeError('maxDepth must be null or a non-negative integer');
+  }
+  if (config.maxRoutes !== null && (!Number.isInteger(config.maxRoutes) || config.maxRoutes < 1)) {
+    throw new TypeError('maxRoutes must be null or a positive integer');
   }
   for (const key of ['width', 'height']) {
     if (!Number.isInteger(config.viewport[key]) || config.viewport[key] < 1) {

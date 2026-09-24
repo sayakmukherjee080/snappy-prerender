@@ -1,9 +1,10 @@
 import { blockThirdPartyRequests } from './blocking.js';
 
 /**
- * Watches one page's network traffic. Records the origins and asset paths the
- * link-hint features need, captures JSON bodies when the AJAX cache is enabled, and
- * optionally aborts third-party requests so rendering stays deterministic.
+ * Watches one page's network traffic. Records every third-party origin for the
+ * preconnect hints, records same-origin asset paths for the preload features,
+ * captures JSON bodies when the AJAX cache is enabled, and optionally aborts
+ * third-party requests when blocking is switched on.
  */
 export function createResourceCollector({
   origin,
@@ -12,7 +13,6 @@ export function createResourceCollector({
   blockThirdParty = false,
   collectJson = false,
 }) {
-  const allowed = new Set(allowedHosts.map((host) => host.toLowerCase()));
   const thirdPartyOrigins = new Set();
   const images = new Set();
   const scripts = new Set();
@@ -32,10 +32,10 @@ export function createResourceCollector({
     },
     async install(page) {
       page.on('request', (request) => {
-        const url = request.url();
-        const parsed = parseUrl(url);
-        if (!parsed || parsed.origin === origin) return;
-        if (allowed.has(parsed.hostname.toLowerCase())) return;
+        const parsed = parseUrl(request.url());
+        if (!parsed) return;
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+        if (parsed.origin === origin) return;
         thirdPartyOrigins.add(parsed.origin);
       });
 

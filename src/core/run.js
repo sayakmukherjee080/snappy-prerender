@@ -7,7 +7,7 @@ import { inlineCriticalCss } from './inline-css.js';
 import { createLogger } from './log.js';
 import { minifyHtml } from './minify.js';
 import { normaliseHtml } from './normalize.js';
-import { routeToScreenshotFile, writeRouteHtml } from './output.js';
+import { findOutputCollisions, routeToScreenshotFile, writeRouteHtml } from './output.js';
 import { buildPreloadManifest } from './preload-manifest.js';
 import { renderRoute } from './render.js';
 import { crawlRoots, filterRoutes, toPublicPath, withinDepth } from './routes.js';
@@ -50,6 +50,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     pageErrors: [],
     verification: null,
     preloadManifest: null,
+    truncated: null,
     ok: false,
     durationMs: 0,
   };
@@ -74,6 +75,12 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
 
     const verifiable = await writeAllRoutes({ rendered, outputDir, config, log, report });
     logFileSummary(report, log);
+
+    if (report.truncated) {
+      log.error(
+        `maxRoutes (${report.truncated.limit}) reached after ${report.truncated.routes} route(s); output is incomplete`,
+      );
+    }
 
     if (config.preloadManifest && !config.dryRun) {
       report.preloadManifest = await writePreloadManifest({
@@ -104,7 +111,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
 
   report.durationMs = Date.now() - startedAt;
   report.ok =
-    !(config.failOnError && report.errors.length > 0) &&
+    !(config.failOnError && (report.errors.length > 0 || report.truncated !== null)) &&
     !(config.failOnHydrationError && report.verification && !report.verification.ok);
   return report;
 }
@@ -149,7 +156,24 @@ async function renderAllRoutes({
   outputDir,
 }) {
   const visited = new Set();
+  const scheduled = new Set();
   const rendered = new Map();
+  const cap = config.maxRoutes ?? Number.POSITIVE_INFINITY;
+
+  // Queues routes up to maxRoutes, flagging the report the first time the cap bites.
+  const accept = (routes) => {
+    const accepted = [];
+    for (const route of routes) {
+      if (scheduled.has(route)) continue;
+      if (scheduled.size >= cap) {
+        report.truncated = { limit: config.maxRoutes, routes: scheduled.size };
+        break;
+      }
+      scheduled.add(route);
+      accepted.push(route);
+    }
+    return accepted;
+  };
 
   const pool = createPool({
     concurrency: config.concurrency,
@@ -184,10 +208,10 @@ async function renderAllRoutes({
           const discovered = filterRoutes(result.links, {
             include: config.includeProvided ? config.include : [],
             exclude: config.exclude,
-          })
-            .filter((candidate) => !visited.has(candidate))
-            .map((candidate) => ({ route: candidate, depth: depth + 1 }));
-          pool.push(discovered);
+          }).filter((candidate) => !scheduled.has(candidate));
+          pool.push(
+            accept(discovered).map((candidate) => ({ route: candidate, depth: depth + 1 })),
+          );
         }
       } catch (error) {
         report.errors.push({ route, message: error.message });
@@ -196,7 +220,7 @@ async function renderAllRoutes({
     },
   });
 
-  const roots = crawlRoots(config);
+  const roots = accept(crawlRoots(config));
   pool.push(roots.map((route) => ({ route, depth: 0 })));
   const { errors } = await pool.run();
   for (const { item, error } of errors) {
@@ -211,8 +235,12 @@ async function renderAllRoutes({
  * failure is recorded against its route instead of aborting the remaining writes.
  */
 async function writeAllRoutes({ rendered, outputDir, config, log, report }) {
+  const sorted = [...report.routes].sort();
+  const conflicted = reportOutputCollisions({ routes: sorted, config, log, report });
+
   const verifiable = [];
-  for (const route of [...report.routes].sort()) {
+  for (const route of sorted) {
+    if (conflicted.has(route)) continue;
     try {
       const file = await writeRouteOutput({
         route,
@@ -229,6 +257,26 @@ async function writeAllRoutes({ rendered, outputDir, config, log, report }) {
     }
   }
   return verifiable;
+}
+
+/**
+ * Records an error for every route involved in an output file collision and returns
+ * the routes to skip, so an ambiguous write can never overwrite another route.
+ */
+function reportOutputCollisions({ routes, config, log, report }) {
+  const conflicted = new Set();
+  for (const [file, colliding] of findOutputCollisions(routes, config)) {
+    for (const route of colliding) {
+      conflicted.add(route);
+      const others = colliding.filter((other) => other !== route).join(', ');
+      report.errors.push({
+        route,
+        message: `output file collision: ${file} is also written by ${others}`,
+      });
+    }
+    log.error(`  output file collision on ${file}: ${colliding.join(', ')}`);
+  }
+  return conflicted;
 }
 
 /**
