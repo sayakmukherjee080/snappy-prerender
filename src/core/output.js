@@ -15,6 +15,17 @@ export function routeToFile(route, { flatOutput = false, notFoundRoute = null } 
 }
 
 /**
+ * Maps a route to its screenshot file. The root route becomes index.png, other
+ * routes keep their path with the extension swapped.
+ */
+export function routeToScreenshotFile(route, { saveAs = 'png' } = {}) {
+  const normalised = normaliseRoute(route);
+  const extension = saveAs === 'jpeg' ? 'jpeg' : 'png';
+  if (normalised === '/') return `index.${extension}`;
+  return `${normalised.slice(1)}.${extension}`;
+}
+
+/**
  * Writes one rendered route into the output directory. Identical existing files are
  * left untouched, which keeps rebuilds and CI caches stable.
  */

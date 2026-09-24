@@ -1,6 +1,6 @@
 # snappy-prerender
 
-Drop-in prerendering for existing single-page apps. It serves your built output, renders every route in a real browser, writes static HTML per route, and then reloads each page with your client bundle to prove React hydration still succeeds.
+Drop-in prerendering for existing single-page apps. It serves your built output, renders every route in a real browser, writes static HTML per route, and then reloads each page with your client bundle to prove React hydration still succeeds. It also optimises the result: critical CSS, link hints, cached AJAX state, optional minification.
 
 No SSR entry, no framework migration, no app changes. React 18 and React 19, Vite 6/7/8, or any static build directory.
 
@@ -12,6 +12,7 @@ Search engines and social crawlers still read HTML, not client-rendered DOM. `re
 
 - Node.js >= 20.19
 - Chrome or Edge installed (detected automatically), or allow the one-time Chrome for Testing download fallback
+- `beasties` only if you use `inlineCss: 'critical'` (optional peer dependency)
 
 Browser resolution order: installed Chrome, installed Edge, a Playwright-managed browser, then a Chrome for Testing download from Google's version-pinned HTTPS bucket into `SNAPPY_BROWSER_CACHE_DIR` (defaults to the platform cache directory). Chrome for Testing publishes no checksum feed, so that archive is trusted on the strength of HTTPS and the pinned URL rather than a verified hash. Set `browserDownload: false` to forbid downloads entirely.
 
@@ -43,18 +44,18 @@ For any static output directory, Vite or not:
 ```sh
 npx snappy-prerender dist
 npx snappy-prerender dist --include /,/pricing,/blog/* --exclude /blog/drafts/*
+npx snappy-prerender dist --inline-css critical --minify-html --preload-manifest
 ```
 
 ## How it works
 
-1. Serves the built output on an ephemeral loopback port.
+1. Serves the built output on an ephemeral loopback port (or copies it to `destination` first).
 2. Crawls same-origin links from the seed routes, rendering each page in a fresh browser context.
 3. Waits for the app to settle: ready contract, quiet network, fonts, two animation frames.
-4. Freezes CSS animations and third-party requests so output is deterministic.
-5. Serialises the DOM, strips the freeze style, removes elements marked `data-prerender-remove`, de-duplicates head styles, and writes `route/index.html`.
-6. Reloads every written file with the real client bundle and reports React hydration errors.
-
-Identical output files are left untouched, so rebuilds stay cache-friendly.
+4. Freezes CSS animations, blocks third-party requests, and records the resources the page used.
+5. Serialises the DOM, then post-processes it: removes the freeze style and `data-prerender-remove` elements, de-duplicates head styles, drops dead blob stylesheets, adds link hints, optionally inlines CSS, removes or marks scripts, optionally minifies.
+6. Writes `route/index.html` (or a screenshot), leaving identical files untouched.
+7. Reloads every written file with the real client bundle and reports React hydration errors.
 
 ## Ready contract
 
@@ -69,11 +70,138 @@ window.__prerenderReady = true;
 
 The flag is only awaited when the app defines it. Alternatively use `waitFor` (a selector that must appear on every route) or `readySelector`.
 
+## Detecting the prerenderer
+
+Pages render with `userAgent: 'SnappyPrerender'`, so app code can branch:
+
+```js
+const isPrerender = navigator.userAgent === 'SnappyPrerender';
+// e.g. skip analytics, or point API calls at a reachable host during the build
+```
+
+Set `userAgent: null` to send the browser's default instead.
+
+## Optimising the output
+
+### Critical CSS
+
+```js
+snappy({ inlineCss: 'inline' })   // inline every same-origin stylesheet, remove the links
+snappy({ inlineCss: 'critical' }) // inline above-the-fold CSS, defer the rest (needs beasties)
+snappy({ inlineCss: true })       // alias for 'inline'
+```
+
+`'inline'` reads the stylesheet text from the live page, so blob-backed CSS-in-JS sheets are inlined too. Stylesheets that cannot be fetched are left as links.
+
+`'critical'` delegates to [beasties](https://github.com/danielroe/beasties):
+
+```sh
+npm install --save-dev beasties
+```
+
+It inlines the critical CSS and converts the remaining stylesheets to non-blocking loads using `media="print"` plus an inline `onload` handler, with a `<noscript>` fallback. Note that the inline handler is inline JavaScript: a strict `script-src` CSP without `unsafe-inline` will leave the deferred stylesheets unapplied. In that case use `'inline'` or a nonce-aware setup.
+
+### Minification
+
+```js
+snappy({ minifyHtml: true, minifyCss: true });
+```
+
+`minifyHtml` uses html-minifier-terser with react-snap's defaults (whitespace collapsing, boolean attribute collapsing, attribute sorting). **Whitespace collapsing changes text nodes, which React notices during hydration** — the verifier is your safety net, and `{ collapseWhitespace: false }` is the usual fix. `minifyCss` is passed through to clean-css and also minifies CSS inlined into the HTML.
+
+### Link hints
+
+```js
+snappy({ preconnectThirdParty: true, preloadImages: true, preloadManifest: true });
+```
+
+- `preconnectThirdParty` (default `true`) records every third-party origin the page tried to reach — including ones blocked by `blockThirdParty` — and adds `<link rel="preconnect">` for each.
+- `preloadImages` adds `<link rel="preload" as="image">` for same-origin images the page loaded.
+- `preloadManifest` writes `preload-manifest.json` into the output directory: for each route, a `Link` header value listing the scripts and stylesheets it used, filtered by `ignoreForPreload` (default `['service-worker.js']`). Serve these as Early Hints or `Link` response headers.
+
+react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome in v106), so the manifest is now a header list rather than a push list.
+
+### Tag surgery
+
+```js
+snappy({
+  asyncScriptTags: true,   // mark external scripts async
+  removeScriptTags: false, // strip every script tag (page works without JS, hydration is lost)
+  removeStyleTags: false,  // strip every style tag
+  removeBlobs: true,       // drop stylesheet links pointing at dead blob: URLs (default on)
+});
+```
+
+## CSS-in-JS
+
+Emotion, styled-components, vanilla-extract, stitches, JSS and friends work out of the box as long as their styles end up as text inside a `<style>` tag. Three things need more than plain serialisation:
+
+**CSSOM-only styles.** In production, emotion and styled-components v5 switch to `CSSStyleSheet.insertRule` ("speedy" mode), which puts rules in the CSS object model and leaves the style element empty in the DOM. Serialising the page would drop every one of those rules. `captureRuntimeStyles` (default `true`) copies them back into the element text, and also folds document-level constructable stylesheets (`document.adoptedStyleSheets`) into a `<style>` tag. Set it to `false` to leave stylesheets untouched.
+
+**Blob-backed stylesheets.** Some setups create stylesheets as `blob:` URLs, which are dead once the page is gone. `removeBlobs` (default `true`) drops those links, and `inlineCss: 'inline'` inlines their content instead.
+
+**Duplicate styles.** Runtimes that re-inject identical CSS during hydration leave repeated style tags behind. Identical `<style>` contents in the head are de-duplicated. A runtime may also re-insert its rules into a captured sheet on the client; that repeats identical CSS outside React's tree, so it changes nothing visually and cannot cause a hydration error.
+
+Both `inlineCss` strategies work with CSS-in-JS output, and the hydration verifier is what catches a runtime that renders differently on the client than during prerender.
+
+**Limitation:** content inside shadow roots is not part of `page.content()`, so a UI built on web components is captured as light DOM only. Use declarative shadow DOM or render those parts into the light DOM.
+
+## Form state
+
+Controlled inputs keep their state as DOM properties, which do not survive serialisation: a checkbox that is checked at runtime would come back unchecked, and a select would fall back to its first option, until the bundle hydrates. `captureFormState` (default `true`) writes `checked` and `selected` attributes to match the live DOM — the same thing React's own server rendering emits for controlled inputs — and clears the attributes when the property is false, so a stale default from the markup cannot leak through. Set it to `false` to leave form controls untouched.
+
+`input.indeterminate` has no attribute and cannot be captured; restore it in the app after hydration if you rely on it.
+
+## Async data and state
+
+Hydration mismatches usually come from data that was present during prerender but missing on the client. Two mechanisms close that gap.
+
+**Cached JSON.** With `cacheAjaxRequests: true`, every same-origin JSON response is captured and injected before the first script runs:
+
+```js
+snappy({ cacheAjaxRequests: true });
+```
+
+```js
+// in your app, during hydration
+const cached = window.snapStore?.['/api/items?page=2'];
+if (cached) return cached;
+return fetch('/api/items?page=2').then((response) => response.json());
+```
+
+`window.snapStore` is keyed by the request path (including its query string), exactly as your app requested it.
+
+**App state.** Define `window.snapSaveState` and whatever it returns is injected as globals before the first script:
+
+```js
+window.snapSaveState = () => ({ __APP_STATE__: store.getState() });
+// becomes: window.__APP_STATE__ = {...}
+```
+
+Values are JSON-encoded with `<`, `>`, `/` and line separators escaped, so they cannot break out of the script tag.
+
+## Screenshots
+
+```js
+snappy({ saveAs: 'png', destination: 'build/screenshots' });
+```
+
+`saveAs: 'png'` or `'jpeg'` captures a full-page screenshot per route instead of HTML (`index.png`, `about.png`, `blog/post.png`). Hydration verification is skipped, since there is no HTML to verify.
+
+## Writing elsewhere
+
+```js
+snappy({ destination: 'build/prerendered' });
+```
+
+The built output is copied to the destination first, so assets sit beside the generated HTML, and the source directory stays untouched.
+
 ## Options
 
 | Option | Default | Description |
 | --- | --- | --- |
 | `sourceDir` | `dist` | Built output directory |
+| `destination` | `null` | Copy the output here and write results here instead of in place |
 | `base` | `/` | Public base path |
 | `include` | `['/']` | Seed routes and allowlist. Wildcards (`/blog/*`) filter discovered routes, only concrete paths are seeded |
 | `exclude` | `[]` | Routes to skip, strings or RegExp |
@@ -82,20 +210,39 @@ The flag is only awaited when the app defines it. Alternatively use `waitFor` (a
 | `concurrency` | derived | Parallel pages, derived from CPU count, capped at 8 |
 | `timeout` | `30000` | Per-route timeout in ms |
 | `quietPeriod` | `500` | Network must be idle this long before capture |
-| `scrollStepDelay` | `100` | Delay between scroll steps when `scrollToBottom` is on |
 | `readyFlag` | `__prerenderReady` | Window flag awaited when defined |
 | `readySelector` | `null` | Selector awaited when set |
 | `waitFor` | `null` | Selector awaited on every route |
 | `viewport` | `1280x720` | Browser viewport |
 | `storageState` | `null` | Playwright storage state file for authenticated routes |
+| `userAgent` | `SnappyPrerender` | User agent used while rendering, `null` for the browser default |
 | `browser` | `auto` | `auto`, `chrome`, `msedge`, `chromium`, or a path to an executable |
 | `browserDownload` | `true` | Allow the Chrome for Testing fallback download |
+| `browserArgs` | `[]` | Extra browser launch arguments |
+| `headless` | `true` | Run the browser headless |
+| `ignoreHTTPSErrors` | `false` | Ignore TLS errors while rendering |
 | `blockThirdParty` | `true` | Abort third-party requests during rendering and verification |
 | `allowedHosts` | `[]` | Extra hosts allowed when third-party blocking is on |
 | `freezeAnimations` | `true` | Neutralise animations and emulate reduced motion |
 | `scrollToBottom` | `false` | Scroll through pages to trigger lazy content |
+| `scrollStepDelay` | `100` | Delay between scroll steps when `scrollToBottom` is on |
+| `captureRuntimeStyles` | `true` | Fold CSSOM-only styles and constructable stylesheets into the output |
+| `captureFormState` | `true` | Sync `checked` and `selected` into the output markup |
+| `inlineCss` | `false` | `'inline'`, `'critical'` (needs beasties) or `true` for `'inline'` |
+| `minifyHtml` | `false` | Minify output HTML, `true` for defaults or an html-minifier-terser options object |
+| `minifyCss` | `false` | Minify CSS with clean-css, also applied to inlined CSS |
+| `preconnectThirdParty` | `true` | Add preconnect hints for third-party origins |
+| `preloadImages` | `false` | Add preload hints for same-origin images |
+| `preloadManifest` | `false` | Write `preload-manifest.json` with Link header hints |
+| `ignoreForPreload` | `['service-worker.js']` | File names excluded from the manifest |
+| `cacheAjaxRequests` | `false` | Expose captured JSON responses as `window.snapStore` |
+| `removeBlobs` | `true` | Drop stylesheet links pointing at dead `blob:` URLs |
+| `removeStyleTags` | `false` | Strip every style tag from the output |
+| `removeScriptTags` | `false` | Strip every script tag from the output |
+| `asyncScriptTags` | `false` | Mark external scripts async |
 | `flatOutput` | `false` | Write `about.html` instead of `about/index.html` |
 | `notFoundRoute` | `/404` | Route emitted as `404.html` |
+| `saveAs` | `html` | `html`, `png` or `jpeg` |
 | `verify` | `true` | Run the hydration verification pass |
 | `failOnHydrationError` | `true` | Fail the run on hydration errors |
 | `failOnError` | `true` | Fail the run on route render errors |
@@ -119,15 +266,24 @@ if (!report.ok) {
 }
 ```
 
-The report exposes `routes`, `files` (with per-route `status`), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `verification`, and `ok`.
+The report exposes `routes`, `files` (with per-route `status`), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `verification`, `preloadManifest`, and `ok`.
+
+## Differences from react-snap
+
+Kept: crawling, include, concurrency, viewport, waitFor, executable path, external server, third-party skipping (now on by default), `userAgent`, `inlineCss`, `minifyHtml`, `minifyCss`, `cacheAjaxRequests`, `snapSaveState`, `preconnectThirdParty`, `preloadImages`, `removeBlobs`, `removeStyleTags`, `removeScriptTags`, `asyncScriptTags`, `destination`, `saveAs` (html/png/jpeg).
+
+Changed: `http2PushManifest` became `preloadManifest` (browsers removed HTTP/2 push), `fixInsertRule` became `captureRuntimeStyles` and also covers constructable stylesheets, `fixFormFields` became `captureFormState`, `puppeteerArgs` became `browserArgs`, `puppeteerIgnoreHTTPSErrors` became `ignoreHTTPSErrors`, `skipThirdPartyRequests` became `blockThirdParty` with the opposite default, `exclude` and `maxDepth` are new, and `notFoundRoute` replaces the `/404` include convention.
+
+Dropped: `sourceMaps` (declared but never referenced in react-snap's code), `fixWebpackChunksIssue` and `fixInsertRule` (webpack/Chrome-era workarounds), `port` (ephemeral loopback port instead), `puppeteer.cache`, and the preload polyfill (modulepreload is universally supported).
 
 ## Limitations
 
-- **Build-time data is a snapshot.** Anything fetched during rendering is frozen into the HTML until the next build.
+- **Build-time data is a snapshot.** Anything fetched during rendering is frozen into the HTML until the next build. Use `cacheAjaxRequests` and `snapSaveState` so the client replays the same data.
 - **Hydration mismatches are your app's to fix.** The verifier tells you exactly which route and which React error. Common causes: `Date.now()`, `Math.random()`, `localStorage` reads during render, viewport-dependent markup, and CSS-in-JS that re-injects styles on hydration.
 - **Authenticated routes need `storageState`.** Never prerender personal data into static HTML without deciding to.
 - **Runtime-only routes** (heavy API dependence, real-time data) are better served by `serveCmd` or left client-rendered.
 - Route query strings are ignored; routes are deduplicated without them.
+- Screenshots are viewport-width full-page captures, so they reflect the configured `viewport`, not a device matrix.
 
 ## License
 

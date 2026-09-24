@@ -2,19 +2,24 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { launchBrowser } from './browser.js';
 import { resolveConfig } from './config.js';
+import { prepareDestination } from './destination.js';
+import { inlineCriticalCss } from './inline-css.js';
 import { createLogger } from './log.js';
+import { minifyHtml } from './minify.js';
 import { normaliseHtml } from './normalize.js';
-import { writeRouteHtml } from './output.js';
+import { routeToScreenshotFile, writeRouteHtml } from './output.js';
+import { buildPreloadManifest } from './preload-manifest.js';
 import { renderRoute } from './render.js';
-import { crawlRoots, filterRoutes, withinDepth } from './routes.js';
+import { crawlRoots, filterRoutes, toPublicPath, withinDepth } from './routes.js';
 import { createPool } from './scheduler.js';
 import { startCommandServer, startStaticServer } from './server.js';
 import { verifyRoutes } from './verify.js';
 
 /**
  * Entry point of the prerenderer: serves the built output, crawls and renders
- * routes in a real browser, writes static HTML per route, then verifies hydration.
- * Returns a report instead of throwing so callers decide how to fail.
+ * routes in a real browser, post-processes and writes one file per route, then
+ * verifies hydration. Returns a report instead of throwing so callers decide how to
+ * fail.
  */
 export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   const config = resolveConfig(userOptions);
@@ -23,6 +28,11 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   const startedAt = Date.now();
 
   await assertSourceDir(sourceDir, config);
+  const outputDir = await resolveOutputDir({ sourceDir, config, log });
+
+  if (config.saveAs !== 'html' && config.verify) {
+    log.warn(`saveAs: '${config.saveAs}' writes images, so hydration verification is skipped`);
+  }
 
   const server = config.serveCmd
     ? await startCommandServer({
@@ -31,7 +41,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
         timeout: config.serveCmdTimeout,
         shutdownTimeout: config.shutdownTimeout,
       })
-    : await startStaticServer({ dir: sourceDir, base: config.base });
+    : await startStaticServer({ dir: outputDir, base: config.base });
 
   const report = {
     routes: [],
@@ -39,9 +49,11 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     errors: [],
     pageErrors: [],
     verification: null,
+    preloadManifest: null,
     ok: false,
     durationMs: 0,
   };
+  const manifestEntries = [];
   let browser = null;
 
   try {
@@ -49,13 +61,31 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     browser = launched.browser;
     log.info(`Browser: ${launched.source}`);
 
-    const rendered = await renderAllRoutes({ browser, server, config, log, report });
+    const rendered = await renderAllRoutes({
+      browser,
+      server,
+      config,
+      log,
+      report,
+      manifestEntries,
+      outputDir,
+    });
     log.info(`Rendered ${report.routes.length} route(s)`);
 
-    const verifiable = await writeAllRoutes({ rendered, sourceDir, config, log, report });
+    const verifiable = await writeAllRoutes({ rendered, outputDir, config, log, report });
     logFileSummary(report, log);
 
-    if (config.verify && !config.dryRun && verifiable.length > 0) {
+    if (config.preloadManifest && !config.dryRun) {
+      report.preloadManifest = await writePreloadManifest({
+        manifestEntries,
+        outputDir,
+        config,
+        log,
+      });
+    }
+
+    const canVerify = config.verify && !config.dryRun && config.saveAs === 'html';
+    if (canVerify && verifiable.length > 0) {
       report.verification = await verifyRoutes({
         browser,
         origin: server.origin,
@@ -92,10 +122,32 @@ async function assertSourceDir(sourceDir, config) {
 }
 
 /**
- * Runs the crawl and render pool. Each rendered page contributes both its HTML and
- * any new same-origin routes, so discovery and rendering happen in a single pass.
+ * Resolves where generated files go. A destination is copied from the source first
+ * so assets sit beside the generated HTML; with serveCmd there is nothing to serve
+ * from disk, so the destination is only used as the write target.
  */
-async function renderAllRoutes({ browser, server, config, log, report }) {
+async function resolveOutputDir({ sourceDir, config, log }) {
+  if (config.serveCmd) return path.resolve(config.destination ?? config.sourceDir);
+  return prepareDestination({
+    sourceDir,
+    destination: config.destination ? path.resolve(config.destination) : null,
+    log,
+  });
+}
+
+/**
+ * Runs the crawl and render pool. Each rendered page contributes its output, any new
+ * same-origin routes, and the resources recorded for the link-hint features.
+ */
+async function renderAllRoutes({
+  browser,
+  server,
+  config,
+  log,
+  report,
+  manifestEntries,
+  outputDir,
+}) {
   const visited = new Set();
   const rendered = new Map();
 
@@ -106,15 +158,24 @@ async function renderAllRoutes({ browser, server, config, log, report }) {
       visited.add(route);
       log.debug(`rendering ${route}`);
       try {
-        const result = await renderRoute({ browser, origin: server.origin, route, config });
-        const { html, stats } = normaliseHtml(result.html);
-        if (stats.removedElements > 0 || stats.dedupedStyles > 0) {
-          log.debug(
-            `  cleaned ${route}: ${stats.removedElements} element(s) removed, ${stats.dedupedStyles} duplicate style(s)`,
-          );
-        }
-        rendered.set(route, { html });
+        const screenshotPath =
+          config.saveAs !== 'html' && !config.dryRun
+            ? path.join(outputDir, routeToScreenshotFile(route, config))
+            : null;
+        const result = await renderRoute({
+          browser,
+          origin: server.origin,
+          route,
+          config,
+          screenshotPath,
+        });
+        rendered.set(route, result);
         report.routes.push(route);
+        manifestEntries.push({
+          route,
+          scripts: [...result.collector.scripts],
+          styles: [...result.collector.styles],
+        });
         for (const message of result.pageErrors) {
           report.pageErrors.push({ route, message });
           log.warn(`  page error on ${route}: ${message}`);
@@ -149,12 +210,17 @@ async function renderAllRoutes({ browser, server, config, log, report }) {
  * Writes every rendered route and returns the routes that can be verified. A write
  * failure is recorded against its route instead of aborting the remaining writes.
  */
-async function writeAllRoutes({ rendered, sourceDir, config, log, report }) {
+async function writeAllRoutes({ rendered, outputDir, config, log, report }) {
   const verifiable = [];
   for (const route of [...report.routes].sort()) {
-    const entry = rendered.get(route);
     try {
-      const file = await writeRouteHtml({ dir: sourceDir, route, html: entry.html, config });
+      const file = await writeRouteOutput({
+        route,
+        result: rendered.get(route),
+        outputDir,
+        config,
+        log,
+      });
       report.files.push(file);
       verifiable.push(route);
     } catch (error) {
@@ -163,6 +229,59 @@ async function writeAllRoutes({ rendered, sourceDir, config, log, report }) {
     }
   }
   return verifiable;
+}
+
+/**
+ * Applies the configured post-processing to one rendered route and writes it: DOM
+ * cleanups and link hints, critical CSS extraction, then optional minification.
+ */
+async function writeRouteOutput({ route, result, outputDir, config, log }) {
+  if (result.screenshot) {
+    const file = routeToScreenshotFile(route, config);
+    const stats = await fs.stat(path.join(outputDir, file));
+    return { route, file, status: 'written', bytes: stats.size };
+  }
+
+  const { html, stats } = normaliseHtml(result.html, {
+    removeStyleTags: config.removeStyleTags,
+    removeScriptTags: config.removeScriptTags,
+    asyncScriptTags: config.asyncScriptTags,
+    removeBlobs: config.removeBlobs,
+    preconnectOrigins: config.preconnectThirdParty
+      ? [...result.collector.thirdPartyOrigins].sort()
+      : [],
+    preloadImages: config.preloadImages
+      ? [...result.collector.images].sort().map((image) => toPublicPath(image, config.base))
+      : [],
+  });
+  if (stats.removedElements > 0 || stats.dedupedStyles > 0 || stats.hints > 0) {
+    log.debug(
+      `  cleaned ${route}: ${stats.removedElements} element(s) removed, ${stats.dedupedStyles} duplicate style(s), ${stats.hints} hint(s)`,
+    );
+  }
+
+  let output = html;
+  if (config.inlineCss === 'critical') {
+    output = await inlineCriticalCss({ html: output, outputDir, base: config.base });
+  }
+  if (config.minifyHtml) {
+    output = await minifyHtml(output, config.minifyHtml, config.minifyCss);
+  }
+  return writeRouteHtml({ dir: outputDir, route, html: output, config });
+}
+
+/**
+ * Writes the preload manifest: per route, the scripts and stylesheets it loaded,
+ * as Link header values a host can serve for Early Hints or HTTP headers.
+ */
+async function writePreloadManifest({ manifestEntries, outputDir, config, log }) {
+  const manifest = buildPreloadManifest(manifestEntries, {
+    ignoreForPreload: config.ignoreForPreload,
+  });
+  const file = 'preload-manifest.json';
+  await fs.writeFile(path.join(outputDir, file), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  log.info(`Wrote preload manifest covering ${manifest.length} route(s)`);
+  return { file, routes: manifest.length };
 }
 
 // Prints the write outcome counts, including a dedicated dry-run wording.

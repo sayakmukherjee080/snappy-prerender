@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { routeToFile, writeRouteHtml } from '../../src/core/output.js';
+import { routeToFile, routeToScreenshotFile, writeRouteHtml } from '../../src/core/output.js';
 
 const tempDirs = [];
 
@@ -36,6 +36,21 @@ describe('routeToFile', () => {
     assert.equal(routeToFile('/404', { notFoundRoute: '/404' }), '404.html');
     assert.equal(routeToFile('/missing', { notFoundRoute: '/missing' }), '404.html');
     assert.equal(routeToFile('/about', { notFoundRoute: '/404' }), 'about/index.html');
+  });
+});
+
+describe('routeToScreenshotFile', () => {
+  it('maps the root route to index.png', () => {
+    assert.equal(routeToScreenshotFile('/', {}), 'index.png');
+  });
+
+  it('maps nested routes to their path with the extension swapped', () => {
+    assert.equal(routeToScreenshotFile('/about', {}), 'about.png');
+    assert.equal(routeToScreenshotFile('/blog/post', {}), 'blog/post.png');
+  });
+
+  it('uses the jpeg extension when requested', () => {
+    assert.equal(routeToScreenshotFile('/about', { saveAs: 'jpeg' }), 'about.jpeg');
   });
 });
 

@@ -27,9 +27,29 @@ Options:
       --no-verify             Skip the hydration verification pass
       --no-block-third-party  Allow third-party requests during rendering
       --no-freeze-animations  Do not neutralise CSS animations before capture
+      --no-capture-runtime-styles  Do not fold CSSOM-only styles into the output
+      --no-capture-form-state  Do not sync checked and selected into the output
       --scroll                Scroll through each page to trigger lazy content
       --flat                  Write about.html instead of about/index.html
       --not-found <route>     Route emitted as 404.html (default: /404)
+      --destination <dir>     Write output to another directory (default: in place)
+      --save-as <format>      html | png | jpeg (default: html)
+      --user-agent <value>    User agent used while rendering (default: SnappyPrerender)
+      --inline-css <strategy> inline | critical (critical needs the beasties package)
+      --minify-html           Minify the generated HTML
+      --minify-css            Minify CSS inlined into the HTML
+      --preconnect-third-party  Add preconnect hints for third-party origins (default: on)
+      --no-preconnect-third-party  Disable preconnect hints
+      --preload-images        Add preload hints for images on the page
+      --preload-manifest      Write preload-manifest.json with Link header hints
+      --ignore-for-preload <names>  File names excluded from the manifest, comma separated
+      --cache-ajax-requests   Expose captured JSON responses as window.snapStore
+      --remove-scripts        Strip every script tag from the output
+      --remove-styles         Strip every style tag from the output
+      --async-scripts         Mark external scripts async
+      --no-remove-blobs       Keep blob stylesheet links instead of dropping them
+      --ignore-https-errors   Ignore TLS errors while rendering
+      --browser-args <args>   Extra browser launch arguments, comma separated
       --url <url>             App URL to connect to when using --serve-cmd
       --serve-cmd <command>   Command that starts the app server instead of static serving
       --dry-run               Render and report without writing files
@@ -61,9 +81,28 @@ async function main() {
       'no-verify': { type: 'boolean' },
       'no-block-third-party': { type: 'boolean' },
       'no-freeze-animations': { type: 'boolean' },
+      'no-capture-runtime-styles': { type: 'boolean' },
+      'no-capture-form-state': { type: 'boolean' },
       scroll: { type: 'boolean' },
       flat: { type: 'boolean' },
       'not-found': { type: 'string' },
+      destination: { type: 'string' },
+      'save-as': { type: 'string' },
+      'user-agent': { type: 'string' },
+      'inline-css': { type: 'string' },
+      'minify-html': { type: 'boolean' },
+      'minify-css': { type: 'boolean' },
+      'no-preconnect-third-party': { type: 'boolean' },
+      'preload-images': { type: 'boolean' },
+      'preload-manifest': { type: 'boolean' },
+      'ignore-for-preload': { type: 'string', multiple: true },
+      'cache-ajax-requests': { type: 'boolean' },
+      'remove-scripts': { type: 'boolean' },
+      'remove-styles': { type: 'boolean' },
+      'async-scripts': { type: 'boolean' },
+      'no-remove-blobs': { type: 'boolean' },
+      'ignore-https-errors': { type: 'boolean' },
+      'browser-args': { type: 'string', multiple: true },
       url: { type: 'string' },
       'serve-cmd': { type: 'string' },
       'dry-run': { type: 'boolean' },
@@ -115,9 +154,30 @@ function cliOptions({ values, positionals }) {
   if (values['no-verify']) options.verify = false;
   if (values['no-block-third-party']) options.blockThirdParty = false;
   if (values['no-freeze-animations']) options.freezeAnimations = false;
+  if (values['no-capture-runtime-styles']) options.captureRuntimeStyles = false;
+  if (values['no-capture-form-state']) options.captureFormState = false;
   if (values.scroll) options.scrollToBottom = true;
   if (values.flat) options.flatOutput = true;
   if (values['not-found'] !== undefined) options.notFoundRoute = values['not-found'];
+  if (values.destination !== undefined) options.destination = values.destination;
+  if (values['save-as'] !== undefined) options.saveAs = values['save-as'];
+  if (values['user-agent'] !== undefined) options.userAgent = values['user-agent'];
+  if (values['inline-css'] !== undefined) options.inlineCss = values['inline-css'];
+  if (values['minify-html']) options.minifyHtml = true;
+  if (values['minify-css']) options.minifyCss = true;
+  if (values['no-preconnect-third-party']) options.preconnectThirdParty = false;
+  if (values['preload-images']) options.preloadImages = true;
+  if (values['preload-manifest']) options.preloadManifest = true;
+  if (values['ignore-for-preload'] !== undefined) {
+    options.ignoreForPreload = splitList(values['ignore-for-preload']);
+  }
+  if (values['cache-ajax-requests']) options.cacheAjaxRequests = true;
+  if (values['remove-scripts']) options.removeScriptTags = true;
+  if (values['remove-styles']) options.removeStyleTags = true;
+  if (values['async-scripts']) options.asyncScriptTags = true;
+  if (values['no-remove-blobs']) options.removeBlobs = false;
+  if (values['ignore-https-errors']) options.ignoreHTTPSErrors = true;
+  if (values['browser-args'] !== undefined) options.browserArgs = splitList(values['browser-args']);
   if (values.url !== undefined) options.url = values.url;
   if (values['serve-cmd'] !== undefined) options.serveCmd = values['serve-cmd'];
   if (values['dry-run']) options.dryRun = true;

@@ -46,6 +46,8 @@ async function verifyRoute({ browser, origin, route, config }) {
   const context = await browser.newContext({
     viewport: config.viewport,
     storageState: config.storageState ?? undefined,
+    userAgent: config.userAgent ?? undefined,
+    ignoreHTTPSErrors: config.ignoreHTTPSErrors,
   });
   const page = await context.newPage();
   const hydrationErrors = [];

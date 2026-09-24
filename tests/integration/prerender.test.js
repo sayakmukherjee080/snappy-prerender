@@ -368,6 +368,255 @@ describe('prerender integration: failure handling', () => {
   });
 });
 
+describe('prerender integration: capture and optimisation options', () => {
+  it('applies the prerender user agent, caches JSON and replays snapSaveState', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html': [
+        '<!doctype html><html><head><title>Home page</title>',
+        '<script>window.snapSaveState = () => ({ __APP_STATE__: { count: 1 } });</script>',
+        "<script>fetch('/api/data.json').then((r) => r.json()).then((d) => { document.title = d.title; });</script>",
+        '</head><body><h1>Home page</h1>',
+        '<script>document.body.dataset.ua = navigator.userAgent;</script>',
+        '</body></html>',
+      ].join(''),
+      'api/data.json': JSON.stringify({ title: 'cached title' }),
+    });
+
+    const report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      cacheAjaxRequests: true,
+      userAgent: 'SnappyTest/1.0',
+    });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.equal(report.errors.length, 0);
+    assert.match(html, /data-ua="SnappyTest\/1\.0"/);
+    assert.match(html, /cached title/);
+    assert.match(html, /window\.snapStore=/);
+    assert.match(html, /\\u002Fapi\\u002Fdata\.json/);
+    assert.match(html, /window\["__APP_STATE__"\]=\{"count":1\}/);
+  });
+
+  it('adds preconnect and image preload hints and writes a preload manifest', async () => {
+    const thirdParty = await startThirdParty();
+    try {
+      const sourceDir = await makeStaticSite({
+        'index.html': [
+          '<!doctype html><html><head><title>Home page</title></head><body>',
+          '<h1>Home page</h1>',
+          '<img src="/hero.svg">',
+          `<img src="${thirdParty.origin}/remote.png">`,
+          '<script src="/app.js"></script>',
+          '</body></html>',
+        ].join(''),
+        'hero.svg':
+          '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>',
+        'app.js': 'document.body.dataset.loaded = "yes";',
+      });
+
+      const report = await prerender({
+        sourceDir,
+        logLevel: 'silent',
+        verify: false,
+        preloadImages: true,
+        preloadManifest: true,
+      });
+
+      const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+      assert.match(html, new RegExp(`<link rel="preconnect" href="${thirdParty.origin}">`));
+      assert.match(html, /<link rel="preload" as="image" href="\/hero\.svg">/);
+      assert.equal(report.preloadManifest?.routes, 1);
+
+      const manifest = JSON.parse(
+        await fs.readFile(path.join(sourceDir, 'preload-manifest.json'), 'utf8'),
+      );
+      assert.equal(manifest[0].source, '/');
+      assert.match(manifest[0].headers[0].value, /<\/app\.js>;rel=preload;as=script/);
+    } finally {
+      await thirdParty.close();
+    }
+  });
+
+  it('inlines stylesheets with the inline strategy', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html':
+        '<!doctype html><html><head><title>Home page</title><link rel="stylesheet" href="/style.css"></head><body><h1 class="hero">Home page</h1></body></html>',
+      'style.css': '.hero { color: rgb(1, 2, 3); }',
+    });
+
+    await prerender({ sourceDir, logLevel: 'silent', verify: false, inlineCss: 'inline' });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.equal(html.includes('rel="stylesheet"'), false);
+    assert.match(html, /<style>\.hero \{ color: rgb\(1, 2, 3\); \}<\/style>/);
+  });
+
+  it('inlines critical CSS with the critical strategy', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html':
+        '<!doctype html><html><head><title>Home page</title><link rel="stylesheet" href="/style.css"></head><body><h1 class="hero">Home page</h1></body></html>',
+      'style.css': '.hero { color: rgb(4, 5, 6); }',
+    });
+
+    await prerender({ sourceDir, logLevel: 'silent', verify: false, inlineCss: 'critical' });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.match(html, /<style>[\s\S]*\.hero[\s\S]*<\/style>/);
+  });
+
+  it('writes to a destination directory and leaves the source untouched', async () => {
+    const sourceDir = await makeStaticSite({ 'index.html': page('Home page', ['/about']) });
+    const destination = await makeStaticSite({});
+    const before = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+
+    const report = await prerender({ sourceDir, destination, logLevel: 'silent', verify: false });
+
+    assert.equal(await exists(path.join(destination, 'index.html')), true);
+    assert.equal(await exists(path.join(destination, 'about', 'index.html')), true);
+    assert.equal(await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8'), before);
+    assert.equal(await exists(path.join(sourceDir, 'about')), false);
+    assert.equal(
+      report.files.every((file) => file.status === 'written'),
+      true,
+    );
+  });
+
+  it('captures screenshots when saveAs is png', async () => {
+    const sourceDir = await makeStaticSite({ 'index.html': page('Home page', ['/about']) });
+
+    const report = await prerender({ sourceDir, logLevel: 'silent', saveAs: 'png' });
+
+    const png = await fs.readFile(path.join(sourceDir, 'index.png'));
+    assert.deepEqual([...png.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+    assert.equal(await exists(path.join(sourceDir, 'about.png')), true);
+    assert.equal(await exists(path.join(sourceDir, 'about', 'index.html')), false);
+    assert.equal(report.verification, null);
+  });
+
+  it('marks scripts async and minifies the output', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html':
+        '<!doctype html><html><head><title>Home page</title></head><body>\n  <h1>Home page</h1>\n  <script src="/app.js"></script>\n</body></html>',
+      'app.js': 'document.body.dataset.loaded = "yes";',
+    });
+
+    await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      asyncScriptTags: true,
+      minifyHtml: true,
+    });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.match(html, /<script async src="\/app\.js">/);
+    assert.equal(html.includes('\n  '), false);
+    assert.match(html, /data-loaded="yes"/);
+  });
+
+  it('removes script and style tags when asked', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html':
+        '<!doctype html><html><head><title>Home page</title><style>.a{}</style></head><body><h1>Home page</h1><script src="/app.js"></script></body></html>',
+      'app.js': '',
+    });
+
+    await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      removeScriptTags: true,
+      removeStyleTags: true,
+    });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.equal(html.includes('<script'), false);
+    assert.equal(html.includes('<style'), false);
+  });
+});
+
+describe('prerender integration: css-in-js', () => {
+  const RUNTIME_PAGE = [
+    '<!doctype html><html><head><title>Home page</title>',
+    '<style>.plain-rule { color: rgb(1, 1, 1); }</style>',
+    '<style id="runtime"></style>',
+    '</head><body><h1 class="runtime-rule">Home page</h1>',
+    '<script>',
+    // Selectors are assembled at runtime so their literal text never appears in the
+    // serialised script, which keeps the assertions below unambiguous.
+    "const runtimeSelector = '.runtime' + '-rule';",
+    "document.getElementById('runtime').sheet.insertRule(runtimeSelector + ' { color: rgb(10, 20, 30); }', 0);",
+    "const adoptedSelector = '.adopted' + '-rule';",
+    'const adopted = new CSSStyleSheet();',
+    "adopted.replaceSync(adoptedSelector + ' { color: rgb(40, 50, 60); }');",
+    'document.adoptedStyleSheets = [...document.adoptedStyleSheets, adopted];',
+    '</script></body></html>',
+  ].join('');
+
+  it('captures CSSOM-only styles and constructable stylesheets', async () => {
+    const sourceDir = await makeStaticSite({ 'index.html': RUNTIME_PAGE });
+
+    await prerender({ sourceDir, logLevel: 'silent', verify: false });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.match(html, /\.runtime-rule \{ color: rgb\(10, 20, 30\); \}/);
+    assert.match(html, /\.adopted-rule \{ color: rgb\(40, 50, 60\); \}/);
+    assert.equal(html.split('.plain-rule').length - 1, 1);
+  });
+
+  it('leaves CSSOM-only styles alone when capture is disabled', async () => {
+    const sourceDir = await makeStaticSite({ 'index.html': RUNTIME_PAGE });
+
+    await prerender({ sourceDir, logLevel: 'silent', verify: false, captureRuntimeStyles: false });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.equal(html.includes('.runtime-rule'), false);
+    assert.equal(html.includes('.adopted-rule'), false);
+  });
+});
+
+describe('prerender integration: form state', () => {
+  const FORM_PAGE = [
+    '<!doctype html><html><head><title>Home page</title></head><body>',
+    '<input id="on" type="checkbox">',
+    '<input id="off" type="checkbox" checked>',
+    '<input type="radio" name="r" value="a">',
+    '<input type="radio" name="r" value="b">',
+    '<select id="s"><option value="a">A</option><option value="b">B</option></select>',
+    '<script>',
+    "document.getElementById('on').checked = true;",
+    "document.getElementById('off').checked = false;",
+    "document.querySelectorAll('input[type=radio]')[1].checked = true;",
+    "document.getElementById('s').value = 'b';",
+    '</script></body></html>',
+  ].join('');
+
+  it('syncs checked and selected state into the markup', async () => {
+    const sourceDir = await makeStaticSite({ 'index.html': FORM_PAGE });
+
+    await prerender({ sourceDir, logLevel: 'silent', verify: false });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.match(html, /<input id="on" type="checkbox" checked="">/);
+    assert.match(html, /<input id="off" type="checkbox">/);
+    assert.match(html, /<input type="radio" name="r" value="b" checked="">/);
+    assert.match(html, /<option value="b" selected="">B<\/option>/);
+  });
+
+  it('leaves form state alone when capture is disabled', async () => {
+    const sourceDir = await makeStaticSite({ 'index.html': FORM_PAGE });
+
+    await prerender({ sourceDir, logLevel: 'silent', verify: false, captureFormState: false });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.match(html, /<input id="on" type="checkbox">/);
+    assert.match(html, /<input id="off" type="checkbox" checked="">/);
+    assert.equal(html.includes('selected'), false);
+  });
+});
+
 describe('prerender integration: cli', () => {
   it('prerenders with explicit flags', async () => {
     const sourceDir = await makeStaticSite({ 'index.html': page('Home page', ['/about']) });
@@ -391,6 +640,26 @@ describe('prerender integration: cli', () => {
     const entries = await fs.readdir(sourceDir);
     assert.deepEqual(entries, ['index.html']);
     assert.match(cli.stdout, /Dry run/);
+  });
+
+  it('applies optimisation flags from the command line', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html':
+        '<!doctype html><html><head><title>Home page</title><link rel="stylesheet" href="/style.css"></head><body>\n  <h1>Home page</h1>\n</body></html>',
+      'style.css': '.hero { color: rgb(7, 8, 9); }',
+    });
+
+    const cli = spawnSync(
+      process.execPath,
+      [cliPath, sourceDir, '--inline-css', 'inline', '--minify-html', '--no-verify'],
+      { encoding: 'utf8', cwd: repoRoot },
+    );
+
+    assert.equal(cli.status, 0, cli.stderr);
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.equal(html.includes('rel="stylesheet"'), false);
+    assert.match(html, /<style>\.hero\s*\{[^}]*rgb\(7, 8, 9\)[^}]*\}<\/style>/);
+    assert.equal(html.includes('\n  '), false);
   });
 
   it('rejects a config file that does not export a plain object', async () => {

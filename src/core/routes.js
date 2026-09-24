@@ -83,8 +83,16 @@ export function toAppRoute(href, base) {
  * re-applying the configured base path.
  */
 export function toServerUrl(route, base, origin) {
+  return `${origin}${toPublicPath(route, base)}`;
+}
+
+/**
+ * Re-applies the base path to an app-relative path, for hints that the browser
+ * resolves against the served origin rather than the app root.
+ */
+export function toPublicPath(pathname, base) {
   const prefix = base === '/' ? '' : base.slice(0, -1);
-  return `${origin}${prefix}${route}`;
+  return `${prefix}${pathname}`;
 }
 
 /**

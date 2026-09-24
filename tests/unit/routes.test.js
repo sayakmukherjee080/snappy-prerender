@@ -6,6 +6,7 @@ import {
   matchesPattern,
   normaliseRoute,
   toAppRoute,
+  toPublicPath,
   toServerUrl,
   withinDepth,
 } from '../../src/core/routes.js';
@@ -84,6 +85,13 @@ describe('toServerUrl', () => {
       'http://127.0.0.1:9/base/about',
     );
     assert.equal(toServerUrl('/about', '/', 'http://127.0.0.1:9'), 'http://127.0.0.1:9/about');
+  });
+});
+
+describe('toPublicPath', () => {
+  it('applies the base path to asset paths', () => {
+    assert.equal(toPublicPath('/assets/app.js', '/'), '/assets/app.js');
+    assert.equal(toPublicPath('/assets/app.js', '/app/'), '/app/assets/app.js');
   });
 });
 

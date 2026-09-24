@@ -55,9 +55,13 @@ export async function launchBrowser(config, log) {
   };
 }
 
-// Launches Chromium with the configured headless mode and the caller's target.
+// Launches Chromium with the configured headless mode, extra args and target.
 function launch(config, options) {
-  return chromium.launch({ headless: config.headless, ...options });
+  return chromium.launch({
+    headless: config.headless,
+    args: config.browserArgs.length > 0 ? config.browserArgs : undefined,
+    ...options,
+  });
 }
 
 // Keeps launch failure summaries to a single line in the aggregated error.

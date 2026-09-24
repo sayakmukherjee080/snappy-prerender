@@ -63,3 +63,61 @@ describe('normaliseHtml', () => {
     assert.equal(stats.dedupedStyles, 0);
   });
 });
+
+describe('normaliseHtml post-processing', () => {
+  const PAGE =
+    '<!DOCTYPE html><html><head><style>.a{}</style><link rel="stylesheet" href="/app.css"></head>' +
+    '<body><script src="/app.js"></script><script>inline()</script>' +
+    '<link rel="stylesheet" href="blob:http://127.0.0.1/1"><img src="/hero.png"></body></html>';
+
+  it('removes every style tag when asked', () => {
+    const { html } = normaliseHtml(PAGE, { removeStyleTags: true });
+    assert.equal(html.includes('<style'), false);
+    assert.equal(html.includes('/app.css'), true);
+  });
+
+  it('removes every script tag when asked', () => {
+    const { html } = normaliseHtml(PAGE, { removeScriptTags: true });
+    assert.equal(html.includes('<script'), false);
+  });
+
+  it('marks external scripts async without touching inline or deferred ones', () => {
+    const page =
+      '<!DOCTYPE html><html><head></head><body>' +
+      '<script src="/app.js"></script><script src="/defer.js" defer></script><script>inline()</script>' +
+      '</body></html>';
+    const { html } = normaliseHtml(page, { asyncScriptTags: true });
+    assert.match(html, /<script src="\/app\.js" async=""><\/script>/);
+    assert.equal(html.includes('async="" defer'), false);
+    assert.match(html, /<script>inline\(\)<\/script>/);
+  });
+
+  it('drops dead blob stylesheets and keeps real ones', () => {
+    const { html } = normaliseHtml(PAGE, { removeBlobs: true });
+    assert.equal(html.includes('blob:'), false);
+    assert.equal(html.includes('/app.css'), true);
+  });
+
+  it('injects preconnect hints and skips duplicates', () => {
+    const { html, stats } = normaliseHtml(PAGE, {
+      preconnectOrigins: ['https://api.example.com', 'https://api.example.com'],
+    });
+    assert.equal(html.split('https://api.example.com').length - 1, 1);
+    assert.match(html, /<link rel="preconnect" href="https:\/\/api\.example\.com">/);
+    assert.equal(stats.hints, 1);
+  });
+
+  it('does not repeat a preconnect that the page already declares', () => {
+    const page =
+      '<!DOCTYPE html><html><head><link rel="preconnect" href="https://api.example.com"></head><body></body></html>';
+    const { html, stats } = normaliseHtml(page, { preconnectOrigins: ['https://api.example.com'] });
+    assert.equal(html.split('api.example.com').length - 1, 1);
+    assert.equal(stats.hints, 0);
+  });
+
+  it('injects image preload hints', () => {
+    const { html, stats } = normaliseHtml(PAGE, { preloadImages: ['/app/hero.png'] });
+    assert.match(html, /<link rel="preload" as="image" href="\/app\/hero\.png">/);
+    assert.equal(stats.hints, 1);
+  });
+});

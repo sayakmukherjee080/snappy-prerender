@@ -13,3 +13,10 @@ This file is committed to the public repository — never record secrets, tokens
 [2026-09-23] [naming] npm package name is snappy-prerender — react-snappy taken by abandoned 2016 html-snapshot testing utility.
 [2026-09-23] [naming] GitHub repo renamed from React-Snappy to snappy-prerender to match npm package.
 [2026-09-23] [other] MIT LICENSE copyright holder: sayakmukherjee080 (GitHub handle).
+[2026-09-23] [naming] Prerender user agent is "SnappyPrerender" so app code can branch on it, mirroring react-snap's "ReactSnap". — user decision, stated explicitly.
+[2026-09-23] [architecture] v2 implements react-snap feature parity: inlineCss, minifyHtml, minifyCss, preconnectThirdParty, preloadImages, cacheAjaxRequests with snapSaveState, removeBlobs, removeStyleTags, removeScriptTags, asyncScriptTags, destination, saveAs, browserArgs, ignoreHTTPSErrors.
+[2026-09-23] [naming] react-snap's http2PushManifest is named preloadManifest here — browsers removed HTTP/2 push (Chrome v106), so the artifact is a Link header list for Early Hints instead.
+[2026-09-23] [dependency] Critical CSS delegates to beasties as an optional peer dependency (>=0.4.1), never a hard dependency — most projects never enable it.
+[2026-09-23] [other] react-snap's sourceMaps option is deliberately not implemented — it is declared in its defaults but never referenced in its source.
+[2026-09-23] [naming] react-snap's fixInsertRule is named captureRuntimeStyles here and additionally serialises document.adoptedStyleSheets; default stays true like react-snap's.
+[2026-09-23] [naming] react-snap's fixFormFields is named captureFormState here; unlike react-snap (always on) it is configurable, defaulting to true.

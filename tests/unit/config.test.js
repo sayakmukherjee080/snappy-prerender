@@ -21,6 +21,29 @@ describe('resolveConfig', () => {
     assert.equal(config.includeProvided, false);
   });
 
+  it('applies the react-snap compatible capture and optimisation defaults', () => {
+    const config = resolveConfig();
+    assert.equal(config.userAgent, 'SnappyPrerender');
+    assert.equal(config.destination, null);
+    assert.equal(config.ignoreHTTPSErrors, false);
+    assert.deepEqual(config.browserArgs, []);
+    assert.equal(config.inlineCss, false);
+    assert.equal(config.minifyHtml, false);
+    assert.equal(config.minifyCss, false);
+    assert.equal(config.saveAs, 'html');
+    assert.equal(config.removeBlobs, true);
+    assert.equal(config.captureRuntimeStyles, true);
+    assert.equal(config.captureFormState, true);
+    assert.equal(config.removeStyleTags, false);
+    assert.equal(config.removeScriptTags, false);
+    assert.equal(config.asyncScriptTags, false);
+    assert.equal(config.preconnectThirdParty, true);
+    assert.equal(config.preloadImages, false);
+    assert.equal(config.preloadManifest, false);
+    assert.deepEqual(config.ignoreForPreload, ['service-worker.js']);
+    assert.equal(config.cacheAjaxRequests, false);
+  });
+
   it('derives concurrency from the machine within the documented cap', () => {
     const config = resolveConfig();
     assert.equal(Number.isInteger(config.concurrency), true);
@@ -64,6 +87,34 @@ describe('resolveConfig', () => {
     assert.throws(() => resolveConfig({ notFoundRoute: 42 }), /notFoundRoute/);
     assert.throws(() => resolveConfig({ maxDepth: -2 }), /maxDepth/);
     assert.throws(() => resolveConfig({ storageState: 'does-not-exist.json' }), /storageState/);
+    assert.throws(() => resolveConfig({ userAgent: 42 }), /userAgent/);
+    assert.throws(() => resolveConfig({ destination: 42 }), /destination/);
+    assert.throws(() => resolveConfig({ browserArgs: [1] }), /browserArgs/);
+    assert.throws(() => resolveConfig({ ignoreForPreload: [1] }), /ignoreForPreload/);
+    assert.throws(() => resolveConfig({ inlineCss: 'partial' }), /inlineCss/);
+    assert.throws(() => resolveConfig({ saveAs: 'webp' }), /saveAs/);
+    assert.throws(() => resolveConfig({ minifyHtml: 'yes' }), /minifyHtml/);
+    assert.throws(() => resolveConfig({ minifyCss: [] }), /minifyCss/);
+    assert.throws(() => resolveConfig({ removeScriptTags: 'yes' }), /removeScriptTags/);
+    assert.throws(() => resolveConfig({ captureRuntimeStyles: 'yes' }), /captureRuntimeStyles/);
+    assert.throws(() => resolveConfig({ captureFormState: 'yes' }), /captureFormState/);
+  });
+
+  it('accepts the optimisation option shapes', () => {
+    const config = resolveConfig({
+      inlineCss: 'critical',
+      saveAs: 'png',
+      minifyHtml: { collapseWhitespace: false },
+      minifyCss: {},
+      userAgent: null,
+      destination: 'out',
+    });
+    assert.equal(config.inlineCss, 'critical');
+    assert.equal(config.saveAs, 'png');
+    assert.deepEqual(config.minifyHtml, { collapseWhitespace: false });
+    assert.equal(config.userAgent, null);
+    assert.equal(config.destination, 'out');
+    assert.equal(resolveConfig({ minifyHtml: true, minifyCss: true }).minifyHtml, true);
   });
 
   it('normalises explicitly undefined optionals to null', () => {

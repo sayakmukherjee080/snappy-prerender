@@ -1,7 +1,7 @@
 {
   "name": "snappy-prerender",
-  "version": "0.1.0",
-  "description": "Drop-in prerendering for existing single-page apps. Renders your built app in a real browser, writes static HTML per route, and fails the build on React hydration mismatches.",
+  "version": "2.0.0",
+  "description": "Drop-in prerendering for existing single-page apps. Renders your built app in a real browser, writes static HTML per route, fails the build on React hydration mismatches, and optimises the output with critical CSS, link hints and cached AJAX state.",
   "type": "module",
   "license": "MIT",
   "author": "sayakmukherjee080",
@@ -52,6 +52,8 @@
   },
   "dependencies": {
     "@puppeteer/browsers": "3.2.3",
+    "clean-css": "5.3.3",
+    "html-minifier-terser": "7.2.0",
     "parse5": "8.0.0",
     "playwright-core": "1.63.0",
     "sirv": "3.0.2"
@@ -59,6 +61,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.0.0",
     "@vitejs/plugin-react": "5.0.0",
+    "beasties": "0.4.1",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "vite": "7.3.6"
@@ -67,9 +70,13 @@
     "tests/fixtures/react18-app"
   ],
   "peerDependencies": {
+    "beasties": ">=0.4.1",
     "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
   },
   "peerDependenciesMeta": {
+    "beasties": {
+      "optional": true
+    },
     "vite": {
       "optional": true
     }

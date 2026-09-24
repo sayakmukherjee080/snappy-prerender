@@ -10,18 +10,37 @@ export const MAX_DEFAULT_CONCURRENCY = 8;
 
 const LOG_LEVELS = ['silent', 'error', 'warn', 'info', 'debug'];
 const BROWSER_CHOICES = ['auto', 'chrome', 'msedge', 'chromium'];
+const INLINE_CSS_STRATEGIES = [false, true, 'inline', 'critical'];
+const SAVE_AS_CHOICES = ['html', 'png', 'jpeg'];
 const NULLABLE_KEYS = [
   'storageState',
   'readySelector',
   'waitFor',
   'maxDepth',
   'notFoundRoute',
+  'userAgent',
+  'destination',
   'url',
   'serveCmd',
+];
+const ARRAY_KEYS = ['include', 'exclude', 'allowedHosts', 'browserArgs', 'ignoreForPreload'];
+const BOOLEAN_KEYS = [
+  'ignoreHTTPSErrors',
+  'captureRuntimeStyles',
+  'captureFormState',
+  'preconnectThirdParty',
+  'preloadImages',
+  'preloadManifest',
+  'cacheAjaxRequests',
+  'removeBlobs',
+  'removeStyleTags',
+  'removeScriptTags',
+  'asyncScriptTags',
 ];
 
 export const DEFAULTS = Object.freeze({
   sourceDir: 'dist',
+  destination: null,
   base: '/',
   include: ['/'],
   exclude: [],
@@ -37,13 +56,31 @@ export const DEFAULTS = Object.freeze({
   waitFor: null,
   viewport: { width: 1280, height: 720 },
   storageState: null,
+  userAgent: 'SnappyPrerender',
   browser: 'auto',
   browserDownload: true,
+  browserArgs: [],
   headless: true,
+  ignoreHTTPSErrors: false,
   blockThirdParty: true,
   allowedHosts: [],
   freezeAnimations: true,
   scrollToBottom: false,
+  captureRuntimeStyles: true,
+  captureFormState: true,
+  saveAs: 'html',
+  inlineCss: false,
+  minifyHtml: false,
+  minifyCss: false,
+  removeBlobs: true,
+  removeStyleTags: false,
+  removeScriptTags: false,
+  asyncScriptTags: false,
+  preconnectThirdParty: true,
+  preloadImages: false,
+  preloadManifest: false,
+  ignoreForPreload: ['service-worker.js'],
+  cacheAjaxRequests: false,
   flatOutput: false,
   notFoundRoute: '/404',
   verify: true,
@@ -64,11 +101,9 @@ export const DEFAULTS = Object.freeze({
 export function resolveConfig(userOptions = {}) {
   const config = { ...DEFAULTS, ...userOptions };
   for (const key of NULLABLE_KEYS) config[key] = config[key] ?? null;
+  for (const key of ARRAY_KEYS) config[key] = toArray(config[key]);
   config.viewport = { ...DEFAULTS.viewport, ...(userOptions.viewport ?? {}) };
   config.base = normaliseBase(config.base);
-  config.include = toArray(config.include);
-  config.exclude = toArray(config.exclude);
-  config.allowedHosts = toArray(config.allowedHosts);
   config.concurrency =
     userOptions.concurrency ??
     Math.max(1, Math.min(os.availableParallelism(), MAX_DEFAULT_CONCURRENCY));
@@ -128,11 +163,19 @@ export function validateConfig(config) {
       throw new TypeError(`${key} must be a string or null`);
     }
   };
+  // Validates that a flag option is a real boolean.
+  const booleanOption = (key) => {
+    if (typeof config[key] !== 'boolean') throw new TypeError(`${key} must be a boolean`);
+  };
 
   patternList(config.include, 'include');
   patternList(config.exclude, 'exclude');
   stringList(config.allowedHosts, 'allowedHosts');
+  stringList(config.browserArgs, 'browserArgs');
+  stringList(config.ignoreForPreload, 'ignoreForPreload');
   for (const key of ['readyFlag', 'readySelector', 'waitFor', 'notFoundRoute']) nullableString(key);
+  for (const key of ['userAgent', 'destination']) nullableString(key);
+  for (const key of BOOLEAN_KEYS) booleanOption(key);
 
   if (!Number.isInteger(config.concurrency) || config.concurrency < 1) {
     throw new TypeError('concurrency must be a positive integer');
@@ -176,5 +219,18 @@ export function validateConfig(config) {
   }
   if (config.url !== null && !/^https?:\/\//.test(config.url)) {
     throw new TypeError('url must be an absolute http(s) URL');
+  }
+  if (!INLINE_CSS_STRATEGIES.includes(config.inlineCss)) {
+    throw new TypeError("inlineCss must be false, true, 'inline' or 'critical'");
+  }
+  for (const key of ['minifyHtml', 'minifyCss']) {
+    const value = config[key];
+    const valid =
+      typeof value === 'boolean' ||
+      (typeof value === 'object' && value !== null && !Array.isArray(value));
+    if (!valid) throw new TypeError(`${key} must be a boolean or an options object`);
+  }
+  if (!SAVE_AS_CHOICES.includes(config.saveAs)) {
+    throw new TypeError(`saveAs must be one of: ${SAVE_AS_CHOICES.join(', ')}`);
   }
 }
