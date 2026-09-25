@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { findBuildOriginUrls } from '../head/tags.js';
 import { launchBrowser } from './browser.js';
 import { resolveConfig } from './config.js';
 import { prepareDestination } from './destination.js';
@@ -55,6 +56,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     durationMs: 0,
   };
   const manifestEntries = [];
+  const state = { warnedBuildOriginMetadata: false };
   let browser = null;
 
   try {
@@ -73,7 +75,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     });
     log.info(`Rendered ${report.routes.length} route(s)`);
 
-    const verifiable = await writeAllRoutes({ rendered, outputDir, config, log, report });
+    const verifiable = await writeAllRoutes({ rendered, outputDir, config, log, report, state });
     logFileSummary(report, log);
     logNotFoundNotice(report, config, log);
 
@@ -237,7 +239,7 @@ async function renderAllRoutes({
  * Writes every rendered route and returns the routes that can be verified. A write
  * failure is recorded against its route instead of aborting the remaining writes.
  */
-async function writeAllRoutes({ rendered, outputDir, config, log, report }) {
+async function writeAllRoutes({ rendered, outputDir, config, log, report, state }) {
   const sorted = [...report.routes].sort();
   const conflicted = reportOutputCollisions({ routes: sorted, config, log, report });
 
@@ -251,6 +253,7 @@ async function writeAllRoutes({ rendered, outputDir, config, log, report }) {
         outputDir,
         config,
         log,
+        state,
       });
       report.files.push(file);
       verifiable.push(route);
@@ -286,7 +289,7 @@ function reportOutputCollisions({ routes, config, log, report }) {
  * Applies the configured post-processing to one rendered route and writes it: DOM
  * cleanups and link hints, critical CSS extraction, then optional minification.
  */
-async function writeRouteOutput({ route, result, outputDir, config, log }) {
+async function writeRouteOutput({ route, result, outputDir, config, log, state }) {
   if (result.screenshot) {
     const file = routeToScreenshotFile(route, config);
     const stats = await fs.stat(path.join(outputDir, file));
@@ -323,7 +326,23 @@ async function writeRouteOutput({ route, result, outputDir, config, log }) {
   if (config.minifyHtml) {
     output = await minifyHtml(output, config.minifyHtml, config.minifyCss);
   }
+  warnOnBuildOriginMetadata(output, route, log, state);
   return writeRouteHtml({ dir: outputDir, route, html: output, config });
+}
+
+/**
+ * Warns once when head metadata contains the build server's origin, which means the page
+ * was composed without a public siteUrl and og:url, og:image or canonical would ship wrong.
+ */
+function warnOnBuildOriginMetadata(html, route, log, state) {
+  if (state.warnedBuildOriginMetadata) return;
+  const head = html.slice(0, html.indexOf('</head>') + 7);
+  const offenders = findBuildOriginUrls(head);
+  if (offenders.length === 0) return;
+  state.warnedBuildOriginMetadata = true;
+  log.warn(
+    `metadata on ${route} points at the build server (${offenders.join(', ')}); set metadata.siteUrl so og:url, og:image and canonical match the deployed site`,
+  );
 }
 
 /**

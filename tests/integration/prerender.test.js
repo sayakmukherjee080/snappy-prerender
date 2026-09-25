@@ -8,7 +8,9 @@ import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { build } from 'vite';
-import { prerender } from '../../src/core/index.js';
+import { launchBrowser } from '../../src/core/browser.js';
+import { prerender, resolveConfig } from '../../src/core/index.js';
+import { startStaticServer } from '../../src/core/server.js';
 import snappy from '../../src/index.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -173,13 +175,32 @@ describe('prerender integration: react 18 app', () => {
   let sourceDir;
   let report;
 
+  const metadata = {
+    siteUrl: 'https://pps.example',
+    siteName: 'PPS',
+    titleTemplate: '%s | PPS',
+    defaultImage: '/share.png',
+    trailingSlash: 'never',
+  };
+
   before(async () => {
     sourceDir = await buildFixture('react18-app');
-    report = await prerender({ sourceDir, logLevel: 'silent' });
+    report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      metadata,
+      include: ['/', '/about', '/inline-style', '/head-a', '/head-b'],
+    });
   });
 
   it('renders and verifies cleanly', async () => {
-    assert.deepEqual([...report.routes].sort(), ['/', '/about', '/inline-style']);
+    assert.deepEqual([...report.routes].sort(), [
+      '/',
+      '/about',
+      '/head-a',
+      '/head-b',
+      '/inline-style',
+    ]);
     assert.equal(report.errors.length, 0);
     assert.equal(report.verification.ok, true);
     assert.equal(report.ok, true);
@@ -191,6 +212,85 @@ describe('prerender integration: react 18 app', () => {
     const styled = report.verification.routes.find((entry) => entry.route === '/inline-style');
     assert.equal(styled.ok, true);
     assert.equal(styled.mode, 'hydrated');
+  });
+
+  it('writes per-route head metadata with the public site URL', async () => {
+    const page = await fs.readFile(path.join(sourceDir, 'head-a', 'index.html'), 'utf8');
+    // Tags carry the manager's owner attribute, so the patterns tolerate any attribute order.
+    assert.match(page, /<title[^>]*>Head A \| PPS<\/title>/);
+    assert.match(page, /<meta[^>]*property="og:title"[^>]*content="Head A \| PPS"/);
+    assert.match(page, /<meta[^>]*property="og:url"[^>]*content="https:\/\/pps\.example\/head-a"/);
+    assert.match(
+      page,
+      /<meta[^>]*property="og:image"[^>]*content="https:\/\/pps\.example\/share-a\.png"/,
+    );
+    assert.match(page, /<meta[^>]*name="twitter:card"[^>]*content="summary_large_image"/);
+    assert.match(page, /<link[^>]*rel="canonical"[^>]*href="https:\/\/pps\.example\/head-a"/);
+    assert.match(page, /<meta[^>]*name="robots"[^>]*content="index,follow"/);
+    // The page's Head and the layout's both set a description; the page's value wins and
+    // never leaves two tags behind.
+    assert.equal((page.match(/name="description"/g) ?? []).length, 1);
+    assert.match(page, /<meta[^>]*name="description"[^>]*content="Page A description"/);
+    // The defaults are persisted for the client as well as used while rendering.
+    assert.match(page, /window\.__SNAPPY_META__/);
+
+    const fallback = await fs.readFile(path.join(sourceDir, 'about', 'index.html'), 'utf8');
+    assert.match(
+      fallback,
+      /<meta[^>]*property="og:image"[^>]*content="https:\/\/pps\.example\/share\.png"/,
+    );
+  });
+
+  it('updates the head on client-side navigation without a reload', async () => {
+    const config = resolveConfig({ logLevel: 'silent' });
+    const server = await startStaticServer({ dir: sourceDir, base: '/' });
+    const { browser } = await launchBrowser(config, {
+      info() {},
+      warn() {},
+      error() {},
+      debug() {},
+    });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    try {
+      await page.goto(`${server.origin}/head-a`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForFunction(
+        () =>
+          document.querySelector('meta[property="og:title"]')?.getAttribute('content') ===
+          'Head A | PPS',
+      );
+      // Hydration adopted the prerendered tags rather than adding a second set.
+      assert.equal(await page.locator('meta[property="og:title"]').count(), 1);
+      assert.equal(await page.title(), 'Head A | PPS');
+
+      await page.getByRole('button', { name: 'Go to Head B' }).click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector('meta[property="og:title"]')?.getAttribute('content') ===
+          'Head B | PPS',
+      );
+
+      assert.equal(await page.title(), 'Head B | PPS');
+      assert.equal(await page.locator('meta[property="og:title"]').count(), 1);
+      assert.equal(await page.locator('meta[name="description"]').count(), 1);
+      assert.equal(
+        await page.locator('meta[name="description"]').getAttribute('content'),
+        'Page B description',
+      );
+      assert.equal(
+        await page.locator('meta[property="og:type"]').getAttribute('content'),
+        'article',
+      );
+      assert.equal(
+        await page.locator('link[rel="canonical"]').getAttribute('href'),
+        'https://pps.example/head-b',
+      );
+    } finally {
+      await context.close();
+      await browser.close();
+      await server.close();
+    }
   });
 });
 
@@ -223,6 +323,7 @@ describe('prerender integration: vite plugin', () => {
       configFile: false,
       logLevel: 'silent',
       plugins: [react(), snappy()],
+      resolve: { dedupe: ['react', 'react-dom'] },
       build: { outDir: 'dist', emptyOutDir: true },
     });
     const home = await fs.readFile(path.join(root, 'dist', 'index.html'), 'utf8');

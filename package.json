@@ -32,6 +32,7 @@
   "exports": {
     ".": "./src/index.js",
     "./core": "./src/core/index.js",
+    "./head": "./src/head/index.js",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -71,10 +72,14 @@
   ],
   "peerDependencies": {
     "beasties": ">=0.4.1",
+    "react": ">=18.0.0",
     "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
   },
   "peerDependenciesMeta": {
     "beasties": {
+      "optional": true
+    },
+    "react": {
       "optional": true
     },
     "vite": {

@@ -91,6 +91,7 @@ export const DEFAULTS = Object.freeze({
   verify: true,
   failOnHydrationError: false,
   failOnRerender: false,
+  metadata: null,
   failOnError: true,
   dryRun: false,
   logLevel: 'info',
@@ -245,5 +246,30 @@ export function validateConfig(config) {
   }
   if (!SAVE_AS_CHOICES.includes(config.saveAs)) {
     throw new TypeError(`saveAs must be one of: ${SAVE_AS_CHOICES.join(', ')}`);
+  }
+  validateMetadata(config.metadata);
+}
+
+/**
+ * Validates the defaults handed to the head component, so a typo surfaces at config time
+ * rather than as metadata that silently points at the build server.
+ */
+function validateMetadata(metadata) {
+  if (metadata === null) return;
+  if (typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new TypeError('metadata must be null or an options object');
+  }
+  const strings = ['siteUrl', 'siteName', 'titleTemplate', 'defaultImage', 'trailingSlash'];
+  for (const key of strings) {
+    const value = metadata[key];
+    if (value !== undefined && value !== null && typeof value !== 'string') {
+      throw new TypeError(`metadata.${key} must be a string`);
+    }
+  }
+  if (metadata.siteUrl && !/^https?:\/\//.test(metadata.siteUrl)) {
+    throw new TypeError('metadata.siteUrl must be an absolute http(s) URL');
+  }
+  if (metadata.trailingSlash && !['preserve', 'always', 'never'].includes(metadata.trailingSlash)) {
+    throw new TypeError("metadata.trailingSlash must be 'preserve', 'always' or 'never'");
   }
 }

@@ -104,6 +104,15 @@ describe('resolveConfig', () => {
     assert.throws(() => resolveConfig({ removeScriptTags: 'yes' }), /removeScriptTags/);
     assert.throws(() => resolveConfig({ captureRuntimeStyles: 'yes' }), /captureRuntimeStyles/);
     assert.throws(() => resolveConfig({ captureFormState: 'yes' }), /captureFormState/);
+    assert.throws(() => resolveConfig({ metadata: 'yes' }), /metadata/);
+    assert.throws(
+      () => resolveConfig({ metadata: { siteUrl: 'pps.example' } }),
+      /metadata\.siteUrl/,
+    );
+    assert.throws(
+      () => resolveConfig({ metadata: { trailingSlash: 'sometimes' } }),
+      /trailingSlash/,
+    );
     assert.throws(
       () => resolveConfig({ browserDownloadHash: 'not-a-hash' }),
       /browserDownloadHash/,
@@ -128,6 +137,8 @@ describe('resolveConfig', () => {
     assert.equal(resolveConfig({ minifyHtml: true, minifyCss: true }).minifyHtml, true);
     const hash = 'a'.repeat(64);
     assert.equal(resolveConfig({ browserDownloadHash: hash }).browserDownloadHash, hash);
+    assert.equal(resolveConfig({ metadata: { siteName: 'PPS' } }).metadata.siteName, 'PPS');
+    assert.equal(resolveConfig({ metadata: null }).metadata, null);
   });
 
   it('normalises explicitly undefined optionals to null', () => {

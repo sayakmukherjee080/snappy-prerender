@@ -8,6 +8,19 @@ import { captureRuntimeStyles } from './runtime-styles.js';
 import { freezeAnimations, scrollThroughPage, settlePage, trackNetwork } from './settle.js';
 import { separateTextNodes } from './text-separators.js';
 
+const SCRIPT_ESCAPES = {
+  '<': '\\u003C',
+  '>': '\\u003E',
+  '/': '\\u002F',
+  '\u2028': '\\u2028',
+  '\u2029': '\\u2029',
+};
+
+// Serialises a value for embedding in a script element without allowing tag breakout.
+function escapeForScript(value) {
+  return JSON.stringify(value).replace(/[<>/\u2028\u2029]/g, (char) => SCRIPT_ESCAPES[char]);
+}
+
 /**
  * Renders one route in a fresh browser context and returns the serialised DOM plus
  * the same-origin links discovered on it. Context isolation keeps cookies and
@@ -25,6 +38,13 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
   const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  const metadataDefaults = config.metadata ? { base: config.base, ...config.metadata } : null;
+  if (metadataDefaults) {
+    await page.addInitScript((defaults) => {
+      window.__SNAPPY_META__ = defaults;
+    }, metadataDefaults);
+  }
 
   const collector = createResourceCollector({
     origin,
@@ -49,6 +69,7 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
     }
     await collector.settled();
     await injectCapturedState(page, collector.json);
+    if (metadataDefaults) await injectMetadataDefaults(page, metadataDefaults);
     if (config.freezeAnimations) await freezeAnimations(page);
     if (config.scrollToBottom) await scrollThroughPage(page, config);
     await separateTextNodes(page);
@@ -108,6 +129,22 @@ async function injectCapturedState(page, cache) {
     if (first?.parentNode) first.parentNode.insertBefore(script, first);
     else document.head.appendChild(script);
   }, store);
+}
+
+/**
+ * Persists the metadata defaults into the document itself, so the head component reads the
+ * public site URL on the client too, not only while prerendering. Placed before the app
+ * bundle runs, exactly like the captured state.
+ */
+async function injectMetadataDefaults(page, defaults) {
+  const script = `window.__SNAPPY_META__ = ${escapeForScript(defaults)};`;
+  await page.evaluate((text) => {
+    const element = document.createElement('script');
+    element.textContent = text;
+    const first = document.scripts[0];
+    if (first?.parentNode) first.parentNode.insertBefore(element, first);
+    else document.head.appendChild(element);
+  }, script);
 }
 
 /**

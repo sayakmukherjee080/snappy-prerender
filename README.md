@@ -98,6 +98,49 @@ const isPrerender = navigator.userAgent === 'SnappyPrerender';
 
 Set `userAgent: null` to send the browser's default instead.
 
+## Head and metadata
+
+Per-route titles, descriptions, canonical links and Open Graph/Twitter tags come from a `Head` component the package ships. It writes into the document head while the route is mounted and reconciles on every render, so client-side navigation updates the head exactly like a site that renders a page per request — and the prerenderer captures whatever is there, because the head is part of the page it serialises.
+
+```jsx
+import { Head } from 'snappy-prerender/head';
+
+<Head
+  title="Awards"
+  description="Awards presented by the society"
+  image="/share/awards.png"
+  type="article"
+  locale="en_GB"
+  robots="index,follow"
+  extra={[{ name: 'keywords', content: 'polymer' }, { rel: 'alternate', href: '/feed.xml' }]}
+/>
+```
+
+Project-wide values come from the `metadata` option. The prerenderer injects them into every page, so the component composes absolute URLs from the public site rather than from the build server:
+
+```js
+snappy({
+  metadata: {
+    siteUrl: 'https://example.com',
+    siteName: 'Example',
+    titleTemplate: '%s | Example',
+    defaultImage: '/share.png',
+    trailingSlash: 'never', // 'preserve' | 'always' | 'never'
+  },
+});
+```
+
+What it emits, per route: `title` (with the template applied, skipped when the title already carries the site name), `meta[name=description]`, `meta[name=robots]`, `link[rel=canonical]`, `og:title`, `og:description`, `og:type`, `og:url`, `og:image`, `og:site_name`, `og:locale`, and `twitter:card` / `twitter:title` / `twitter:description` / `twitter:image`. Switch a family off with `openGraph: false` or `twitter: false`, and skip the canonical with `canonical: false`.
+
+Rules worth knowing:
+
+- `metadata` values are defaults; a `Head`'s own props win. When several Heads render, the later one in render order wins per tag, so a page overrides its layout.
+- An existing tag is updated in place rather than duplicated, which is why hydration adopts the prerendered tags instead of adding a second set.
+- The component renders nothing, so it cannot affect hydration of the page content.
+- Tags carry a `data-snappy-head` attribute, so they are recognisable in the output and are removed when the route unmounts.
+- Absolute URLs are required for `og:url`, `og:image` and canonical. Without `metadata.siteUrl` they fall back to the browser origin, which during prerendering is the build server — the run warns when that happens.
+- `react` is an optional peer dependency, needed only for this entry point. Non-React code can call `setHead(id, props)` and `clearHead(id)` instead.
+
 ## Optimising the output
 
 ### Critical CSS
@@ -276,6 +319,7 @@ The built output is copied to the destination first, so assets sit beside the ge
 | `flatOutput` | `false` | Write `about.html` instead of `about/index.html` |
 | `notFoundRoute` | `/404` | Route emitted as `404.html`; a notice is logged when it is never prerendered |
 | `saveAs` | `html` | `html`, `png` or `jpeg` |
+| `metadata` | `null` | Defaults for the head component: `siteUrl`, `siteName`, `titleTemplate`, `defaultImage`, `trailingSlash` |
 | `verify` | `true` | Run the hydration verification pass |
 | `failOnHydrationError` | `false` | Fail the run on hydration errors; off by default, where they are reported instead |
 | `failOnRerender` | `false` | Fail the run when a route re-renders instead of hydrating |
