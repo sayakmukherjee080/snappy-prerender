@@ -169,10 +169,40 @@ describe('resolveConfig', () => {
       'failOnRerender',
       'flatOutput',
       'dryRun',
+      'externalScripts',
     ]) {
       assert.throws(() => resolveConfig({ [key]: 'yes' }), new RegExp(key));
     }
     assert.equal(resolveConfig({ failOnPageError: true }).failOnPageError, true);
+  });
+
+  it('validates the critical CSS preload choice', () => {
+    assert.throws(() => resolveConfig({ criticalCssPreload: 'sometimes' }), /criticalCssPreload/);
+    assert.equal(resolveConfig({ criticalCssPreload: false }).criticalCssPreload, false);
+    assert.equal(resolveConfig({ criticalCssPreload: 'body' }).criticalCssPreload, 'body');
+    assert.equal(resolveConfig({}).criticalCssPreload, 'media');
+  });
+
+  it('derives the script-delivery defaults from the CSP dial', () => {
+    const off = resolveConfig({});
+    assert.equal(off.csp, 'off');
+    assert.equal(off.externalScripts, false);
+    assert.equal(off.criticalCssPreload, 'media');
+
+    const strict = resolveConfig({ csp: 'strict' });
+    assert.equal(strict.externalScripts, true);
+    assert.equal(strict.criticalCssPreload, false);
+
+    // Explicit options still win over the dial, so one part can be put back.
+    const tuned = resolveConfig({
+      csp: 'strict',
+      externalScripts: false,
+      criticalCssPreload: 'body',
+    });
+    assert.equal(tuned.externalScripts, false);
+    assert.equal(tuned.criticalCssPreload, 'body');
+
+    assert.throws(() => resolveConfig({ csp: 'sometimes' }), /csp/);
   });
 
   it('freezes the nested viewport defaults', () => {

@@ -65,9 +65,9 @@ async function exists(target) {
  * Runs the CLI as a child process without blocking this process's event loop, so a server
  * started by a test can still answer the child's requests.
  */
-function runCli(args) {
+function runCli(args, { cwd = repoRoot } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [cliPath, ...args], { cwd: repoRoot });
+    const child = spawn(process.execPath, [cliPath, ...args], { cwd });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => {
@@ -288,8 +288,10 @@ describe('prerender integration: react 18 app', () => {
     // and never leaves two tags behind.
     assert.equal((page.match(/name="description"/g) ?? []).length, 1);
     assert.match(page, /<meta[^>]*name="description"[^>]*content="Page A description"/);
-    // The defaults are persisted for the client as well as used while rendering.
-    assert.match(page, /window\.__SNAPPY_META__/);
+    // The defaults are persisted for the client as inert JSON, not an executable script.
+    assert.match(page, /<script(?=[^>]*type="application\/json")(?=[^>]*data-snappy-meta)[^>]*>/);
+    assert.match(page, /"siteUrl":/);
+    assert.equal(page.includes('window.__SNAPPY_META__ ='), false);
 
     const fallback = await fs.readFile(path.join(sourceDir, 'about', 'index.html'), 'utf8');
     assert.match(
@@ -884,6 +886,68 @@ describe('prerender integration: capture and optimisation options', () => {
     assert.match(html, /<style>[\s\S]*\.hero[\s\S]*<\/style>/);
   });
 
+  it('disables the CSS preload swap so a strict script-src stays clean', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html':
+        '<!doctype html><html><head><title>Home page</title><link rel="stylesheet" href="/style.css"></head><body><h1 class="hero">Home page</h1></body></html>',
+      'style.css': '.hero { color: rgb(4, 5, 6); }',
+    });
+
+    await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      inlineCss: 'critical',
+      criticalCssPreload: false,
+    });
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.match(html, /<style>[\s\S]*\.hero[\s\S]*<\/style>/);
+    assert.equal(html.includes('onload='), false);
+  });
+
+  it('writes captured state as a same-origin file when asked', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html': [
+        '<!doctype html><html><head><title>Home page</title>',
+        '<script>window.snapSaveState = () => ({ __APP_STATE__: { count: 7 } });</script>',
+        '</head><body><h1>Home page</h1></body></html>',
+      ].join(''),
+    });
+
+    const report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      externalScripts: true,
+    });
+    assert.equal(report.errors.length, 0);
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.match(
+      html,
+      /<script(?=[^>]*data-snappy-state)(?=[^>]*src="\/snappy\/state-[0-9a-f]{12}\.js")[^>]*>/,
+    );
+    // The payload is no longer inline, so a strict script-src only has to allow 'self'.
+    assert.equal(html.includes('window["__APP_STATE__"]'), false);
+
+    const stateFile = report.files.find((file) => file.file.startsWith('snappy/'));
+    assert.equal(stateFile !== undefined, true);
+    const contents = await fs.readFile(path.join(sourceDir, stateFile.file), 'utf8');
+    assert.match(contents, /window\["__APP_STATE__"\]=\{/);
+
+    // The same payload resolves to the same content-addressed file on a rerun.
+    const second = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      externalScripts: true,
+    });
+    const again = second.files.find((file) => file.file.startsWith('snappy/'));
+    assert.equal(again.file, stateFile.file);
+    assert.equal(again.status, 'unchanged');
+  });
+
   it('writes to a destination directory and leaves the source untouched', async () => {
     const sourceDir = await makeStaticSite({ 'index.html': page('Home page', ['/about']) });
     const destination = await makeStaticSite({});
@@ -971,10 +1035,11 @@ describe('prerender integration: capture and optimisation options', () => {
 
     assert.equal(report.errors.length, 0);
     const html = await fs.readFile(path.join(sourceDir, 'head-a', 'index.html'), 'utf8');
-    assert.match(html, /<script data-snappy-meta[^>]*>/);
-    assert.match(html, /window\.__SNAPPY_META__/);
+    assert.match(html, /<script(?=[^>]*type="application\/json")(?=[^>]*data-snappy-meta)[^>]*>/);
+    assert.match(html, /"siteUrl":/);
     // The app bundle is gone as asked, and the stale script from a previous run with it.
     assert.equal(html.includes('/assets/index-'), false);
+    assert.equal(html.includes('window.__SNAPPY_META__ ='), false);
     assert.equal((html.match(/data-snappy-meta/g) ?? []).length, 1);
   });
 
@@ -992,14 +1057,47 @@ describe('prerender integration: capture and optimisation options', () => {
 
     assert.equal(report.errors.length, 0);
     const html = await fs.readFile(path.join(sourceDir, 'head-a', 'index.html'), 'utf8');
-    assert.match(html, /window\.__SNAPPY_META__/);
+    assert.match(html, /<script(?=[^>]*type="application\/json")(?=[^>]*data-snappy-meta)[^>]*>/);
+    assert.match(html, /"siteUrl":/);
     // Attribute sorting means the property and content order is not fixed.
     assert.match(
       html,
       /<meta(?=[^>]*property="og:url")(?=[^>]*content="https:\/\/pps\.example\/head-a")[^>]*>/,
     );
-    // The external bundle is marked async; the inline metadata script has no src and is left.
+    // The external bundle is marked async; the inert metadata element is left alone.
     assert.match(html, /<script[^>]*async[^>]*src=/);
+  });
+
+  it('honours the strict CSP dial end to end', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html': [
+        '<!doctype html><html><head><title>Home page</title>',
+        '<link rel="stylesheet" href="/style.css">',
+        '<script>window.snapSaveState = () => ({ __APP_STATE__: { count: 1 } });</script>',
+        '</head><body><h1 class="hero">Home page</h1></body></html>',
+      ].join(''),
+      'style.css': '.hero { color: rgb(1, 2, 3); }',
+    });
+
+    const report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      csp: 'strict',
+      inlineCss: 'critical',
+    });
+    assert.equal(report.errors.length, 0);
+
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    // State moves to a same-origin file and the CSS swap handlers are gone, so a strict
+    // script-src has nothing inline left to allow.
+    assert.match(
+      html,
+      /<script(?=[^>]*data-snappy-state)(?=[^>]*src="\/snappy\/state-[0-9a-f]{12}\.js")[^>]*>/,
+    );
+    assert.equal(html.includes('window["__APP_STATE__"]'), false);
+    assert.equal(html.includes('onload='), false);
+    assert.match(html, /<style>[\s\S]*\.hero[\s\S]*<\/style>/);
   });
 
   it('writes preload manifest hints under the base path', async () => {
@@ -1328,6 +1426,102 @@ describe('prerender integration: cli', () => {
 
     assert.equal(cli.status, 0, cli.stderr);
     assert.match(cli.stdout, /duplicate style/);
+  });
+});
+
+describe('prerender integration: init', () => {
+  it('writes a config the CLI then uses without flags', async () => {
+    const dir = await makeStaticSite({ 'index.html': page('Home page', ['/about']) });
+
+    const init = await runCli(
+      [
+        'init',
+        '--yes',
+        '--source',
+        '.',
+        '--metadata-site-url',
+        'https://init.example',
+        '--metadata-site-name',
+        'Init',
+        '--csp',
+        'strict',
+      ],
+      { cwd: dir },
+    );
+    assert.equal(init.status, 0, init.stderr);
+
+    const config = await fs.readFile(path.join(dir, 'snappy.config.js'), 'utf8');
+    assert.match(config, /sourceDir: "\."/);
+    assert.match(config, /siteUrl: "https:\/\/init\.example"/);
+    assert.match(config, /siteName: "Init"/);
+    assert.match(config, /csp: "strict"/);
+    assert.match(init.stdout, /Next steps:/);
+    assert.match(init.stdout, /npx snappy-prerender --dry-run/);
+    assert.match(init.stdout, /snappy-prerender\/head/);
+
+    const run = await runCli([], { cwd: dir });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(await exists(path.join(dir, 'about', 'index.html')), true);
+  });
+
+  it('refuses to replace an existing config without force', async () => {
+    const dir = await makeStaticSite({ 'index.html': page('Home page', []) });
+    await fs.writeFile(path.join(dir, 'snappy.config.js'), 'export default { crawl: false };\n');
+
+    const init = await runCli(['init', '--yes'], { cwd: dir });
+
+    assert.equal(init.status, 1);
+    assert.match(init.stderr, /already exists/);
+    assert.equal(
+      await fs.readFile(path.join(dir, 'snappy.config.js'), 'utf8'),
+      'export default { crawl: false };\n',
+    );
+  });
+
+  it('replaces it when force is set', async () => {
+    const dir = await makeStaticSite({ 'index.html': page('Home page', []) });
+    await fs.writeFile(path.join(dir, 'snappy.config.js'), 'export default { crawl: false };\n');
+
+    const init = await runCli(['init', '--yes', '--force'], { cwd: dir });
+
+    assert.equal(init.status, 0, init.stderr);
+    assert.match(
+      await fs.readFile(path.join(dir, 'snappy.config.js'), 'utf8'),
+      /sourceDir: "dist"/,
+    );
+  });
+
+  it('explains itself when there is no terminal to prompt on', async () => {
+    const dir = await makeStaticSite({ 'index.html': page('Home page', []) });
+
+    const init = spawnSync(process.execPath, [cliPath, 'init'], { cwd: dir, encoding: 'utf8' });
+
+    assert.equal(init.status, 1);
+    assert.match(init.stderr, /interactive terminal/);
+    assert.equal(await exists(path.join(dir, 'snappy.config.js')), false);
+  });
+
+  it('warns instead of writing a site URL or template it cannot use', async () => {
+    const dir = await makeStaticSite({ 'index.html': page('Home page', []) });
+
+    const init = await runCli(
+      [
+        'init',
+        '--yes',
+        '--metadata-site-url',
+        'init.example',
+        '--metadata-title-template',
+        'No placeholder',
+      ],
+      { cwd: dir },
+    );
+
+    assert.equal(init.status, 0, init.stderr);
+    const config = await fs.readFile(path.join(dir, 'snappy.config.js'), 'utf8');
+    assert.equal(config.includes('siteUrl'), false);
+    assert.equal(config.includes('titleTemplate'), false);
+    assert.match(init.stderr, /ignoring site URL/);
+    assert.match(init.stderr, /ignoring the title template/);
   });
 });
 

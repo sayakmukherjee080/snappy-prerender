@@ -45,8 +45,9 @@ export async function inlineStylesheets({ page, minifyCssOptions }) {
  * Inlines only the above-the-fold CSS and defers the rest, using beasties. It runs
  * on the serialised HTML in Node, reading stylesheets from the output directory.
  * beasties is an optional peer dependency because most projects never need it.
+ * `preload` is passed through so a strict script-src can turn the swap handlers off.
  */
-export async function inlineCriticalCss({ html, outputDir, base }) {
+export async function inlineCriticalCss({ html, outputDir, base, preload = 'media' }) {
   let Beasties;
   try {
     ({ default: Beasties } = await import('beasties'));
@@ -59,7 +60,7 @@ export async function inlineCriticalCss({ html, outputDir, base }) {
     path: outputDir,
     publicPath: base,
     logLevel: 'silent',
-    preload: 'media',
+    preload,
     noscriptFallback: true,
   });
   return beasties.process(html);

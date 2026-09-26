@@ -49,24 +49,33 @@ export function findOutputCollisions(routes, config) {
  */
 export async function writeRouteHtml({ dir, route, html, config }) {
   const file = routeToFile(route, config);
-  const bytes = Buffer.byteLength(html);
+  if (config.dryRun) {
+    return { route, file, status: 'dry-run', bytes: Buffer.byteLength(html) };
+  }
+  const written = await writeFileIfChanged({ dir, file, contents: html });
+  return { route, file, status: written.status, bytes: written.bytes };
+}
 
-  if (config.dryRun) return { route, file, status: 'dry-run', bytes };
-
+/**
+ * Writes a generated file, leaving an identical one untouched. Page files and the state
+ * files routes reference both go through here so a rebuild only touches what changed.
+ */
+export async function writeFileIfChanged({ dir, file, contents }) {
+  const bytes = Buffer.byteLength(contents);
   const target = path.join(dir, file);
   const existing = await fs.readFile(target, 'utf8').catch(() => null);
-  if (existing === html) return { route, file, status: 'unchanged', bytes };
+  if (existing === contents) return { file, status: 'unchanged', bytes };
 
   await fs.mkdir(path.dirname(target), { recursive: true });
   // Written through a temporary file and renamed, so an interrupted run cannot leave a
-  // half-written page behind for a host to serve.
+  // half-written file behind for a host to serve.
   const temporary = `${target}.snappy-tmp`;
   try {
-    await fs.writeFile(temporary, html, 'utf8');
+    await fs.writeFile(temporary, contents, 'utf8');
     await fs.rename(temporary, target);
   } catch (error) {
     await fs.rm(temporary, { force: true }).catch(() => {});
     throw error;
   }
-  return { route, file, status: 'written', bytes };
+  return { file, status: 'written', bytes };
 }

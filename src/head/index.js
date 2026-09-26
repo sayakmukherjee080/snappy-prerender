@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { registerHead, unregisterHead } from './manager.js';
+import { readMetadataDefaults, registerHead, unregisterHead } from './manager.js';
 import { buildHeadEntries } from './tags.js';
 
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
@@ -26,7 +26,7 @@ export function Head(props) {
     sequenceRef.current = sequence;
   }
 
-  const entries = buildHeadEntries(props, readDefaults());
+  const entries = buildHeadEntries(props, readMetadataDefaults());
 
   // A layout effect so a route change updates the head before the browser paints, and a
   // plain effect on the server, where layout effects never run.
@@ -53,10 +53,4 @@ export function setHead(id, props) {
  */
 export function clearHead(id) {
   unregisterHead(id);
-}
-
-// Reads the defaults the prerenderer injected, so metadata composed during a build uses the
-// public site URL rather than the local preview server.
-function readDefaults() {
-  return typeof window === 'undefined' ? {} : (window.__SNAPPY_META__ ?? {});
 }

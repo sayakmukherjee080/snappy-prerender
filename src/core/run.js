@@ -7,7 +7,12 @@ import { inlineCriticalCss } from './inline-css.js';
 import { createLogger } from './log.js';
 import { minifyHtml } from './minify.js';
 import { normaliseHtml } from './normalize.js';
-import { findOutputCollisions, routeToScreenshotFile, writeRouteHtml } from './output.js';
+import {
+  findOutputCollisions,
+  routeToScreenshotFile,
+  writeFileIfChanged,
+  writeRouteHtml,
+} from './output.js';
 import { buildPreloadManifest } from './preload-manifest.js';
 import { renderRoute } from './render.js';
 import { crawlRoots, filterRoutes, normaliseRoute, toPublicPath, withinDepth } from './routes.js';
@@ -259,6 +264,8 @@ async function writeAllRoutes({ rendered, outputDir, config, log, report, state 
   const sorted = [...report.routes].sort();
   const conflicted = reportOutputCollisions({ routes: sorted, config, log, report });
 
+  await writeStateScripts({ rendered, outputDir, config, log, report });
+
   const verifiable = [];
   for (const route of sorted) {
     if (conflicted.has(route)) continue;
@@ -280,6 +287,41 @@ async function writeAllRoutes({ rendered, outputDir, config, log, report, state 
     }
   }
   return verifiable;
+}
+
+/**
+ * Writes the captured-state scripts routes reference when externalScripts is on. The payload
+ * is content-addressed, so routes that inject the same state share one file and a rerun
+ * leaves it untouched.
+ */
+async function writeStateScripts({ rendered, outputDir, config, log, report }) {
+  const seen = new Set();
+  for (const [route, result] of rendered) {
+    const stateScript = result?.stateScript;
+    if (!stateScript || seen.has(stateScript.file)) continue;
+    seen.add(stateScript.file);
+    if (config.dryRun) {
+      report.files.push({
+        route,
+        file: stateScript.file,
+        status: 'dry-run',
+        bytes: Buffer.byteLength(stateScript.contents),
+      });
+      continue;
+    }
+    try {
+      const written = await writeFileIfChanged({
+        dir: outputDir,
+        file: stateScript.file,
+        contents: stateScript.contents,
+      });
+      report.files.push({ route, ...written });
+      log.debug(`  wrote ${stateScript.file}: ${written.status}`);
+    } catch (error) {
+      report.errors.push({ route, message: `write failed: ${error.message}` });
+      log.error(`  write failed for ${stateScript.file}: ${error.message}`);
+    }
+  }
 }
 
 /**
@@ -356,7 +398,14 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
  * the output directory, which a command server does not have to serve.
  */
 async function applyCriticalCss({ output, outputDir, config, log, state }) {
-  if (!config.serveCmd) return inlineCriticalCss({ html: output, outputDir, base: config.base });
+  if (!config.serveCmd) {
+    return inlineCriticalCss({
+      html: output,
+      outputDir,
+      base: config.base,
+      preload: config.criticalCssPreload,
+    });
+  }
   if (!state.warnedCriticalCssSkipped) {
     state.warnedCriticalCssSkipped = true;
     log.warn(

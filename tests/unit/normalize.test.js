@@ -146,15 +146,15 @@ describe('normaliseHtml post-processing', () => {
     assert.equal(normaliseHtml(PAGE).stats.titleElements, 0);
   });
 
-  it('keeps the metadata script even when every other script is removed', () => {
+  it('keeps the persisted metadata element even when every other script is removed', () => {
     const page = [
       '<!DOCTYPE html><html><head>',
-      '<script data-snappy-meta>window.__SNAPPY_META__={"siteUrl":"https://pps.example"};</script>',
+      '<script type="application/json" data-snappy-meta>{"siteUrl":"https://pps.example"}</script>',
       '</head><body><script src="/app.js"></script></body></html>',
     ].join('');
     const { html, stats } = normaliseHtml(page, { removeScriptTags: true });
     assert.equal(html.includes('data-snappy-meta'), true);
-    assert.equal(html.includes('__SNAPPY_META__'), true);
+    assert.equal(html.includes('https://pps.example'), true);
     assert.equal(html.includes('/app.js'), false);
     assert.equal(stats.removedElements, 1);
   });

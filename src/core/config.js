@@ -11,7 +11,9 @@ export const MAX_DEFAULT_CONCURRENCY = 8;
 const LOG_LEVELS = ['silent', 'error', 'warn', 'info', 'debug'];
 const BROWSER_CHOICES = ['auto', 'chrome', 'msedge', 'chromium'];
 const INLINE_CSS_STRATEGIES = [false, true, 'inline', 'critical'];
+const CSP_MODES = ['off', 'strict'];
 const SAVE_AS_CHOICES = ['html', 'png', 'jpeg'];
+const CRITICAL_CSS_PRELOAD = ['body', 'media', 'swap', 'swap-high', 'swap-low', 'js', 'js-lazy'];
 const NULLABLE_KEYS = [
   'storageState',
   'readySelector',
@@ -60,13 +62,16 @@ export const DEFAULTS = Object.freeze({
   captureRuntimeStyles: true,
   captureFormState: true,
   saveAs: 'html',
+  csp: 'off',
   inlineCss: false,
+  criticalCssPreload: 'media',
   minifyHtml: false,
   minifyCss: false,
   removeBlobs: true,
   removeStyleTags: false,
   removeScriptTags: false,
   asyncScriptTags: false,
+  externalScripts: false,
   preconnectThirdParty: true,
   preloadImages: false,
   preloadManifest: false,
@@ -112,6 +117,12 @@ export function resolveConfig(userOptions = {}) {
     userOptions.concurrency ??
     Math.max(1, Math.min(os.availableParallelism(), MAX_DEFAULT_CONCURRENCY));
   config.includeProvided = userOptions.include !== undefined;
+  // The CSP dial decides the defaults for the pieces that can move. Explicit options still
+  // win, so a project can take 'strict' and put one part back.
+  if (userOptions.externalScripts === undefined) config.externalScripts = config.csp === 'strict';
+  if (userOptions.criticalCssPreload === undefined) {
+    config.criticalCssPreload = config.csp === 'strict' ? false : 'media';
+  }
   config.warnings = [];
   validateConfig(config);
   return config;
@@ -237,6 +248,17 @@ export function validateConfig(config) {
   }
   if (!INLINE_CSS_STRATEGIES.includes(config.inlineCss)) {
     throw new TypeError("inlineCss must be false, true, 'inline' or 'critical'");
+  }
+  if (!CSP_MODES.includes(config.csp)) {
+    throw new TypeError(`csp must be one of: ${CSP_MODES.join(', ')}`);
+  }
+  if (
+    config.criticalCssPreload !== false &&
+    !CRITICAL_CSS_PRELOAD.includes(config.criticalCssPreload)
+  ) {
+    throw new TypeError(
+      `criticalCssPreload must be false or one of: ${CRITICAL_CSS_PRELOAD.join(', ')}`,
+    );
   }
   for (const key of ['minifyHtml', 'minifyCss']) {
     const value = config[key];

@@ -71,7 +71,10 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
       inlineCssSkipped = inlined.skipped;
     }
     await collector.settled();
-    await injectCapturedState(page, collector.json);
+    const stateScript = await injectCapturedState(page, collector.json, {
+      externalScripts: config.externalScripts,
+      base: config.base,
+    });
     if (metadataDefaults) await injectMetadataDefaults(page, metadataDefaults);
     if (config.freezeAnimations) await freezeAnimations(page);
     if (config.scrollToBottom) await scrollThroughPage(page, config);
@@ -82,11 +85,19 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
     if (screenshotPath) {
       await fs.mkdir(path.dirname(screenshotPath), { recursive: true });
       await page.screenshot({ path: screenshotPath, fullPage: true });
-      return { route, links, pageErrors, collector, inlineCssSkipped, screenshot: true };
+      return {
+        route,
+        links,
+        pageErrors,
+        collector,
+        inlineCssSkipped,
+        stateScript,
+        screenshot: true,
+      };
     }
 
     const html = await page.content();
-    return { route, html, links, pageErrors, collector, inlineCssSkipped };
+    return { route, html, links, pageErrors, collector, inlineCssSkipped, stateScript };
   } finally {
     tracker.stop();
     await context.close();
@@ -97,53 +108,81 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
  * Injects captured JSON responses as window.snapStore and anything the app exposes
  * through window.snapSaveState, before the first script runs. The client can then
  * replay the same data during hydration instead of re-fetching and mismatching.
+ *
+ * Inline by default. With externalScripts the same payload is written as a content-hashed
+ * same-origin file and referenced with src, so a strict script-src can allow it without
+ * unsafe-inline. Returns that file for the caller to write, or null when nothing was needed.
  */
-async function injectCapturedState(page, cache) {
+async function injectCapturedState(page, cache, { externalScripts = false, base = '/' } = {}) {
   const store = Object.fromEntries(cache);
-  await page.evaluate((captured) => {
-    const UNSAFE_CHARS = /[<>/\u2028\u2029]/g;
-    const ESCAPED_CHARS = {
-      '<': '\\u003C',
-      '>': '\\u003E',
-      '/': '\\u002F',
-      '\u2028': '\\u2028',
-      '\u2029': '\\u2029',
-    };
-    const escapeJson = (value) =>
-      JSON.stringify(value).replace(UNSAFE_CHARS, (char) => ESCAPED_CHARS[char]);
+  return page.evaluate(
+    async ({ captured, external, basePath }) => {
+      const UNSAFE_CHARS = /[<>/\u2028\u2029]/g;
+      const ESCAPED_CHARS = {
+        '<': '\\u003C',
+        '>': '\\u003E',
+        '/': '\\u002F',
+        '\u2028': '\\u2028',
+        '\u2029': '\\u2029',
+      };
+      const escapeJson = (value) =>
+        JSON.stringify(value).replace(UNSAFE_CHARS, (char) => ESCAPED_CHARS[char]);
 
-    const parts = [];
-    if (Object.keys(captured).length > 0) {
-      parts.push(`window.snapStore=${escapeJson(captured)};`);
-    }
-    const state = typeof window.snapSaveState === 'function' ? window.snapSaveState() : null;
-    if (state && typeof state === 'object') {
-      for (const [key, value] of Object.entries(state)) {
-        // Both the key and the value are escaped: JSON.stringify alone leaves angle
-        // brackets and slashes intact, which would let a dynamic key close the tag.
-        parts.push(`window[${escapeJson(key)}]=${escapeJson(value)};`);
+      const parts = [];
+      if (Object.keys(captured).length > 0) {
+        parts.push(`window.snapStore=${escapeJson(captured)};`);
       }
-    }
-    // Replacing an earlier injection keeps a rerun against already prerendered output
-    // byte-identical instead of stacking a second copy of the state script.
-    document.querySelectorAll('script[data-snappy-state]').forEach((script) => script.remove());
-    if (parts.length === 0) return;
+      const state = typeof window.snapSaveState === 'function' ? window.snapSaveState() : null;
+      if (state && typeof state === 'object') {
+        for (const [key, value] of Object.entries(state)) {
+          // Both the key and the value are escaped: JSON.stringify alone leaves angle
+          // brackets and slashes intact, which would let a dynamic key close the tag.
+          parts.push(`window[${escapeJson(key)}]=${escapeJson(value)};`);
+        }
+      }
+      // Replacing an earlier injection keeps a rerun against already prerendered output
+      // byte-identical instead of stacking a second copy of the state script.
+      document.querySelectorAll('script[data-snappy-state]').forEach((script) => script.remove());
+      if (parts.length === 0) return null;
 
-    const script = document.createElement('script');
-    script.setAttribute('data-snappy-state', '');
-    script.textContent = parts.join('');
-    const first = document.scripts[0];
-    if (first?.parentNode) first.parentNode.insertBefore(script, first);
-    else document.head.appendChild(script);
-  }, store);
+      // Inserted before the first script so the state exists before the bundle runs.
+      const insert = (element) => {
+        const first = document.scripts[0];
+        if (first?.parentNode) first.parentNode.insertBefore(element, first);
+        else document.head.appendChild(element);
+      };
+
+      const script = document.createElement('script');
+      script.setAttribute('data-snappy-state', '');
+      const text = parts.join('');
+
+      if (!external) {
+        script.textContent = text;
+        insert(script);
+        return null;
+      }
+
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      const hash = [...new Uint8Array(digest)]
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+        .slice(0, 12);
+      const file = `snappy/state-${hash}.js`;
+      const prefix = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+      script.setAttribute('src', `${prefix}/${file}`);
+      insert(script);
+      return { file, contents: text };
+    },
+    { captured: store, external: externalScripts === true, basePath: base },
+  );
 }
 
 /**
  * Persists the metadata defaults into the document itself, so the head component reads the
  * public site URL on the client too, not only while prerendering. Anything the head layer
  * recorded about the tags it overwrote is merged in, and an earlier injection from a previous
- * run is replaced so repeated runs stay identical. Placed before the app bundle runs, exactly
- * like the captured state.
+ * run is replaced so repeated runs stay identical. Written as inert JSON rather than an
+ * executable script, so a strict script-src applies to nothing here.
  */
 async function injectMetadataDefaults(page, defaults) {
   const payload = await page.evaluate((fallback) => {
@@ -154,15 +193,16 @@ async function injectMetadataDefaults(page, defaults) {
     if (recorded) merged.originals = recorded;
     return Object.keys(merged).length > 0 ? merged : fallback;
   }, defaults);
-  const script = `window.__SNAPPY_META__ = ${escapeForScript(payload)};`;
+  const element = escapeForScript(payload);
   await page.evaluate((text) => {
-    const element = document.createElement('script');
-    element.setAttribute('data-snappy-meta', '');
-    element.textContent = text;
+    const script = document.createElement('script');
+    script.setAttribute('type', 'application/json');
+    script.setAttribute('data-snappy-meta', '');
+    script.textContent = text;
     const first = document.scripts[0];
-    if (first?.parentNode) first.parentNode.insertBefore(element, first);
-    else document.head.appendChild(element);
-  }, script);
+    if (first?.parentNode) first.parentNode.insertBefore(script, first);
+    else document.head.appendChild(script);
+  }, element);
 }
 
 /**
