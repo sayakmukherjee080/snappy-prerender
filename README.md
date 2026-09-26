@@ -1,28 +1,24 @@
 # snappy-prerender
 
-Drop-in prerendering for existing single-page apps. It renders every route in a real browser and writes static HTML — content, titles, meta tags and preconnect hints — so search engines and social crawlers see the full page without running JavaScript. Then it reloads each page with the client bundle and reports how it booted.
+**Prerender your single-page app without rewriting it.** Point it at your build output, and every route is rendered in a real browser and written to disk as static HTML — content, titles, meta tags, canonical links and Open Graph tags included. Search engines and social crawlers get the full page; your users get the same app they had before.
 
-No SSR entry, no framework migration, no app changes. React 18 and React 19, Vite 6/7/8, or any static build directory.
+[![npm](https://img.shields.io/npm/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
+[![node](https://img.shields.io/node/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
+[![license](https://img.shields.io/npm/l/snappy-prerender.svg)](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/LICENSE)
 
-## Why
+- **No SSR entry, no framework migration, no app changes.** If it builds to a `dist` directory, it can be prerendered.
+- **React 18 and React 19, Vite 6/7/8, or any static build.**
+- **Inspired by [react-snap](https://github.com/stereobooster/react-snap)** and rebuilt from scratch for current toolchains: a browser-based prerenderer with a hydration report attached, not another SSR framework.
 
-Search engines and social crawlers still read HTML, not client-rendered DOM: a client-only SPA is an empty body and a generic title to them, whatever the page shows in a browser. Prerendering fixes that, because the HTML a crawler reads is the HTML the browser rendered. `react-snap` did this for webpack-era SPAs and has been unmaintained since 2019. `snappy-prerender` is a fresh implementation for current toolchains, with a hydration report attached: it tells you how each page booted, so a mismatch is visible without being a blocker.
+## Who this is for
 
-## Requirements
+**Use it when** your app renders in the browser and you want the crawler-visible HTML to match: Create React App, Vite + React, plain SPAs, CMS-driven sites, marketing pages behind a client router.
 
-- Node.js >= 20.19
-- Chrome or Edge installed (detected automatically), or allow the one-time Chrome for Testing download fallback
-- `beasties` only if you use `inlineCss: 'critical'` (optional peer dependency)
+**Skip it when** you already render HTML on the server — Next.js, Remix, Astro and friends do not need prerendering, and this tool will not improve on what they ship.
 
-Browser resolution order: installed Chrome, installed Edge, a Playwright-managed browser, then a Chrome for Testing download from Google's version-pinned HTTPS bucket into `SNAPPY_BROWSER_CACHE_DIR` (defaults to the platform cache directory). Chrome for Testing publishes no checksum feed, so that archive is trusted on the strength of HTTPS and the pinned URL unless you set `browserDownloadHash`, which makes the download fail if the SHA-256 does not match. Set `browserDownload: false` to forbid downloads entirely.
+## Quick start
 
-## Install
-
-```sh
-npm install --save-dev snappy-prerender
-```
-
-## Vite plugin
+### Vite
 
 ```js
 // vite.config.js
@@ -35,27 +31,113 @@ export default defineConfig({
 });
 ```
 
-`vite build` now prerenders the output directory. Rendering or hydration failures fail the build.
+`vite build` now prerenders the output directory. Rendering failures fail the build; hydration is reported unless you opt into enforcement.
 
-## CLI
+### CLI
 
 For any static output directory, Vite or not:
 
 ```sh
+npm install --save-dev snappy-prerender
+
 npx snappy-prerender dist
 npx snappy-prerender dist --include /,/pricing,/blog/* --exclude /blog/drafts/*
+npx snappy-prerender dist --block-third-party --allowed-hosts cms.example.com
+npx snappy-prerender dist --metadata-site-url https://example.com --metadata-title-template '%s | Example'
 npx snappy-prerender dist --inline-css critical --minify-html --preload-manifest
 ```
+
+### Programmatic
+
+```js
+import { prerender } from 'snappy-prerender/core';
+
+const report = await prerender({ sourceDir: 'dist', include: ['/'] });
+if (!report.ok) {
+  for (const failure of report.verification.routes.filter((entry) => !entry.ok)) {
+    console.error(failure.route, failure.hydrationErrors);
+  }
+}
+```
+
+## Inspired by react-snap
+
+react-snap proved the idea that makes this approach attractive: you do not need a server, a second renderer or a rewrite to give crawlers real HTML — you need a browser, a router and a build step. It carried a generation of webpack-era SPAs and has been unmaintained since 2019.
+
+`snappy-prerender` is a fresh implementation of that idea for current toolchains. It is not a fork: no react-snap code was reused. What changed is the machinery around the same core trick — Playwright instead of an old Puppeteer, Chrome or Edge from the machine you already have, Vite plugin support, a head and metadata layer with client-side updates, hydration verification that tells you how each page booted, and option names that say what they do.
+
+If you are moving over, the [differences and migration table](#differences-from-react-snap) maps every option.
+
+## What you get
+
+| | |
+| --- | --- |
+| **Static HTML per route** | `route/index.html` (or `route.html` with `flatOutput`), plus a `404.html` from your not-found route. Identical files are left untouched, so rebuilds and CI caches stay stable. |
+| **Head and metadata** | A `Head` component writes per-route title, description, robots, canonical, Open Graph and Twitter tags — and keeps updating them on client-side navigation, exactly like a page-per-request site. |
+| **Hydration report** | Every written page is reloaded with the real bundle and reported as `hydrated`, `re-rendered`, `undetected` or `unknown`, with React mismatch messages per route. |
+| **A ready contract** | `window.__prerenderReady`, a selector, or network quiescence — whichever fits your app. |
+| **Output optimisation** | Critical CSS, HTML/CSS minification, preconnect hints, image preload, a preload manifest, script and style surgery. |
+| **CSS-in-JS support** | CSSOM-only styles (emotion, styled-components in speedy mode) and constructable stylesheets are folded back into the HTML. |
+| **Ajax state replay** | Captured JSON and `window.snapSaveState()` are injected before the first script, so hydration sees the same data the prerender did. |
+| **Any static build** | Base paths, `serveCmd` for apps that need a live API, screenshots, dry runs, bounded concurrency. |
 
 ## How it works
 
 1. Serves the built output on an ephemeral loopback port (or copies it to `destination` first).
 2. Crawls same-origin links from the seed routes, rendering each page in a fresh browser context.
 3. Waits for the app to settle: ready contract, quiet network, fonts, two animation frames.
-4. Freezes CSS animations, blocks third-party requests, and records the resources the page used.
-5. Serialises the DOM, then post-processes it: removes the freeze style and `data-prerender-remove` elements, de-duplicates head styles, drops dead blob stylesheets, adds link hints, optionally inlines CSS, removes or marks scripts, optionally minifies.
+4. Freezes CSS animations, optionally blocks third-party requests, records the resources the page used, and reconciles any head tags the app rendered.
+5. Serialises the DOM, then post-processes it: removes the freeze style and `data-prerender-remove` elements, de-duplicates head styles, drops dead blob stylesheets, adds link hints, optionally inlines CSS, removes or marks scripts, optionally minifies, and notes metadata that points at the build server or ships more than one title.
 6. Writes `route/index.html` (or a screenshot), leaving identical files untouched.
 7. Reloads every written file with the real client bundle, reports React hydration errors, and records whether each route hydrated or re-rendered.
+
+## Head and metadata
+
+Per-route titles, descriptions, canonical links and Open Graph/Twitter tags come from a `Head` component the package ships. It writes into the document head while the route is mounted and reconciles on every render, so client-side navigation updates the head exactly like a site that renders a page per request — and the prerenderer captures whatever is there, because the head is part of the page it serialises.
+
+```jsx
+import { Head } from 'snappy-prerender/head';
+
+<Head
+  title="Awards"
+  description="Awards presented by the society"
+  image="/share/awards.png"
+  type="article"
+  locale="en_GB"
+  robots="index,follow"
+  extra={[{ name: 'keywords', content: 'polymer' }, { rel: 'alternate', href: '/feed.xml' }]}
+/>
+```
+
+Project-wide values come from the `metadata` option. The prerenderer injects them into every page, so the component composes absolute URLs from the public site rather than the build server:
+
+```js
+snappy({
+  metadata: {
+    siteUrl: 'https://example.com',
+    siteName: 'Example',
+    titleTemplate: '%s | Example',
+    defaultImage: '/share.png',
+    trailingSlash: 'never', // 'preserve' | 'always' | 'never'
+  },
+});
+```
+
+What it emits, per route: `title` (with the template applied unless the title already carries its suffix), `meta[name=description]`, `meta[name=robots]`, `link[rel=canonical]`, `og:title`, `og:description`, `og:type`, `og:url`, `og:image`, `og:site_name`, `og:locale`, and `twitter:card` / `twitter:title` / `twitter:description` / `twitter:image`. Switch a family off with `openGraph: false` or `twitter: false`, and skip the canonical with `canonical: false`.
+
+Rules worth knowing:
+
+- `metadata` values are defaults; a `Head`'s own props win. When several Heads render, the later one in render order wins per tag, so a page overrides its layout.
+- Tags are matched on the attribute a crawler reads, so an existing tag is updated in place rather than duplicated. Two tags with the same identity already in the document — a `name`, `property`, `http-equiv` or `rel` match — are reduced to one.
+- A tag the head layer generated carries `data-snappy-head-created` beside `data-snappy-head`, so a later page load can tell it apart from one the app wrote.
+- When no Head wants a tag any more, a generated one is removed and one the app wrote is restored to the value it had before the head layer touched it. That original is recorded into the page during prerendering, so a route change brings the template's fallback metadata back.
+- The component renders nothing, so it cannot affect hydration of the page content.
+- The title template applies unless the title already ends with the template's fixed part, or is the site name itself, so a title composed by hand is never suffixed twice.
+- Absolute URLs are required for `og:url`, `og:image` and canonical. Without `metadata.siteUrl` they fall back to the browser origin, which during prerendering is the build server — the run warns when that happens. The `trailingSlash` convention applies to page URLs only; asset URLs are left alone.
+- `metadata.base` overrides the base path used for absolute URLs and defaults to the `base` option.
+- On React 19, React hoists `<title>` and `<meta>` rendered in JSX and leaves an existing template tag alone, so a page can end up with two titles. Use React's native metadata or this component, not both; the run warns when the output carries more than one `<title>`.
+- Every metadata value has a CLI flag: `--metadata-site-url`, `--metadata-site-name`, `--metadata-title-template`, `--metadata-default-image`, `--metadata-trailing-slash`.
+- `react` is an optional peer dependency, needed only for this entry point. Non-React code can call `setHead(id, props)` and `clearHead(id)` instead.
 
 ## Hydration verification
 
@@ -73,6 +155,8 @@ After writing the output, every route is loaded again with the real client bundl
 | `unknown` | The prerendered node was never seen, for example a container outside the usual ids. |
 
 `re-rendered` matters because an app calling `createRoot` instead of `hydrateRoot` throws the prerendered DOM away on boot — and because `createRoot` cannot raise a hydration error, nothing else would ever tell you. It is reported per route as `verification.routes[].mode` and summarised in `verification.modes`, with a warning in the log. Set `failOnRerender: true` to make it fail the build as well.
+
+**Page errors.** Errors the browser logs while verifying are reported too: uncaught exceptions as warnings, console errors at debug level. Errors thrown during rendering itself are counted in the summary and reported per route, and `failOnPageError: true` turns them into a build failure; by default an app that throws still ships what it managed to render, because the static output is what crawlers read.
 
 ## Ready contract
 
@@ -98,49 +182,6 @@ const isPrerender = navigator.userAgent === 'SnappyPrerender';
 
 Set `userAgent: null` to send the browser's default instead.
 
-## Head and metadata
-
-Per-route titles, descriptions, canonical links and Open Graph/Twitter tags come from a `Head` component the package ships. It writes into the document head while the route is mounted and reconciles on every render, so client-side navigation updates the head exactly like a site that renders a page per request — and the prerenderer captures whatever is there, because the head is part of the page it serialises.
-
-```jsx
-import { Head } from 'snappy-prerender/head';
-
-<Head
-  title="Awards"
-  description="Awards presented by the society"
-  image="/share/awards.png"
-  type="article"
-  locale="en_GB"
-  robots="index,follow"
-  extra={[{ name: 'keywords', content: 'polymer' }, { rel: 'alternate', href: '/feed.xml' }]}
-/>
-```
-
-Project-wide values come from the `metadata` option. The prerenderer injects them into every page, so the component composes absolute URLs from the public site rather than from the build server:
-
-```js
-snappy({
-  metadata: {
-    siteUrl: 'https://example.com',
-    siteName: 'Example',
-    titleTemplate: '%s | Example',
-    defaultImage: '/share.png',
-    trailingSlash: 'never', // 'preserve' | 'always' | 'never'
-  },
-});
-```
-
-What it emits, per route: `title` (with the template applied, skipped when the title already carries the site name), `meta[name=description]`, `meta[name=robots]`, `link[rel=canonical]`, `og:title`, `og:description`, `og:type`, `og:url`, `og:image`, `og:site_name`, `og:locale`, and `twitter:card` / `twitter:title` / `twitter:description` / `twitter:image`. Switch a family off with `openGraph: false` or `twitter: false`, and skip the canonical with `canonical: false`.
-
-Rules worth knowing:
-
-- `metadata` values are defaults; a `Head`'s own props win. When several Heads render, the later one in render order wins per tag, so a page overrides its layout.
-- An existing tag is updated in place rather than duplicated, which is why hydration adopts the prerendered tags instead of adding a second set.
-- The component renders nothing, so it cannot affect hydration of the page content.
-- Tags carry a `data-snappy-head` attribute, so they are recognisable in the output and are removed when the route unmounts.
-- Absolute URLs are required for `og:url`, `og:image` and canonical. Without `metadata.siteUrl` they fall back to the browser origin, which during prerendering is the build server — the run warns when that happens.
-- `react` is an optional peer dependency, needed only for this entry point. Non-React code can call `setHead(id, props)` and `clearHead(id)` instead.
-
 ## Optimising the output
 
 ### Critical CSS
@@ -151,7 +192,7 @@ snappy({ inlineCss: 'critical' }) // inline above-the-fold CSS, defer the rest (
 snappy({ inlineCss: true })       // alias for 'inline'
 ```
 
-`'inline'` reads the stylesheet text from the live page, so blob-backed CSS-in-JS sheets are inlined too. Stylesheets that cannot be fetched are left as links.
+`'inline'` reads the stylesheet text from the live page, so blob-backed CSS-in-JS sheets are inlined too. Stylesheets that cannot be fetched, and non-screen media such as a print stylesheet, are left as links.
 
 `'critical'` delegates to [beasties](https://github.com/danielroe/beasties):
 
@@ -177,7 +218,7 @@ snappy({ preconnectThirdParty: true, preloadImages: true, preloadManifest: true 
 
 - `preconnectThirdParty` (default `true`) records every third-party origin the page tried to reach — including ones blocked by `blockThirdParty` — and adds `<link rel="preconnect">` for each.
 - `preloadImages` adds `<link rel="preload" as="image">` for same-origin images the page loaded.
-- `preloadManifest` writes `preload-manifest.json` into the output directory: for each route, a `Link` header value listing the scripts and stylesheets it used, filtered by `ignoreForPreload` (default `['service-worker.js']`). Serve these as Early Hints or `Link` response headers.
+- `preloadManifest` writes `preload-manifest.json` into the output directory: for each route, a `Link` header value listing the scripts and stylesheets it used, filtered by `ignoreForPreload` (default `['service-worker.js']`). Hints and route keys carry the base path, so serve these as Early Hints or `Link` response headers as they are.
 
 react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome in v106), so the manifest is now a header list rather than a push list.
 
@@ -192,6 +233,8 @@ snappy({
 });
 ```
 
+The metadata script the head layer persists is exempt from `removeScriptTags`; everything else is removed as asked.
+
 ## Third-party requests
 
 Third-party requests are **allowed by default**. Most React sites get their content from a CMS, headless API or a separate service origin, and blocking those during prerendering produces pages that render without data — so the default keeps them working, matching react-snap.
@@ -204,7 +247,7 @@ snappy({ blockThirdParty: true, allowedHosts: ['cms.example.com'] }); // block a
 
 Turning blocking on makes rendering deterministic and keeps analytics, ads and chat widgets from executing during a build. `allowedHosts` is the usual setting for a CMS-backed site: the API stays reachable while everything else is cut.
 
-Preconnect hints are generated for **every** third-party origin the page contacts — including hosts you allowlist while blocking — so the deployed page can start those connections early. Set `preconnectThirdParty: false` to turn the hints off.
+Preconnect hints are generated for **every** third-party origin the page contacts — including hosts you allowlist while blocking — so the deployed page can start those connections early. Set `preconnectThirdParty: false` to turn the hints off. The CLI equivalent for blocking is `--block-third-party`.
 
 ## CSS-in-JS
 
@@ -243,7 +286,7 @@ if (cached) return cached;
 return fetch('/api/items?page=2').then((response) => response.json());
 ```
 
-`window.snapStore` is keyed by the request path (including its query string), exactly as your app requested it.
+`window.snapStore` is keyed by the request path (including its query string), exactly as your app requested it. Responses larger than `maxCachedBytes` (default 5 MiB) are skipped, so one heavy endpoint cannot bloat every page.
 
 **App state.** Define `window.snapSaveState` and whatever it returns is injected as globals before the first script:
 
@@ -268,7 +311,26 @@ snappy({ saveAs: 'png', destination: 'build/screenshots' });
 snappy({ destination: 'build/prerendered' });
 ```
 
-The built output is copied to the destination first, so assets sit beside the generated HTML, and the source directory stays untouched.
+The built output is copied to the destination first, so assets sit beside the generated HTML, and the source directory stays untouched. A destination that already has files is reported before it is overwritten.
+
+## A typical config file
+
+```js
+// snappy.config.js — picked up by the CLI automatically
+export default {
+  sourceDir: 'dist',
+  metadata: {
+    siteUrl: 'https://example.com',
+    siteName: 'Example',
+    titleTemplate: '%s | Example',
+    defaultImage: '/share.png',
+  },
+  cacheAjaxRequests: true,
+  preloadImages: true,
+  inlineCss: 'critical',
+  minifyHtml: true,
+};
+```
 
 ## Options
 
@@ -312,6 +374,7 @@ The built output is copied to the destination first, so assets sit beside the ge
 | `preloadManifest` | `false` | Write `preload-manifest.json` with Link header hints |
 | `ignoreForPreload` | `['service-worker.js']` | File names excluded from the manifest |
 | `cacheAjaxRequests` | `false` | Expose captured JSON responses as `window.snapStore` |
+| `maxCachedBytes` | `5242880` | Largest JSON response cached per route, measured on the serialised body |
 | `removeBlobs` | `true` | Drop stylesheet links pointing at dead `blob:` URLs |
 | `removeStyleTags` | `false` | Strip every style tag from the output |
 | `removeScriptTags` | `false` | Strip every script tag from the output |
@@ -319,10 +382,11 @@ The built output is copied to the destination first, so assets sit beside the ge
 | `flatOutput` | `false` | Write `about.html` instead of `about/index.html` |
 | `notFoundRoute` | `/404` | Route emitted as `404.html`; a notice is logged when it is never prerendered |
 | `saveAs` | `html` | `html`, `png` or `jpeg` |
-| `metadata` | `null` | Defaults for the head component: `siteUrl`, `siteName`, `titleTemplate`, `defaultImage`, `trailingSlash` |
+| `metadata` | `null` | Defaults for the head component: `siteUrl`, `siteName`, `titleTemplate`, `defaultImage`, `trailingSlash`, `base` |
 | `verify` | `true` | Run the hydration verification pass |
 | `failOnHydrationError` | `false` | Fail the run on hydration errors; off by default, where they are reported instead |
 | `failOnRerender` | `false` | Fail the run when a route re-renders instead of hydrating |
+| `failOnPageError` | `false` | Fail the run when a page throws while rendering; off by default, where page errors are reported |
 | `failOnError` | `true` | Fail the run on route render errors |
 | `dryRun` | `false` | Render and report without writing |
 | `logLevel` | `info` | `silent`, `error`, `warn`, `info`, `debug` |
@@ -330,6 +394,8 @@ The built output is copied to the destination first, so assets sit beside the ge
 | `url` | `null` | App URL, required with `serveCmd` |
 | `serveCmdTimeout` | `30000` | How long to wait for `serveCmd` to answer |
 | `shutdownTimeout` | `5000` | Grace period before force-killing `serveCmd` |
+
+Run `npx snappy-prerender --help` for the matching CLI flags.
 
 ## Programmatic API
 
@@ -344,7 +410,9 @@ if (!report.ok) {
 }
 ```
 
-The report exposes `routes`, `files` (with per-route `status`), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `verification` (per-route `mode` plus a `modes` summary), `preloadManifest`, `truncated`, and `ok`.
+The report exposes `routes`, `files` (with per-route `status`), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `duplicateTitles` (routes shipping more than one title), `verification` (per-route `mode` plus a `modes` summary), `preloadManifest`, `truncated`, and `ok`.
+
+`snappy-prerender` exports `DEFAULTS`, `prerender` and `resolveConfig`; the default export is the Vite plugin.
 
 ## Differences from react-snap
 
@@ -364,8 +432,29 @@ Dropped: `sourceMaps` (declared but never referenced in react-snap's code), `fix
 - Route query strings are ignored; routes are deduplicated without them.
 - Routes whose decoded path contains dot segments or backslashes are skipped, so encoded traversal cannot create stray directories.
 - Crawling is unbounded unless `maxRoutes` is set; hitting the cap marks the run as failed so incomplete output is never shipped silently. Which routes are cut is concurrency-dependent on a large site — narrow `include`/`exclude` instead when you need a deterministic set.
+- **React 19 native metadata.** React hoists `<title>` and `<meta>` rendered in JSX and leaves an existing template title in place, so using both systems produces two titles in the output. Use one of them; the run warns when a page ships more than one `<title>`.
 - If two routes would write the same file — such as `/` and `/index` with `flatOutput` — neither is written and the run fails with a collision error.
 - Screenshots are viewport-width full-page captures, so they reflect the configured `viewport`, not a device matrix.
+- Output files from routes that no longer exist are left in place; clean the output directory or use a fresh `destination` when route sets shrink.
+
+## Requirements
+
+- Node.js >= 20.19
+- Chrome or Edge installed (detected automatically), or allow the one-time Chrome for Testing download fallback
+- `beasties` only if you use `inlineCss: 'critical'` (optional peer dependency)
+
+Browser resolution order: installed Chrome, installed Edge, a Playwright-managed browser, then a Chrome for Testing download from Google's version-pinned HTTPS bucket into `SNAPPY_BROWSER_CACHE_DIR` (defaults to the platform cache directory). Chrome for Testing publishes no checksum feed, so that archive is trusted on the strength of HTTPS and the pinned URL unless you set `browserDownloadHash`, which makes the download fail if the SHA-256 does not match. Set `browserDownload: false` to forbid downloads entirely.
+
+## Contributing
+
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). For security reports, follow [SECURITY.md](SECURITY.md).
+
+```sh
+npm install
+npm test               # unit
+npm run test:integration
+npm run lint
+```
 
 ## License
 

@@ -12,6 +12,7 @@ export function createResourceCollector({
   allowedHosts = [],
   blockThirdParty = false,
   collectJson = false,
+  maxCachedBytes = Number.POSITIVE_INFINITY,
 }) {
   const thirdPartyOrigins = new Set();
   const images = new Set();
@@ -56,10 +57,12 @@ export function createResourceCollector({
         else if (resourceType === 'script') scripts.add(path);
         else if (resourceType === 'stylesheet') styles.add(path);
         else if (collectJson && isJson(response)) {
+          const length = Number(response.headers()['content-length'] ?? Number.NaN);
+          if (Number.isFinite(length) && length > maxCachedBytes) return;
           const capture = response
             .json()
             .then((body) => {
-              json.set(path, body);
+              if (withinCacheLimit(body, maxCachedBytes)) json.set(path, body);
             })
             .catch(() => {
               // A truncated or aborted response is simply not cached.
@@ -81,10 +84,19 @@ export function toAppPath(url, base) {
   let pathname = parsed.pathname;
   if (base !== '/') {
     const prefix = base.slice(0, -1);
-    if (!pathname.startsWith(prefix)) return null;
-    pathname = pathname.slice(prefix.length) || '/';
+    if (pathname === prefix) pathname = '/';
+    else if (pathname.startsWith(`${prefix}/`)) pathname = pathname.slice(prefix.length);
+    else return null;
   }
   return `${pathname}${parsed.search}`;
+}
+
+/**
+ * Reports whether a captured JSON body fits the cache budget, measured on the serialised
+ * text so the check matches how much is injected into the page.
+ */
+export function withinCacheLimit(body, maxBytes) {
+  return JSON.stringify(body).length <= maxBytes;
 }
 
 function parseUrl(url) {

@@ -7,10 +7,18 @@ import { minifyCss } from './minify.js';
  */
 export async function inlineStylesheets({ page, minifyCssOptions }) {
   const collected = await page.evaluate(async () => {
+    // Only media that applies on screen can be inlined without changing how the sheet
+    // applies, so a print stylesheet is left as a link instead of becoming active.
+    const INLINEABLE_MEDIA = new Set(['', 'all', 'screen']);
     const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
     const parts = [];
     const skipped = [];
     for (const link of links) {
+      const media = (link.getAttribute('media') ?? '').trim().toLowerCase();
+      if (!INLINEABLE_MEDIA.has(media)) {
+        skipped.push(link.href);
+        continue;
+      }
       try {
         const response = await fetch(link.href);
         if (!response.ok) throw new Error(String(response.status));

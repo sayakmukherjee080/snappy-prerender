@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { findBuildOriginUrls } from '../head/tags.js';
 import { launchBrowser } from './browser.js';
 import { resolveConfig } from './config.js';
 import { prepareDestination } from './destination.js';
@@ -25,6 +24,7 @@ import { verifyRoutes } from './verify.js';
 export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   const config = resolveConfig(userOptions);
   const log = injectedLog ?? createLogger(config.logLevel);
+  for (const warning of config.warnings ?? []) log.warn(warning);
   const sourceDir = path.resolve(config.sourceDir);
   const startedAt = Date.now();
 
@@ -49,6 +49,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     files: [],
     errors: [],
     pageErrors: [],
+    duplicateTitles: [],
     verification: null,
     preloadManifest: null,
     truncated: null,
@@ -56,7 +57,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     durationMs: 0,
   };
   const manifestEntries = [];
-  const state = { warnedBuildOriginMetadata: false };
+  const state = { warnedBuildOriginMetadata: false, warnedCriticalCssSkipped: false };
   let browser = null;
 
   try {
@@ -73,11 +74,20 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       manifestEntries,
       outputDir,
     });
-    log.info(`Rendered ${report.routes.length} route(s)`);
+    const pageErrors = report.pageErrors.length;
+    log.info(
+      `Rendered ${report.routes.length} route(s)${pageErrors > 0 ? `, ${pageErrors} page error(s)` : ''}`,
+    );
+    if (pageErrors > 0 && !config.failOnPageError) {
+      log.warn(
+        'Page errors are reported, not enforced, so the generated HTML still shipped. Set failOnPageError to fail the build instead.',
+      );
+    }
 
     const verifiable = await writeAllRoutes({ rendered, outputDir, config, log, report, state });
     logFileSummary(report, log);
     logNotFoundNotice(report, config, log);
+    logDuplicateTitles(report, log);
 
     if (report.truncated) {
       log.error(
@@ -95,7 +105,12 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     }
 
     const canVerify = config.verify && !config.dryRun && config.saveAs === 'html';
-    if (canVerify && verifiable.length > 0) {
+    if (canVerify && config.serveCmd) {
+      log.warn(
+        'hydration verification is skipped with serveCmd: the command server decides which document it serves, so the written files cannot be checked',
+      );
+    }
+    if (canVerify && !config.serveCmd && verifiable.length > 0) {
       report.verification = await verifyRoutes({
         browser,
         origin: server.origin,
@@ -116,6 +131,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   const reRendered = report.verification?.modes['re-rendered'] ?? 0;
   report.ok =
     !(config.failOnError && (report.errors.length > 0 || report.truncated !== null)) &&
+    !(config.failOnPageError && report.pageErrors.length > 0) &&
     !(config.failOnHydrationError && report.verification && !report.verification.ok) &&
     !(config.failOnRerender && reRendered > 0);
   return report;
@@ -254,6 +270,7 @@ async function writeAllRoutes({ rendered, outputDir, config, log, report, state 
         config,
         log,
         state,
+        report,
       });
       report.files.push(file);
       verifiable.push(route);
@@ -289,7 +306,7 @@ function reportOutputCollisions({ routes, config, log, report }) {
  * Applies the configured post-processing to one rendered route and writes it: DOM
  * cleanups and link hints, critical CSS extraction, then optional minification.
  */
-async function writeRouteOutput({ route, result, outputDir, config, log, state }) {
+async function writeRouteOutput({ route, result, outputDir, config, log, state, report }) {
   if (result.screenshot) {
     const file = routeToScreenshotFile(route, config);
     const stats = await fs.stat(path.join(outputDir, file));
@@ -318,30 +335,56 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state }
       `  cleaned ${route}: ${stats.removedElements} element(s) removed, ${stats.dedupedStyles} duplicate style(s), ${stats.hints} hint(s), ${stats.textSeparators} text separator(s)`,
     );
   }
+  if ((result.inlineCssSkipped ?? []).length > 0) {
+    log.debug(`  inline css: left ${result.inlineCssSkipped.length} stylesheet(s) as links`);
+  }
 
   let output = html;
   if (config.inlineCss === 'critical') {
-    output = await inlineCriticalCss({ html: output, outputDir, base: config.base });
+    output = await applyCriticalCss({ output, outputDir, config, log, state });
   }
   if (config.minifyHtml) {
     output = await minifyHtml(output, config.minifyHtml, config.minifyCss);
   }
-  warnOnBuildOriginMetadata(output, route, log, state);
+  warnOnBuildOriginMetadata({ origins: stats.metadataOrigins, route, log, state });
+  if (stats.titleElements > 1) report.duplicateTitles.push(route);
   return writeRouteHtml({ dir: outputDir, route, html: output, config });
 }
 
 /**
- * Warns once when head metadata contains the build server's origin, which means the page
- * was composed without a public siteUrl and og:url, og:image or canonical would ship wrong.
+ * Inlines critical CSS, or explains once why it cannot: the strategy reads stylesheets from
+ * the output directory, which a command server does not have to serve.
  */
-function warnOnBuildOriginMetadata(html, route, log, state) {
-  if (state.warnedBuildOriginMetadata) return;
-  const head = html.slice(0, html.indexOf('</head>') + 7);
-  const offenders = findBuildOriginUrls(head);
-  if (offenders.length === 0) return;
+async function applyCriticalCss({ output, outputDir, config, log, state }) {
+  if (!config.serveCmd) return inlineCriticalCss({ html: output, outputDir, base: config.base });
+  if (!state.warnedCriticalCssSkipped) {
+    state.warnedCriticalCssSkipped = true;
+    log.warn(
+      "inlineCss: 'critical' is skipped with serveCmd: stylesheets are read from the output directory, which the command server does not have to serve",
+    );
+  }
+  return output;
+}
+
+/**
+ * Warns once when metadata contains the build server's origin, which means the page was
+ * composed without a public siteUrl and og:url, og:image or canonical would ship wrong.
+ */
+function warnOnBuildOriginMetadata({ origins, route, log, state }) {
+  if (state.warnedBuildOriginMetadata || origins.length === 0) return;
   state.warnedBuildOriginMetadata = true;
   log.warn(
-    `metadata on ${route} points at the build server (${offenders.join(', ')}); set metadata.siteUrl so og:url, og:image and canonical match the deployed site`,
+    `metadata on ${route} points at the build server (${origins.join(', ')}); set metadata.siteUrl so og:url, og:image and canonical match the deployed site`,
+  );
+}
+
+// Notes routes whose output carries more than one title, which is what React 19 native
+// metadata and the head layer together produce.
+function logDuplicateTitles(report, log) {
+  if (report.duplicateTitles.length === 0) return;
+  const sample = report.duplicateTitles.slice(0, 5).join(', ');
+  log.warn(
+    `${report.duplicateTitles.length} route(s) contain more than one <title> element: ${sample}${report.duplicateTitles.length > 5 ? ', …' : ''}. React 19 native metadata and the head layer can each write one, so use one system.`,
   );
 }
 
@@ -352,6 +395,7 @@ function warnOnBuildOriginMetadata(html, route, log, state) {
 async function writePreloadManifest({ manifestEntries, outputDir, config, log }) {
   const manifest = buildPreloadManifest(manifestEntries, {
     ignoreForPreload: config.ignoreForPreload,
+    base: config.base,
   });
   const file = 'preload-manifest.json';
   await fs.writeFile(path.join(outputDir, file), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
@@ -387,7 +431,8 @@ function logFileSummary(report, log) {
 }
 
 // Reports verification results per route, warns when routes discarded their prerendered
-// markup, and notes when hydration failures were reported but not enforced.
+// markup, surfaces errors the client logged while booting, and notes when hydration failures
+// were reported but not enforced.
 function logVerification(verification, config, log) {
   if (verification.ok) {
     log.success(`Hydration verified for ${verification.routes.length} route(s)`);
@@ -404,6 +449,15 @@ function logVerification(verification, config, log) {
       log.warn(
         `Hydration failures are reported, not enforced, so the prerendered HTML still shipped. Set failOnHydrationError to fail the build instead.`,
       );
+    }
+  }
+
+  for (const entry of verification.routes) {
+    for (const message of entry.pageErrors) {
+      log.warn(`  page error on ${entry.route} while verifying: ${message.split('\n')[0]}`);
+    }
+    for (const message of entry.consoleErrors.slice(0, 3)) {
+      log.debug(`  console error on ${entry.route}: ${message.split('\n')[0]}`);
     }
   }
 

@@ -1,7 +1,9 @@
 import { parse, serialize } from 'parse5';
+import { collectBuildOrigins, isMetadataUrlNode, metadataUrlValue } from './metadata-origin.js';
 
 const FREEZE_STYLE_ID = 'snappy-freeze';
 const REMOVE_ATTRIBUTE = 'data-prerender-remove';
+const MAX_METADATA_ORIGINS = 3;
 
 /**
  * Cleans and post-processes the browser-serialised DOM before it is written to disk.
@@ -12,7 +14,14 @@ const REMOVE_ATTRIBUTE = 'data-prerender-remove';
  */
 export function normaliseHtml(html, options = {}) {
   const document = parse(html);
-  const stats = { removedElements: 0, dedupedStyles: 0, hints: 0, textSeparators: 0 };
+  const stats = {
+    removedElements: 0,
+    dedupedStyles: 0,
+    hints: 0,
+    textSeparators: 0,
+    titleElements: 0,
+    metadataOrigins: [],
+  };
   const seenStyles = new Set();
   cleanChildren(document, stats, seenStyles, false, options);
 
@@ -33,6 +42,8 @@ function cleanChildren(parent, stats, seenStyles, inHead, options) {
     const childInHead = inHead || child.tagName === 'head';
     if (shouldRemove(child, stats, options)) continue;
     if (childInHead && child.tagName === 'style' && dedupeStyle(child, stats, seenStyles)) continue;
+    if (childInHead && child.tagName === 'title') stats.titleElements += 1;
+    if (childInHead) collectMetadataOrigins(child, stats);
     if (options.asyncScriptTags && child.tagName === 'script') markScriptAsync(child);
     cleanChildren(child, stats, seenStyles, childInHead, options);
     if (child.content) cleanChildren(child.content, stats, seenStyles, childInHead, options);
@@ -56,8 +67,10 @@ function createComment() {
   return { nodeName: '#comment', data: ' ', parentNode: null };
 }
 
-// Reports whether a node is removed for any of the configured reasons.
+// Reports whether a node is removed for any of the configured reasons. The metadata script is
+// exempt: the head layer reads it on the client, so stripping it would lose the site defaults.
 function shouldRemove(node, stats, options) {
+  if (node.tagName === 'script' && hasAttribute(node, 'data-snappy-meta', null)) return false;
   const reason =
     (node.tagName === 'style' && hasAttribute(node, 'id', FREEZE_STYLE_ID)) ||
     hasAttribute(node, REMOVE_ATTRIBUTE, null) ||
@@ -68,6 +81,16 @@ function shouldRemove(node, stats, options) {
   if (!reason) return false;
   stats.removedElements += 1;
   return true;
+}
+
+// Records the build server origins that metadata URLs point at, so the run can warn once
+// about metadata composed without a public site URL.
+function collectMetadataOrigins(node, stats) {
+  if (stats.metadataOrigins.length >= MAX_METADATA_ORIGINS) return;
+  if (!isMetadataUrlNode(node)) return;
+  for (const origin of collectBuildOrigins(metadataUrlValue(node))) {
+    if (!stats.metadataOrigins.includes(origin)) stats.metadataOrigins.push(origin);
+  }
 }
 
 // Drops a style tag whose text was already seen, reporting it through stats.
