@@ -1,6 +1,6 @@
 {
   "name": "snappy-prerender",
-  "version": "2.5.0",
+  "version": "2.6.0-rc.1",
   "description": "Drop-in prerendering for existing single-page apps. Renders your built app in a real browser, writes static HTML per route, reports React hydration mismatches, and optimises the output with critical CSS, link hints and cached AJAX state.",
   "type": "module",
   "license": "MIT",
