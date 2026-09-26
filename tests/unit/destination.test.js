@@ -42,4 +42,33 @@ describe('prepareDestination', () => {
     assert.equal(await fs.readFile(path.join(destination, 'assets', 'app.js'), 'utf8'), 'js');
     assert.equal(await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8'), 'home');
   });
+
+  it('warns before overwriting a destination that already has files', async () => {
+    const sourceDir = await makeDir();
+    await fs.writeFile(path.join(sourceDir, 'index.html'), 'home');
+    const destination = await makeDir();
+    await fs.writeFile(path.join(destination, 'stale.html'), 'old');
+
+    const messages = [];
+    const log = { warn: (message) => messages.push(message), debug: () => {} };
+    await prepareDestination({ sourceDir, destination, log });
+
+    assert.equal(
+      messages.some((message) => message.includes('is not empty')),
+      true,
+    );
+  });
+
+  it('stays quiet when the destination does not exist yet', async () => {
+    const sourceDir = await makeDir();
+    await fs.writeFile(path.join(sourceDir, 'index.html'), 'home');
+    const destination = path.join(await makeDir(), 'nested', 'out');
+
+    const messages = [];
+    const log = { warn: (message) => messages.push(message), debug: () => {} };
+    await prepareDestination({ sourceDir, destination, log });
+
+    assert.deepEqual(messages, []);
+    assert.equal(await fs.readFile(path.join(destination, 'index.html'), 'utf8'), 'home');
+  });
 });

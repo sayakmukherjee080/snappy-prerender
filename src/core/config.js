@@ -26,20 +26,6 @@ const NULLABLE_KEYS = [
   'serveCmd',
 ];
 const ARRAY_KEYS = ['include', 'exclude', 'allowedHosts', 'browserArgs', 'ignoreForPreload'];
-const BOOLEAN_KEYS = [
-  'ignoreHTTPSErrors',
-  'captureRuntimeStyles',
-  'captureFormState',
-  'failOnRerender',
-  'preconnectThirdParty',
-  'preloadImages',
-  'preloadManifest',
-  'cacheAjaxRequests',
-  'removeBlobs',
-  'removeStyleTags',
-  'removeScriptTags',
-  'asyncScriptTags',
-];
 
 export const DEFAULTS = Object.freeze({
   sourceDir: 'dist',
@@ -58,7 +44,7 @@ export const DEFAULTS = Object.freeze({
   readyFlag: '__prerenderReady',
   readySelector: null,
   waitFor: null,
-  viewport: { width: 1280, height: 720 },
+  viewport: Object.freeze({ width: 1280, height: 720 }),
   storageState: null,
   userAgent: 'SnappyPrerender',
   browser: 'auto',
@@ -86,11 +72,13 @@ export const DEFAULTS = Object.freeze({
   preloadManifest: false,
   ignoreForPreload: ['service-worker.js'],
   cacheAjaxRequests: false,
+  maxCachedBytes: 5 * 1024 * 1024,
   flatOutput: false,
   notFoundRoute: '/404',
   verify: true,
   failOnHydrationError: false,
   failOnRerender: false,
+  failOnPageError: false,
   metadata: null,
   failOnError: true,
   dryRun: false,
@@ -98,8 +86,17 @@ export const DEFAULTS = Object.freeze({
   url: null,
   serveCmd: null,
   serveCmdTimeout: 30000,
-  includeProvided: false,
 });
+
+// Options whose default is boolean but which accept other shapes, so their own validators
+// below decide what is allowed.
+const MULTI_TYPE_KEYS = new Set(['inlineCss', 'minifyHtml', 'minifyCss']);
+
+// Every boolean option is validated, derived from the defaults so a new flag cannot be
+// forgotten in a hand-maintained list.
+const BOOLEAN_KEYS = Object.entries(DEFAULTS)
+  .filter(([key, value]) => typeof value === 'boolean' && !MULTI_TYPE_KEYS.has(key))
+  .map(([key]) => key);
 
 /**
  * Merges user options over defaults and normalises the values the rest of the
@@ -115,6 +112,7 @@ export function resolveConfig(userOptions = {}) {
     userOptions.concurrency ??
     Math.max(1, Math.min(os.availableParallelism(), MAX_DEFAULT_CONCURRENCY));
   config.includeProvided = userOptions.include !== undefined;
+  config.warnings = [];
   validateConfig(config);
   return config;
 }
@@ -208,6 +206,9 @@ export function validateConfig(config) {
   if (config.maxRoutes !== null && (!Number.isInteger(config.maxRoutes) || config.maxRoutes < 1)) {
     throw new TypeError('maxRoutes must be null or a positive integer');
   }
+  if (!Number.isFinite(config.maxCachedBytes) || config.maxCachedBytes <= 0) {
+    throw new TypeError('maxCachedBytes must be a positive number of bytes');
+  }
   for (const key of ['width', 'height']) {
     if (!Number.isInteger(config.viewport[key]) || config.viewport[key] < 1) {
       throw new TypeError(`viewport.${key} must be a positive integer`);
@@ -247,20 +248,33 @@ export function validateConfig(config) {
   if (!SAVE_AS_CHOICES.includes(config.saveAs)) {
     throw new TypeError(`saveAs must be one of: ${SAVE_AS_CHOICES.join(', ')}`);
   }
-  validateMetadata(config.metadata);
+  validateMetadata(config);
 }
+
+// The metadata keys the head component reads, so a typo is reported instead of ignored.
+const METADATA_KEYS = new Set([
+  'siteUrl',
+  'siteName',
+  'titleTemplate',
+  'defaultImage',
+  'trailingSlash',
+  'base',
+]);
 
 /**
  * Validates the defaults handed to the head component, so a typo surfaces at config time
  * rather than as metadata that silently points at the build server.
  */
-function validateMetadata(metadata) {
+function validateMetadata(config) {
+  const metadata = config.metadata;
   if (metadata === null) return;
   if (typeof metadata !== 'object' || Array.isArray(metadata)) {
     throw new TypeError('metadata must be null or an options object');
   }
-  const strings = ['siteUrl', 'siteName', 'titleTemplate', 'defaultImage', 'trailingSlash'];
-  for (const key of strings) {
+  for (const key of Object.keys(metadata)) {
+    if (!METADATA_KEYS.has(key)) throw new TypeError(`metadata.${key} is not a recognised option`);
+  }
+  for (const key of METADATA_KEYS) {
     const value = metadata[key];
     if (value !== undefined && value !== null && typeof value !== 'string') {
       throw new TypeError(`metadata.${key} must be a string`);
@@ -269,7 +283,16 @@ function validateMetadata(metadata) {
   if (metadata.siteUrl && !/^https?:\/\//.test(metadata.siteUrl)) {
     throw new TypeError('metadata.siteUrl must be an absolute http(s) URL');
   }
+  if (metadata.base && !metadata.base.startsWith('/')) {
+    throw new TypeError('metadata.base must start with a slash, for example /app/');
+  }
   if (metadata.trailingSlash && !['preserve', 'always', 'never'].includes(metadata.trailingSlash)) {
     throw new TypeError("metadata.trailingSlash must be 'preserve', 'always' or 'never'");
+  }
+  if (metadata.titleTemplate && !metadata.titleTemplate.includes('%s')) {
+    config.warnings ??= [];
+    config.warnings.push(
+      'metadata.titleTemplate has no %s placeholder, so the title is left as the page set it',
+    );
   }
 }

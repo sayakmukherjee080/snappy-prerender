@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { registerHead, unregisterHead } from './manager.js';
 import { buildHeadEntries } from './tags.js';
+
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 let sequence = 0;
 
@@ -26,7 +28,9 @@ export function Head(props) {
 
   const entries = buildHeadEntries(props, readDefaults());
 
-  useEffect(() => {
+  // A layout effect so a route change updates the head before the browser paints, and a
+  // plain effect on the server, where layout effects never run.
+  useIsomorphicLayoutEffect(() => {
     registerHead(idRef.current, sequenceRef.current, entries);
   });
 

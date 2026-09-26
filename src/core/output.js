@@ -58,6 +58,15 @@ export async function writeRouteHtml({ dir, route, html, config }) {
   if (existing === html) return { route, file, status: 'unchanged', bytes };
 
   await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.writeFile(target, html, 'utf8');
+  // Written through a temporary file and renamed, so an interrupted run cannot leave a
+  // half-written page behind for a host to serve.
+  const temporary = `${target}.snappy-tmp`;
+  try {
+    await fs.writeFile(temporary, html, 'utf8');
+    await fs.rename(temporary, target);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
   return { route, file, status: 'written', bytes };
 }

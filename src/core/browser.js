@@ -99,7 +99,7 @@ async function downloadChrome(config, log) {
     cacheDir,
     expectedHash: config.browserDownloadHash ?? undefined,
     downloadProgressCallback: (downloaded, total) =>
-      log.debug(`  downloaded ${Math.round((downloaded / total) * 100)}%`),
+      log.debug(`  downloaded ${total > 0 ? Math.round((downloaded / total) * 100) : 0}%`),
   });
   if (!fs.existsSync(installed.executablePath)) {
     throw new Error(`Chrome download reported success but ${installed.executablePath} is missing`);

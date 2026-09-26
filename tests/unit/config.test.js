@@ -92,6 +92,8 @@ describe('resolveConfig', () => {
     assert.throws(() => resolveConfig({ maxRoutes: 0 }), /maxRoutes/);
     assert.throws(() => resolveConfig({ maxRoutes: -1 }), /maxRoutes/);
     assert.throws(() => resolveConfig({ maxRoutes: 1.5 }), /maxRoutes/);
+    assert.throws(() => resolveConfig({ maxCachedBytes: 0 }), /maxCachedBytes/);
+    assert.throws(() => resolveConfig({ maxCachedBytes: -1 }), /maxCachedBytes/);
     assert.throws(() => resolveConfig({ storageState: 'does-not-exist.json' }), /storageState/);
     assert.throws(() => resolveConfig({ userAgent: 42 }), /userAgent/);
     assert.throws(() => resolveConfig({ destination: 42 }), /destination/);
@@ -139,6 +141,44 @@ describe('resolveConfig', () => {
     assert.equal(resolveConfig({ browserDownloadHash: hash }).browserDownloadHash, hash);
     assert.equal(resolveConfig({ metadata: { siteName: 'PPS' } }).metadata.siteName, 'PPS');
     assert.equal(resolveConfig({ metadata: null }).metadata, null);
+  });
+
+  it('validates metadata keys, base and template', () => {
+    assert.throws(() => resolveConfig({ metadata: { base: 'app' } }), /metadata\.base/);
+    assert.throws(
+      () => resolveConfig({ metadata: { siteURL: 'https://x.example' } }),
+      /metadata\.siteURL/,
+    );
+    assert.equal(resolveConfig({ metadata: { base: '/app/' } }).metadata.base, '/app/');
+
+    const warned = resolveConfig({ metadata: { titleTemplate: 'Example' } });
+    assert.equal(
+      warned.warnings.some((message) => message.includes('titleTemplate')),
+      true,
+    );
+    assert.deepEqual(resolveConfig({}).warnings, []);
+  });
+
+  it('validates every boolean option, not a hand-picked subset', () => {
+    for (const key of [
+      'crawl',
+      'headless',
+      'verify',
+      'failOnHydrationError',
+      'failOnPageError',
+      'failOnRerender',
+      'flatOutput',
+      'dryRun',
+    ]) {
+      assert.throws(() => resolveConfig({ [key]: 'yes' }), new RegExp(key));
+    }
+    assert.equal(resolveConfig({ failOnPageError: true }).failOnPageError, true);
+  });
+
+  it('freezes the nested viewport defaults', () => {
+    assert.throws(() => {
+      DEFAULTS.viewport.width = 1;
+    }, TypeError);
   });
 
   it('normalises explicitly undefined optionals to null', () => {

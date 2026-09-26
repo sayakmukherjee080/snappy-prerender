@@ -37,4 +37,16 @@ describe('buildPreloadManifest', () => {
       [],
     );
   });
+
+  it('prefixes hints and route keys with the base path', () => {
+    const manifest = buildPreloadManifest(
+      [{ route: '/about', scripts: ['/assets/app.js'], styles: ['/assets/app.css'] }],
+      { base: '/app/' },
+    );
+    assert.equal(manifest[0].source, '/app/about');
+    assert.equal(
+      manifest[0].headers[0].value,
+      '</app/assets/app.js>;rel=preload;as=script,</app/assets/app.css>;rel=preload;as=style',
+    );
+  });
 });

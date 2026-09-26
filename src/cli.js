@@ -29,7 +29,9 @@ Options:
       --no-verify             Skip the hydration verification pass
       --fail-on-hydration-error  Fail the build when hydration errors are found
       --fail-on-rerender      Fail when a route re-renders instead of hydrating
-      --no-block-third-party  Allow third-party requests during rendering
+      --fail-on-page-error    Fail when a page throws while it is being rendered
+      --block-third-party     Block third-party requests while rendering
+      --no-block-third-party  Allow third-party requests (the default)
       --allowed-hosts <hosts>  Third-party hosts to allow while blocking the rest, comma separated
       --no-freeze-animations  Do not neutralise CSS animations before capture
       --no-capture-runtime-styles  Do not fold CSSOM-only styles into the output
@@ -40,6 +42,11 @@ Options:
       --destination <dir>     Write output to another directory (default: in place)
       --save-as <format>      html | png | jpeg (default: html)
       --user-agent <value>    User agent used while rendering (default: SnappyPrerender)
+      --metadata-site-url <url>       Public site URL for canonical and og:url
+      --metadata-site-name <name>     Site name used for og:site_name
+      --metadata-title-template <t>   Title template, for example '%s | Example'
+      --metadata-default-image <url>  Share image for routes without one
+      --metadata-trailing-slash <mode>  preserve | always | never
       --inline-css <strategy> inline | critical (critical needs the beasties package)
       --minify-html           Minify the generated HTML
       --minify-css            Minify CSS inlined into the HTML
@@ -88,7 +95,9 @@ async function main() {
       'no-verify': { type: 'boolean' },
       'fail-on-hydration-error': { type: 'boolean' },
       'fail-on-rerender': { type: 'boolean' },
+      'fail-on-page-error': { type: 'boolean' },
       'no-block-third-party': { type: 'boolean' },
+      'block-third-party': { type: 'boolean' },
       'allowed-hosts': { type: 'string', multiple: true },
       'no-freeze-animations': { type: 'boolean' },
       'no-capture-runtime-styles': { type: 'boolean' },
@@ -99,6 +108,11 @@ async function main() {
       destination: { type: 'string' },
       'save-as': { type: 'string' },
       'user-agent': { type: 'string' },
+      'metadata-site-url': { type: 'string' },
+      'metadata-site-name': { type: 'string' },
+      'metadata-title-template': { type: 'string' },
+      'metadata-default-image': { type: 'string' },
+      'metadata-trailing-slash': { type: 'string' },
       'inline-css': { type: 'string' },
       'minify-html': { type: 'boolean' },
       'minify-css': { type: 'boolean' },
@@ -134,7 +148,10 @@ async function main() {
   }
 
   const fileConfig = await loadConfigFile(parsed.values.config);
-  const options = { ...fileConfig, ...cliOptions(parsed) };
+  const cli = cliOptions(parsed);
+  const options = { ...fileConfig, ...cli };
+  // Metadata flags are partial: they refine a config file value instead of replacing it.
+  if (cli.metadata) options.metadata = { ...(fileConfig.metadata ?? {}), ...cli.metadata };
   if (!options.sourceDir) options.sourceDir = 'dist';
 
   const log = createLogger(options.logLevel ?? 'info');
@@ -168,7 +185,9 @@ function cliOptions({ values, positionals }) {
   if (values['no-verify']) options.verify = false;
   if (values['fail-on-hydration-error']) options.failOnHydrationError = true;
   if (values['fail-on-rerender']) options.failOnRerender = true;
+  if (values['fail-on-page-error']) options.failOnPageError = true;
   if (values['no-block-third-party']) options.blockThirdParty = false;
+  if (values['block-third-party']) options.blockThirdParty = true;
   if (values['allowed-hosts'] !== undefined)
     options.allowedHosts = splitList(values['allowed-hosts']);
   if (values['no-freeze-animations']) options.freezeAnimations = false;
@@ -180,6 +199,8 @@ function cliOptions({ values, positionals }) {
   if (values.destination !== undefined) options.destination = values.destination;
   if (values['save-as'] !== undefined) options.saveAs = values['save-as'];
   if (values['user-agent'] !== undefined) options.userAgent = values['user-agent'];
+  const metadata = metadataOptions(values);
+  if (metadata) options.metadata = metadata;
   if (values['inline-css'] !== undefined) options.inlineCss = values['inline-css'];
   if (values['minify-html']) options.minifyHtml = true;
   if (values['minify-css']) options.minifyCss = true;
@@ -206,6 +227,25 @@ function cliOptions({ values, positionals }) {
 // Splits comma separated flag values and drops empty entries.
 function splitList(entries) {
   return entries.flatMap((entry) => entry.split(',')).filter((entry) => entry.length > 0);
+}
+
+// Collects the metadata flags, or null when none was passed so a config file value survives.
+function metadataOptions(values) {
+  const metadata = {};
+  if (values['metadata-site-url'] !== undefined) metadata.siteUrl = values['metadata-site-url'];
+  if (values['metadata-site-name'] !== undefined) {
+    metadata.siteName = values['metadata-site-name'];
+  }
+  if (values['metadata-title-template'] !== undefined) {
+    metadata.titleTemplate = values['metadata-title-template'];
+  }
+  if (values['metadata-default-image'] !== undefined) {
+    metadata.defaultImage = values['metadata-default-image'];
+  }
+  if (values['metadata-trailing-slash'] !== undefined) {
+    metadata.trailingSlash = values['metadata-trailing-slash'];
+  }
+  return Object.keys(metadata).length > 0 ? metadata : null;
 }
 
 /**

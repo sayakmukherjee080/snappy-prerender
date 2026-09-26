@@ -37,6 +37,7 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
   });
   const page = await context.newPage();
   const pageErrors = [];
+  let inlineCssSkipped = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   const metadataDefaults = config.metadata ? { base: config.base, ...config.metadata } : null;
@@ -52,6 +53,7 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
     allowedHosts: config.allowedHosts,
     blockThirdParty: config.blockThirdParty,
     collectJson: config.cacheAjaxRequests,
+    maxCachedBytes: config.maxCachedBytes,
   });
   await collector.install(page);
   const tracker = trackNetwork(page);
@@ -65,7 +67,8 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
     if (config.captureRuntimeStyles) await captureRuntimeStyles(page);
     if (config.captureFormState) await captureFormState(page);
     if (config.inlineCss === true || config.inlineCss === 'inline') {
-      await inlineStylesheets({ page, minifyCssOptions: config.minifyCss });
+      const inlined = await inlineStylesheets({ page, minifyCssOptions: config.minifyCss });
+      inlineCssSkipped = inlined.skipped;
     }
     await collector.settled();
     await injectCapturedState(page, collector.json);
@@ -79,11 +82,11 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
     if (screenshotPath) {
       await fs.mkdir(path.dirname(screenshotPath), { recursive: true });
       await page.screenshot({ path: screenshotPath, fullPage: true });
-      return { route, links, pageErrors, collector, screenshot: true };
+      return { route, links, pageErrors, collector, inlineCssSkipped, screenshot: true };
     }
 
     const html = await page.content();
-    return { route, html, links, pageErrors, collector };
+    return { route, html, links, pageErrors, collector, inlineCssSkipped };
   } finally {
     tracker.stop();
     await context.close();
@@ -121,9 +124,13 @@ async function injectCapturedState(page, cache) {
         parts.push(`window[${escapeJson(key)}]=${escapeJson(value)};`);
       }
     }
+    // Replacing an earlier injection keeps a rerun against already prerendered output
+    // byte-identical instead of stacking a second copy of the state script.
+    document.querySelectorAll('script[data-snappy-state]').forEach((script) => script.remove());
     if (parts.length === 0) return;
 
     const script = document.createElement('script');
+    script.setAttribute('data-snappy-state', '');
     script.textContent = parts.join('');
     const first = document.scripts[0];
     if (first?.parentNode) first.parentNode.insertBefore(script, first);
@@ -133,13 +140,24 @@ async function injectCapturedState(page, cache) {
 
 /**
  * Persists the metadata defaults into the document itself, so the head component reads the
- * public site URL on the client too, not only while prerendering. Placed before the app
- * bundle runs, exactly like the captured state.
+ * public site URL on the client too, not only while prerendering. Anything the head layer
+ * recorded about the tags it overwrote is merged in, and an earlier injection from a previous
+ * run is replaced so repeated runs stay identical. Placed before the app bundle runs, exactly
+ * like the captured state.
  */
 async function injectMetadataDefaults(page, defaults) {
-  const script = `window.__SNAPPY_META__ = ${escapeForScript(defaults)};`;
+  const payload = await page.evaluate((fallback) => {
+    document.querySelectorAll('script[data-snappy-meta]').forEach((script) => script.remove());
+    const current = typeof window === 'undefined' ? null : window.__SNAPPY_META__;
+    const recorded = typeof window === 'undefined' ? null : window.__snappyHeadOriginals;
+    const merged = { ...(current ?? fallback) };
+    if (recorded) merged.originals = recorded;
+    return Object.keys(merged).length > 0 ? merged : fallback;
+  }, defaults);
+  const script = `window.__SNAPPY_META__ = ${escapeForScript(payload)};`;
   await page.evaluate((text) => {
     const element = document.createElement('script');
+    element.setAttribute('data-snappy-meta', '');
     element.textContent = text;
     const first = document.scripts[0];
     if (first?.parentNode) first.parentNode.insertBefore(element, first);

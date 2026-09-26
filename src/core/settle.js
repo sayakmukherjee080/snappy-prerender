@@ -60,7 +60,9 @@ export function trackNetwork(page) {
  * quiescence check below is the only signal.
  */
 export async function waitForReady(page, config) {
-  await page.waitForLoadState('load', { timeout: config.timeout });
+  // Best-effort: one slow third-party asset should not cost a route its whole timeout, since
+  // the quiet-network check in settlePage is the real gate.
+  await page.waitForLoadState('load', { timeout: config.timeout }).catch(() => {});
 
   if (config.waitFor) {
     await page.waitForSelector(config.waitFor, { timeout: config.timeout });

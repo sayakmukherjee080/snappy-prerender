@@ -1,6 +1,19 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
+import { Head } from '../../../../src/head/index.js';
 
 const LazyContent = lazy(() => Promise.resolve({ default: () => <p>Lazy content</p> }));
+
+// Throws once the page has rendered, so a build can exercise the page-error path without
+// losing the markup. Enabled per route rather than conditionally called, for hooks rules.
+function useDeliberatePageError(enabled) {
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const timer = setTimeout(() => {
+      throw new Error('deliberate page error');
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [enabled]);
+}
 
 function currentPath() {
   const path = window.location.pathname.replace(/\/$/, '');
@@ -9,6 +22,36 @@ function currentPath() {
 
 export default function App() {
   const path = currentPath();
+  useDeliberatePageError(path === '/page-error');
+
+  if (path === '/head') {
+    return (
+      <main>
+        <Head title="Nineteen head" description="Nine description" image="/share-19.png" />
+        <h1>Nineteen head</h1>
+        <a href="/">Home</a>
+      </main>
+    );
+  }
+
+  if (path === '/native-title') {
+    return (
+      <main>
+        <title>Native title</title>
+        <h1>Native title</h1>
+        <a href="/">Home</a>
+      </main>
+    );
+  }
+
+  if (path === '/page-error') {
+    return (
+      <main>
+        <h1>Page error</h1>
+        <a href="/">Home</a>
+      </main>
+    );
+  }
 
   if (path === '/about') {
     return (
@@ -65,6 +108,9 @@ export default function App() {
       <a href="/adjacent-text">Adjacent</a>
       <a href="/inline-style">Styled</a>
       <a href="/suspense">Suspense</a>
+      <a href="/head">Head</a>
+      <a href="/native-title">Native title</a>
+      <a href="/page-error">Page error</a>
     </main>
   );
 }

@@ -58,6 +58,9 @@ export default function App() {
       <main>
         <Head title="Head B" description="Page B description" image="/share-b.png" type="article" />
         <h1>Head B</h1>
+        <button type="button" onClick={() => navigate('/about')}>
+          Go to About
+        </button>
       </main>
     );
   } else {
@@ -73,8 +76,9 @@ export default function App() {
 
   return (
     <>
-      {/* Layout metadata applies to every route; a page's own Head overrides what it sets. */}
-      <Head title="Snappy Fixture" description="Layout default" robots="index,follow" />
+      {/* Layout metadata applies to every route; a page's own Head overrides what it sets.
+          The template's description is the fallback that must reappear once no page sets one. */}
+      <Head title="Snappy Fixture" robots="index,follow" />
       {page}
     </>
   );

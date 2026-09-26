@@ -95,15 +95,17 @@ async function verifyRoute({ browser, origin, route, config }) {
   });
   const page = await context.newPage();
   const hydrationErrors = [];
-  const otherErrors = [];
-  const collect = (message) => {
+  const consoleErrors = [];
+  const pageErrors = [];
+  // Hydration messages arrive through either channel, so both are classified the same way.
+  const collect = (message, target) => {
     if (isHydrationError(message)) hydrationErrors.push(message);
-    else otherErrors.push(message);
+    else target.push(message);
   };
   page.on('console', (message) => {
-    if (message.type() === 'error') collect(message.text());
+    if (message.type() === 'error') collect(message.text(), consoleErrors);
   });
-  page.on('pageerror', (error) => collect(error.message));
+  page.on('pageerror', (error) => collect(error.message, pageErrors));
 
   const tracker = trackNetwork(page);
   try {
@@ -133,7 +135,8 @@ async function verifyRoute({ browser, origin, route, config }) {
     return {
       route,
       hydrationErrors,
-      otherErrors,
+      consoleErrors,
+      pageErrors,
       ok: hydrationErrors.length === 0,
       mode: classifyBoot(boot),
       markupPreserved: boot.markupPreserved,

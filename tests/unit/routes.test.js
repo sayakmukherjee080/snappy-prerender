@@ -146,3 +146,13 @@ describe('withinDepth', () => {
     assert.equal(withinDepth(2, 1), false);
   });
 });
+
+describe('matchesPattern', () => {
+  it('keeps a global RegExp consistent across repeated matches', () => {
+    const pattern = /^\/blog/g;
+    assert.equal(matchesPattern('/blog/post', pattern), true);
+    assert.equal(matchesPattern('/blog/post', pattern), true);
+    assert.equal(matchesPattern('/blog/post', pattern), true);
+    assert.equal(matchesPattern('/about', pattern), false);
+  });
+});

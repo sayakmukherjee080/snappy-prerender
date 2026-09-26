@@ -120,4 +120,42 @@ describe('normaliseHtml post-processing', () => {
     assert.match(html, /<link rel="preload" as="image" href="\/app\/hero\.png">/);
     assert.equal(stats.hints, 1);
   });
+
+  it('collects build server origins from metadata tags only', () => {
+    const page = [
+      '<!DOCTYPE html><html><head>',
+      '<meta property="og:url" content="http://127.0.0.1:5500/a">',
+      '<link rel="canonical" href="http://localhost:5500/a">',
+      '<script>window.snapStore={"u":"http://localhost:9999/api"};</script>',
+      '</head><body></body></html>',
+    ].join('');
+    const { stats } = normaliseHtml(page);
+    assert.deepEqual(stats.metadataOrigins, ['http://127.0.0.1:5500', 'http://localhost:5500']);
+  });
+
+  it('reports nothing for metadata that points at a public site', () => {
+    const page =
+      '<!DOCTYPE html><html><head><link rel="canonical" href="https://pps.example/a"></head><body></body></html>';
+    assert.deepEqual(normaliseHtml(page).stats.metadataOrigins, []);
+  });
+
+  it('counts title elements so duplicate titles can be reported', () => {
+    const page =
+      '<!DOCTYPE html><html><head><title>One</title><title>Two</title></head><body></body></html>';
+    assert.equal(normaliseHtml(page).stats.titleElements, 2);
+    assert.equal(normaliseHtml(PAGE).stats.titleElements, 0);
+  });
+
+  it('keeps the metadata script even when every other script is removed', () => {
+    const page = [
+      '<!DOCTYPE html><html><head>',
+      '<script data-snappy-meta>window.__SNAPPY_META__={"siteUrl":"https://pps.example"};</script>',
+      '</head><body><script src="/app.js"></script></body></html>',
+    ].join('');
+    const { html, stats } = normaliseHtml(page, { removeScriptTags: true });
+    assert.equal(html.includes('data-snappy-meta'), true);
+    assert.equal(html.includes('__SNAPPY_META__'), true);
+    assert.equal(html.includes('/app.js'), false);
+    assert.equal(stats.removedElements, 1);
+  });
 });

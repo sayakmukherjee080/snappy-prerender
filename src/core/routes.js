@@ -28,7 +28,13 @@ export function normaliseRoute(input) {
  * strings ending in `*` match by prefix, and RegExp patterns are tested directly.
  */
 export function matchesPattern(route, pattern) {
-  if (pattern instanceof RegExp) return pattern.test(route);
+  // A global or sticky RegExp keeps lastIndex between calls, so it is reset around each test.
+  if (pattern instanceof RegExp) {
+    pattern.lastIndex = 0;
+    const matched = pattern.test(route);
+    pattern.lastIndex = 0;
+    return matched;
+  }
   if (pattern.endsWith('*')) return route.startsWith(pattern.slice(0, -1));
   return route === pattern;
 }

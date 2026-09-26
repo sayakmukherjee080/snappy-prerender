@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
@@ -62,6 +62,25 @@ async function exists(target) {
 }
 
 /**
+ * Runs the CLI as a child process without blocking this process's event loop, so a server
+ * started by a test can still answer the child's requests.
+ */
+function runCli(args) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [cliPath, ...args], { cwd: repoRoot });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.once('exit', (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
+/**
  * Starts a throwaway HTTP server on its own origin, counting every request so tests
  * can prove third-party traffic was blocked or allowed. The host is configurable so a
  * test can compare two origins that differ by host name rather than by port.
@@ -94,9 +113,15 @@ describe('prerender integration: react 19 app', () => {
   let sourceDir;
   let report;
 
+  const metadata = {
+    siteUrl: 'https://pps.example',
+    siteName: 'PPS',
+    titleTemplate: '%s | PPS',
+  };
+
   before(async () => {
     sourceDir = await buildFixture('react19-app');
-    report = await prerender({ sourceDir, logLevel: 'silent' });
+    report = await prerender({ sourceDir, logLevel: 'silent', metadata });
   });
 
   it('crawls same-origin links from the root route', () => {
@@ -104,8 +129,11 @@ describe('prerender integration: react 19 app', () => {
       '/',
       '/about',
       '/adjacent-text',
+      '/head',
       '/inline-style',
       '/mismatch',
+      '/native-title',
+      '/page-error',
       '/suspense',
     ]);
   });
@@ -135,7 +163,12 @@ describe('prerender integration: react 19 app', () => {
   });
 
   it('fails the run on hydration errors when enforcement is requested', async () => {
-    const enforced = await prerender({ sourceDir, logLevel: 'silent', failOnHydrationError: true });
+    const enforced = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      metadata,
+      failOnHydrationError: true,
+    });
     assert.equal(enforced.verification.ok, false);
     assert.equal(enforced.ok, false);
   });
@@ -161,13 +194,37 @@ describe('prerender integration: react 19 app', () => {
   });
 
   it('leaves deterministic output untouched on a second run', async () => {
-    const second = await prerender({ sourceDir, logLevel: 'silent' });
+    const second = await prerender({ sourceDir, logLevel: 'silent', metadata });
     const stable = second.files.filter((file) => file.route !== '/mismatch');
     assert.equal(stable.length > 0, true);
     assert.equal(
       stable.every((file) => file.status === 'unchanged'),
       true,
     );
+  });
+
+  it('reconciles duplicate template metadata and writes head tags from the head layer', async () => {
+    const head = await fs.readFile(path.join(sourceDir, 'head', 'index.html'), 'utf8');
+    assert.match(head, /<title[^>]*>Nineteen head \| PPS<\/title>/);
+    assert.equal((head.match(/<title/g) ?? []).length, 1);
+    // The fixture template ships two descriptions; the head layer keeps the page's one.
+    assert.equal((head.match(/name="description"/g) ?? []).length, 1);
+    assert.match(head, /<meta[^>]*name="description"[^>]*content="Nine description"/);
+    assert.match(
+      head,
+      /<meta[^>]*property="og:image"[^>]*content="https:\/\/pps\.example\/share-19\.png"/,
+    );
+
+    const verified = report.verification.routes.find((entry) => entry.route === '/head');
+    assert.equal(verified.ok, true);
+    assert.equal(verified.mode, 'hydrated');
+  });
+
+  it('records a crashing route as a page error without failing the run', () => {
+    const entry = report.pageErrors.find((error) => error.route === '/page-error');
+    assert.equal(entry !== undefined, true);
+    assert.match(entry.message, /deliberate page error/);
+    assert.equal(report.ok, true);
   });
 });
 
@@ -227,8 +284,8 @@ describe('prerender integration: react 18 app', () => {
     assert.match(page, /<meta[^>]*name="twitter:card"[^>]*content="summary_large_image"/);
     assert.match(page, /<link[^>]*rel="canonical"[^>]*href="https:\/\/pps\.example\/head-a"/);
     assert.match(page, /<meta[^>]*name="robots"[^>]*content="index,follow"/);
-    // The page's Head and the layout's both set a description; the page's value wins and
-    // never leaves two tags behind.
+    // The page's Head and the template both provide a description; the page's value wins
+    // and never leaves two tags behind.
     assert.equal((page.match(/name="description"/g) ?? []).length, 1);
     assert.match(page, /<meta[^>]*name="description"[^>]*content="Page A description"/);
     // The defaults are persisted for the client as well as used while rendering.
@@ -286,6 +343,26 @@ describe('prerender integration: react 18 app', () => {
         await page.locator('link[rel="canonical"]').getAttribute('href'),
         'https://pps.example/head-b',
       );
+
+      await page.getByRole('button', { name: 'Go to About' }).click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector('meta[name="description"]')?.getAttribute('content') ===
+          'Template description',
+      );
+
+      // The template's own description comes back once no Head wants one, and the page's
+      // share image falls back to the site default.
+      assert.equal(await page.locator('meta[name="description"]').count(), 1);
+      assert.equal(
+        await page.locator('meta[name="description"]').getAttribute('content'),
+        'Template description',
+      );
+      assert.equal(
+        await page.locator('meta[property="og:image"]').getAttribute('content'),
+        'https://pps.example/share.png',
+      );
+      assert.equal(await page.title(), 'Snappy Fixture | PPS');
     } finally {
       await context.close();
       await browser.close();
@@ -592,15 +669,96 @@ describe('prerender integration: failure handling', () => {
     );
   });
 
-  it('records uncaught page errors in the report', async () => {
+  it('records uncaught page errors and reports them without enforcing by default', async () => {
     const sourceDir = await makeStaticSite({
       'index.html':
         '<!doctype html><html><head><title>Boom</title></head><body><script>throw new Error("fixture boom")</script></body></html>',
     });
-    const report = await prerender({ sourceDir, logLevel: 'silent', verify: false });
+    const messages = [];
+    const log = {
+      level: 'info',
+      debug: () => {},
+      info: (message) => messages.push(message),
+      warn: (message) => messages.push(message),
+      error: (message) => messages.push(message),
+      success: (message) => messages.push(message),
+    };
+
+    const report = await prerender({ sourceDir, logLevel: 'silent', verify: false }, { log });
     assert.equal(report.pageErrors.length, 1);
     assert.equal(report.pageErrors[0].route, '/');
     assert.match(report.pageErrors[0].message, /fixture boom/);
+    assert.equal(report.ok, true);
+    assert.equal(
+      messages.some((message) => message.includes('1 page error(s)')),
+      true,
+    );
+    assert.equal(
+      messages.some((message) => message.includes('Set failOnPageError to fail the build')),
+      true,
+    );
+
+    const enforced = await prerender(
+      { sourceDir, logLevel: 'silent', verify: false, failOnPageError: true },
+      { log },
+    );
+    assert.equal(enforced.ok, false);
+  });
+
+  it('warns when the output carries more than one title element', async () => {
+    const messages = [];
+    const log = {
+      level: 'info',
+      debug: () => {},
+      info: (message) => messages.push(message),
+      warn: (message) => messages.push(message),
+      error: (message) => messages.push(message),
+      success: (message) => messages.push(message),
+    };
+
+    const sourceDir = await buildFixture('react19-app');
+    const report = await prerender({ sourceDir, logLevel: 'silent', verify: false }, { log });
+
+    assert.equal(report.duplicateTitles.includes('/native-title'), true);
+    assert.equal(report.duplicateTitles.includes('/about'), false);
+    assert.equal(
+      messages.some((message) => message.includes('more than one <title> element')),
+      true,
+    );
+  });
+
+  it('renders a page whose load event is slowed by one asset', async () => {
+    const slow = http.createServer((_request, response) => {
+      setTimeout(() => {
+        response.setHeader('content-type', 'image/png');
+        response.end('png');
+      }, 2000);
+    });
+    await new Promise((resolve) => slow.listen(0, '127.0.0.1', resolve));
+    const port = slow.address().port;
+
+    try {
+      const sourceDir = await makeStaticSite({
+        'index.html': [
+          '<!doctype html><html><head><title>Home page</title></head><body><h1>Home page</h1>',
+          `<img src="http://127.0.0.1:${port}/slow.png">`,
+          '</body></html>',
+        ].join(''),
+      });
+      // The timeout is shorter than the asset, so a strict load wait would fail the route.
+      const report = await prerender({
+        sourceDir,
+        logLevel: 'silent',
+        verify: false,
+        timeout: 1500,
+        quietPeriod: 300,
+      });
+      assert.equal(report.errors.length, 0);
+      assert.equal(report.routes.includes('/'), true);
+    } finally {
+      slow.closeAllConnections();
+      await new Promise((resolve) => slow.close(resolve));
+    }
   });
 });
 
@@ -795,6 +953,107 @@ describe('prerender integration: capture and optimisation options', () => {
     assert.equal(html.includes('<script'), false);
     assert.equal(html.includes('<style'), false);
   });
+
+  it('keeps the metadata script when script tags are stripped', async () => {
+    const sourceDir = await buildFixture('react18-app');
+    const report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      include: ['/head-a'],
+      removeScriptTags: true,
+      metadata: {
+        siteUrl: 'https://pps.example',
+        siteName: 'PPS',
+        titleTemplate: '%s | PPS',
+      },
+    });
+
+    assert.equal(report.errors.length, 0);
+    const html = await fs.readFile(path.join(sourceDir, 'head-a', 'index.html'), 'utf8');
+    assert.match(html, /<script data-snappy-meta[^>]*>/);
+    assert.match(html, /window\.__SNAPPY_META__/);
+    // The app bundle is gone as asked, and the stale script from a previous run with it.
+    assert.equal(html.includes('/assets/index-'), false);
+    assert.equal((html.match(/data-snappy-meta/g) ?? []).length, 1);
+  });
+
+  it('keeps head metadata intact through minification and async scripts', async () => {
+    const sourceDir = await buildFixture('react18-app');
+    const report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      include: ['/head-a'],
+      minifyHtml: true,
+      asyncScriptTags: true,
+      metadata: { siteUrl: 'https://pps.example', siteName: 'PPS', titleTemplate: '%s | PPS' },
+    });
+
+    assert.equal(report.errors.length, 0);
+    const html = await fs.readFile(path.join(sourceDir, 'head-a', 'index.html'), 'utf8');
+    assert.match(html, /window\.__SNAPPY_META__/);
+    // Attribute sorting means the property and content order is not fixed.
+    assert.match(
+      html,
+      /<meta(?=[^>]*property="og:url")(?=[^>]*content="https:\/\/pps\.example\/head-a")[^>]*>/,
+    );
+    // The external bundle is marked async; the inline metadata script has no src and is left.
+    assert.match(html, /<script[^>]*async[^>]*src=/);
+  });
+
+  it('writes preload manifest hints under the base path', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html': [
+        '<!doctype html><html><head><title>Home page</title>',
+        '<link rel="stylesheet" href="/app/app.css">',
+        '</head><body><h1>Home page</h1><script src="/app/app.js"></script></body></html>',
+      ].join(''),
+      'app.css': 'h1 { color: red; }',
+      'app.js': 'document.body.dataset.js = "loaded";',
+    });
+
+    const report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      base: '/app/',
+      preloadManifest: true,
+    });
+
+    assert.equal(report.errors.length, 0);
+    const manifest = JSON.parse(
+      await fs.readFile(path.join(sourceDir, 'preload-manifest.json'), 'utf8'),
+    );
+    assert.equal(manifest[0].source, '/app/');
+    assert.match(manifest[0].headers[0].value, /<\/app\/app\.(css|js)>/);
+  });
+
+  it('leaves non-screen stylesheets as links when inlining', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html': [
+        '<!doctype html><html><head><title>Home page</title>',
+        '<link rel="stylesheet" href="/screen.css">',
+        '<link rel="stylesheet" href="/print.css" media="print">',
+        '</head><body><h1>Home page</h1></body></html>',
+      ].join(''),
+      'screen.css': 'h1 { color: red; }',
+      'print.css': 'h1 { color: black; }',
+    });
+
+    const report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      inlineCss: 'inline',
+    });
+
+    assert.equal(report.errors.length, 0);
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.match(html, /h1 \{ color: red; \}/);
+    assert.match(html, /media="print"/);
+    assert.equal(html.includes('color: black'), false);
+  });
 });
 
 describe('prerender integration: css-in-js', () => {
@@ -967,6 +1226,67 @@ describe('prerender integration: cli', () => {
     assert.equal(html.includes('\n  '), false);
   });
 
+  it('blocks third-party requests when the flag is passed', async () => {
+    let hits = 0;
+    const widget = http.createServer((_request, response) => {
+      hits += 1;
+      response.setHeader('content-type', 'application/javascript');
+      response.end('window.widgetRan = true;');
+    });
+    await new Promise((resolve) => widget.listen(0, '127.0.0.1', resolve));
+    const widgetUrl = `http://127.0.0.1:${widget.address().port}/widget.js`;
+
+    try {
+      const sourceDir = await makeStaticSite({
+        'index.html': [
+          '<!doctype html><html><head><title>Home page</title></head><body><h1>Home page</h1>',
+          `<script src="${widgetUrl}"></script>`,
+          '<script>document.body.dataset.widget = String(window.widgetRan === true);</script>',
+          '</body></html>',
+        ].join(''),
+      });
+
+      const blocked = await runCli([sourceDir, '--block-third-party', '--no-verify']);
+      assert.equal(blocked.status, 0, blocked.stderr);
+      assert.equal(hits, 0);
+
+      const allowed = await runCli([sourceDir, '--no-verify']);
+      assert.equal(allowed.status, 0, allowed.stderr);
+      assert.equal(hits, 1);
+      const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+      assert.match(html, /data-widget="true"/);
+    } finally {
+      widget.closeAllConnections();
+      await new Promise((resolve) => widget.close(resolve));
+    }
+  });
+
+  it('applies metadata flags from the command line', async () => {
+    const sourceDir = await buildFixture('react18-app');
+    const cli = spawnSync(
+      process.execPath,
+      [
+        cliPath,
+        sourceDir,
+        '--include',
+        '/head-a',
+        '--no-verify',
+        '--metadata-site-url',
+        'https://cli.example',
+        '--metadata-site-name',
+        'CLI',
+        '--metadata-title-template',
+        '%s | CLI',
+      ],
+      { encoding: 'utf8', cwd: repoRoot },
+    );
+
+    assert.equal(cli.status, 0, cli.stderr);
+    const html = await fs.readFile(path.join(sourceDir, 'head-a', 'index.html'), 'utf8');
+    assert.match(html, /<title[^>]*>Head A \| CLI<\/title>/);
+    assert.match(html, /<meta[^>]*property="og:url"[^>]*content="https:\/\/cli\.example\/head-a"/);
+  });
+
   it('rejects a config file that does not export a plain object', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snappy-config-'));
     tempDirs.push(dir);
@@ -1054,5 +1374,44 @@ describe('prerender integration: serveCmd', () => {
 
     assert.equal(report.errors.length, 0);
     await assert.rejects(fetch(url));
+  });
+
+  it('skips verification and critical CSS with a clear warning', async () => {
+    const messages = [];
+    const log = {
+      level: 'info',
+      debug: () => {},
+      info: (message) => messages.push(message),
+      warn: (message) => messages.push(message),
+      error: (message) => messages.push(message),
+      success: (message) => messages.push(message),
+    };
+    const sourceDir = await makeStaticSite({ 'index.html': page('Home page', []) });
+    const port = 46000 + Math.floor(Math.random() * 2000);
+    const url = `http://127.0.0.1:${port}/`;
+    const fixtureServer = path.join(fixtureRoot, 'static-server.mjs');
+    const quote = (value) => `"${value}"`;
+
+    const report = await prerender(
+      {
+        sourceDir,
+        logLevel: 'silent',
+        inlineCss: 'critical',
+        url,
+        serveCmd: `${quote(process.execPath)} ${quote(fixtureServer)} ${quote(sourceDir)} ${port}`,
+      },
+      { log },
+    );
+
+    // The command server decides which document it serves, so hydration cannot be judged.
+    assert.equal(report.verification, null);
+    assert.equal(
+      messages.some((message) => message.includes('verification is skipped with serveCmd')),
+      true,
+    );
+    assert.equal(
+      messages.some((message) => message.includes("inlineCss: 'critical' is skipped")),
+      true,
+    );
   });
 });

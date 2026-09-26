@@ -1,2 +1,3 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Normalise text files to LF in the repository and in the working tree, so a Windows
+# checkout cannot ship CRLF into the published tarball and break the CLI shebang.
+* text=auto eol=lf
