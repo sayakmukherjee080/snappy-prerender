@@ -6,6 +6,24 @@ const stack = [];
 const snapshots = new WeakMap();
 const createdElements = new WeakSet();
 const originals = readRecordedOriginals();
+publishOriginals();
+
+/**
+ * Reads the metadata defaults the prerenderer persisted: an inert JSON script once the page
+ * carries one, or the init-script global while prerendering, before that element exists.
+ */
+export function readMetadataDefaults() {
+  const element =
+    typeof document === 'undefined' ? null : document.querySelector('script[data-snappy-meta]');
+  if (element) {
+    try {
+      return JSON.parse(element.textContent) ?? {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof window === 'undefined' ? {} : (window.__SNAPPY_META__ ?? {});
+}
 
 /**
  * Registers one mounted Head's tag list and reconciles the document head with the merged
@@ -145,12 +163,19 @@ function snapshotTag(element, key) {
   // output reproduces the same bytes instead of recording its own output as the original.
   if (key in originals) return;
   originals[key] = snapshot;
+  publishOriginals();
+}
+
+// Mirrors the recorded originals into a global the prerenderer picks up, so the generated HTML
+// can carry them and a later page load can hand the app's own tags back. Published once at
+// module load as well, because a rerun must not lose records it did not add itself.
+function publishOriginals() {
   if (typeof window !== 'undefined') window.__snappyHeadOriginals = originals;
 }
 
 // Reads the originals an earlier prerender baked into the page.
 function readRecordedOriginals() {
-  const recorded = typeof window === 'undefined' ? null : window.__SNAPPY_META__?.originals;
+  const recorded = readMetadataDefaults().originals;
   return recorded && typeof recorded === 'object' ? { ...recorded } : {};
 }
 
@@ -175,8 +200,7 @@ function releaseTag(element, key) {
 
 // Reads the original attributes a previous prerender recorded for a key.
 function readRecordedOriginal(key) {
-  const defaults = typeof window === 'undefined' ? null : window.__SNAPPY_META__;
-  return (defaults?.originals ?? null)?.[key] ?? null;
+  return key in originals ? originals[key] : null;
 }
 
 // Replaces every attribute and the text of a tag with a recorded snapshot.

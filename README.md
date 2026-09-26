@@ -33,6 +33,21 @@ export default defineConfig({
 
 `vite build` now prerenders the output directory. Rendering failures fail the build; hydration is reported unless you opt into enforcement.
 
+### Init wizard
+
+```sh
+npm install --save-dev snappy-prerender
+npx snappy-prerender init
+```
+
+A few questions — build directory, base path, routes, site URL, site name, title template — then it writes `snappy.config.js` with only the options you set, and prints install, run and head-layer next steps. It reads your project first, so a Vite app is offered `dist`, a Create React App `build`, and the commands match your package runner.
+
+```sh
+npx snappy-prerender init --yes        # accept every default, for a shell without a terminal
+npx snappy-prerender init --force      # replace an existing snappy.config.js
+npx snappy-prerender init --metadata-site-url https://example.com   # flags answer the questions
+```
+
 ### CLI
 
 For any static output directory, Vite or not:
@@ -45,6 +60,7 @@ npx snappy-prerender dist --include /,/pricing,/blog/* --exclude /blog/drafts/*
 npx snappy-prerender dist --block-third-party --allowed-hosts cms.example.com
 npx snappy-prerender dist --metadata-site-url https://example.com --metadata-title-template '%s | Example'
 npx snappy-prerender dist --inline-css critical --minify-html --preload-manifest
+npx snappy-prerender dist --csp strict --inline-css critical
 ```
 
 ### Programmatic
@@ -79,6 +95,7 @@ If you are moving over, the [differences and migration table](#differences-from-
 | **Output optimisation** | Critical CSS, HTML/CSS minification, preconnect hints, image preload, a preload manifest, script and style surgery. |
 | **CSS-in-JS support** | CSSOM-only styles (emotion, styled-components in speedy mode) and constructable stylesheets are folded back into the HTML. |
 | **Ajax state replay** | Captured JSON and `window.snapSaveState()` are injected before the first script, so hydration sees the same data the prerender did. |
+| **Guided setup** | `snappy-prerender init` asks the handful of questions that matter — build directory, base path, routes, site URL, site name, title template — and writes a `snappy.config.js` with your answers, detected from the project where it can. |
 | **Any static build** | Base paths, `serveCmd` for apps that need a live API, screenshots, dry runs, bounded concurrency. |
 
 ## How it works
@@ -233,7 +250,28 @@ snappy({
 });
 ```
 
-The metadata script the head layer persists is exempt from `removeScriptTags`; everything else is removed as asked.
+The persisted metadata element is exempt from `removeScriptTags`; everything else is removed as asked.
+
+### Strict CSP
+
+One dial decides how the injected pieces are delivered. `csp: 'off'` (default) leaves them inline, which is cheapest to load. `csp: 'strict'` makes the whole output work under `script-src 'self'` with no `unsafe-inline`:
+
+| Piece | `off` | `strict` |
+| --- | --- | --- |
+| Head defaults | Inert `<script type="application/json" data-snappy-meta>` — never executed, so `script-src` does not govern it | Same |
+| Captured state | Inline script, injected before the bundle | Content-hashed same-origin file (`externalScripts: true`); routes sharing state share one file |
+| Critical CSS swap | beasties' `media="print"` plus an inline `onload` handler | No swap handlers (`criticalCssPreload: false`); deferred stylesheets stay plain links |
+
+```js
+snappy({ csp: 'strict' });                            // the dial
+snappy({ csp: 'strict', criticalCssPreload: 'media' }); // strict scripts, swap kept
+snappy({ externalScripts: true });                    // fine-tune one part on its own
+```
+
+Two things the dial cannot remove, because they are what prerendered HTML is:
+
+- Inlined CSS — critical CSS, `inlineCss: 'inline'`, and captured runtime styles — is `<style>` text, so `style-src` needs an allowance, the same as any prerendered HTML.
+- The app bundle is an ordinary external script and is unaffected either way.
 
 ## Third-party requests
 
@@ -339,7 +377,7 @@ export default {
 | `sourceDir` | `dist` | Built output directory |
 | `destination` | `null` | Copy the output here and write results here instead of in place |
 | `base` | `/` | Public base path |
-| `include` | `['/']` | Seed routes and allowlist. Wildcards (`/blog/*`) filter discovered routes, only concrete paths are seeded |
+| `include` | `['/']` | Seed routes and allowlist. Wildcards (`/blog/*`) filter discovered routes, only concrete paths are seeded. Supplying your own list switches discovery off, so the listed routes are all that is rendered; leave it unset to render the root and crawl everything linked from it |
 | `exclude` | `[]` | Routes to skip, strings or RegExp |
 | `crawl` | `true` | Follow same-origin links from seeds |
 | `maxDepth` | `null` | Crawl depth limit, `null` is unlimited, `0` renders seeds only |
@@ -366,7 +404,9 @@ export default {
 | `scrollStepDelay` | `100` | Delay between scroll steps when `scrollToBottom` is on |
 | `captureRuntimeStyles` | `true` | Fold CSSOM-only styles and constructable stylesheets into the output |
 | `captureFormState` | `true` | Sync `checked` and `selected` into the output markup |
+| `csp` | `'off'` | `'off'` leaves the injected pieces inline; `'strict'` makes the output work under `script-src 'self'` by moving state to a same-origin file and dropping the CSS swap handlers |
 | `inlineCss` | `false` | `'inline'`, `'critical'` (needs beasties) or `true` for `'inline'` |
+| `criticalCssPreload` | `'media'` | Swap used for CSS deferred by `inlineCss: 'critical'`; `false` emits no swap handlers, for a strict script-src |
 | `minifyHtml` | `false` | Minify output HTML, `true` for defaults or an html-minifier-terser options object |
 | `minifyCss` | `false` | Minify CSS with clean-css, also applied to inlined CSS |
 | `preconnectThirdParty` | `true` | Add preconnect hints for every third-party origin the page contacts |
@@ -379,6 +419,7 @@ export default {
 | `removeStyleTags` | `false` | Strip every style tag from the output |
 | `removeScriptTags` | `false` | Strip every script tag from the output |
 | `asyncScriptTags` | `false` | Mark external scripts async |
+| `externalScripts` | `false` | Write injected state scripts as content-hashed same-origin files instead of inline; set by `csp: 'strict'` |
 | `flatOutput` | `false` | Write `about.html` instead of `about/index.html` |
 | `notFoundRoute` | `/404` | Route emitted as `404.html`; a notice is logged when it is never prerendered |
 | `saveAs` | `html` | `html`, `png` or `jpeg` |

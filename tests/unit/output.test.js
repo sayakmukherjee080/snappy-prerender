@@ -7,6 +7,7 @@ import {
   findOutputCollisions,
   routeToFile,
   routeToScreenshotFile,
+  writeFileIfChanged,
   writeRouteHtml,
 } from '../../src/core/output.js';
 
@@ -117,5 +118,30 @@ describe('writeRouteHtml', () => {
     assert.equal(result.status, 'dry-run');
     const entries = await fs.readdir(dir);
     assert.deepEqual(entries, []);
+  });
+});
+
+describe('writeFileIfChanged', () => {
+  it('writes a nested file and leaves an identical one untouched', async () => {
+    const dir = await makeTempDir();
+    const first = await writeFileIfChanged({
+      dir,
+      file: 'snappy/state-abc.js',
+      contents: 'window.__STATE__={};',
+    });
+    const second = await writeFileIfChanged({
+      dir,
+      file: 'snappy/state-abc.js',
+      contents: 'window.__STATE__={};',
+    });
+
+    assert.equal(first.status, 'written');
+    assert.equal(second.status, 'unchanged');
+    assert.equal(
+      await fs.readFile(path.join(dir, 'snappy', 'state-abc.js'), 'utf8'),
+      'window.__STATE__={};',
+    );
+    // The temporary file used for the atomic rename is never left behind.
+    assert.deepEqual(await fs.readdir(path.join(dir, 'snappy')), ['state-abc.js']);
   });
 });
