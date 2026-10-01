@@ -3,8 +3,11 @@
 **Prerender your single-page app without rewriting it.** Point it at your build output, and every route is rendered in a real browser and written to disk as static HTML — content, titles, meta tags, canonical links and Open Graph tags included. Search engines and social crawlers get the full page; your users get the same app they had before.
 
 [![npm](https://img.shields.io/npm/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
+[![npm downloads](https://img.shields.io/npm/dm/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![node](https://img.shields.io/node/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![license](https://img.shields.io/npm/l/snappy-prerender.svg)](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/LICENSE)
+
+Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). While 2.6.0 is a release candidate it is published under the `next` tag, so install with `npm install --save-dev snappy-prerender@next`; the plain command below works once 2.6.0 is stable.
 
 - **No SSR entry, no framework migration, no app changes.** If it builds to a `dist` directory, it can be prerendered.
 - **React 18 and React 19, Vite 6/7/8, or any static build.**
