@@ -10,7 +10,7 @@
 Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). While 2.6.0 is a release candidate it is published under the `next` tag, so install with `npm install --save-dev snappy-prerender@next`; the plain command below works once 2.6.0 is stable.
 
 - **No SSR entry, no framework migration, no app changes.** If it builds to a `dist` directory, it can be prerendered.
-- **React 18 and React 19, Vite 6/7/8, or any static build.**
+- **React 16.8, 17, 18 and 19, Vite 6/7/8, or any static build.**
 - **Inspired by [react-snap](https://github.com/stereobooster/react-snap)** and rebuilt from scratch for current toolchains: a browser-based prerenderer with a hydration report attached, not another SSR framework.
 
 ## Who this is for
@@ -177,6 +177,8 @@ After writing the output, every route is loaded again with the real client bundl
 `re-rendered` matters because an app calling `createRoot` instead of `hydrateRoot` throws the prerendered DOM away on boot — and because `createRoot` cannot raise a hydration error, nothing else would ever tell you. It is reported per route as `verification.routes[].mode` and summarised in `verification.modes`, with a warning in the log. Set `failOnRerender: true` to make it fail the build as well.
 
 **Page errors.** Errors the browser logs while verifying are reported too: uncaught exceptions as warnings, console errors at debug level. Errors thrown during rendering itself are counted in the summary and reported per route, and `failOnPageError: true` turns them into a build failure; by default an app that throws still ships what it managed to render, because the static output is what crawlers read.
+
+**React 16 and 17.** Hydration and boot modes are judged the same way, and their dev mismatch warnings ("Text content did not match", "Did not expect server HTML to contain") are recognised. Their production builds report nothing for a mismatch at all — no warning, no minified code — so on 16 and 17 the boot-mode report (`hydrated` versus `re-rendered`) is the signal that something drifted.
 
 ## Ready contract
 

@@ -373,6 +373,120 @@ describe('prerender integration: react 18 app', () => {
   });
 });
 
+/**
+ * The React 16 and 17 fixtures exercise the same contract as each other: every route renders,
+ * the prerendered markup is hydrated rather than replaced, and the head layer works. React 16
+ * and 17 hydrate through ReactDOM.hydrate, so a regression in the captured DOM shows up here
+ * as a `re-rendered` mode rather than as an error.
+ */
+function describeLegacyReactApp(label, fixture) {
+  describe(`prerender integration: ${label}`, () => {
+    let sourceDir;
+    let report;
+
+    const metadata = {
+      siteUrl: 'https://pps.example',
+      siteName: 'PPS',
+      titleTemplate: '%s | PPS',
+    };
+
+    before(async () => {
+      sourceDir = await buildFixture(fixture);
+      report = await prerender({
+        sourceDir,
+        logLevel: 'silent',
+        metadata,
+        include: ['/', '/about', '/adjacent-text', '/inline-style', '/head-a', '/head-b'],
+      });
+    });
+
+    it('renders every route and verifies cleanly', async () => {
+      assert.deepEqual([...report.routes].sort(), [
+        '/',
+        '/about',
+        '/adjacent-text',
+        '/head-a',
+        '/head-b',
+        '/inline-style',
+      ]);
+      assert.equal(report.errors.length, 0);
+      assert.equal(report.verification.ok, true);
+      assert.equal(report.ok, true);
+      const about = await fs.readFile(path.join(sourceDir, 'about', 'index.html'), 'utf8');
+      assert.match(about, /About page/);
+    });
+
+    it('hydrates the prerendered markup instead of replacing it', () => {
+      const byRoute = new Map(report.verification.routes.map((entry) => [entry.route, entry]));
+      for (const route of [
+        '/',
+        '/about',
+        '/adjacent-text',
+        '/inline-style',
+        '/head-a',
+        '/head-b',
+      ]) {
+        const entry = byRoute.get(route);
+        assert.equal(entry.mode, 'hydrated', `${route} should hydrate on ${label}`);
+        assert.equal(entry.ok, true);
+        assert.deepEqual(entry.hydrationErrors, []);
+      }
+    });
+
+    it('writes head metadata from the head layer', async () => {
+      const page = await fs.readFile(path.join(sourceDir, 'head-a', 'index.html'), 'utf8');
+      assert.match(page, /<title[^>]*>Head A \| PPS<\/title>/);
+      assert.match(
+        page,
+        /<meta[^>]*property="og:url"[^>]*content="https:\/\/pps\.example\/head-a"/,
+      );
+      assert.match(page, /<link[^>]*rel="canonical"[^>]*href="https:\/\/pps\.example\/head-a"/);
+    });
+
+    it('updates the head on client-side navigation without a reload', async () => {
+      const config = resolveConfig({ logLevel: 'silent' });
+      const server = await startStaticServer({ dir: sourceDir, base: '/' });
+      const { browser } = await launchBrowser(config, {
+        info() {},
+        warn() {},
+        error() {},
+        debug() {},
+      });
+      const context = await browser.newContext();
+      const page = await context.newPage();
+
+      try {
+        await page.goto(`${server.origin}/head-a`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30000,
+        });
+        await page.waitForFunction(
+          () =>
+            document.querySelector('meta[property="og:title"]')?.getAttribute('content') ===
+            'Head A | PPS',
+        );
+        assert.equal(await page.locator('meta[property="og:title"]').count(), 1);
+
+        await page.getByRole('button', { name: 'Go to Head B' }).click();
+        await page.waitForFunction(
+          () =>
+            document.querySelector('meta[property="og:title"]')?.getAttribute('content') ===
+            'Head B | PPS',
+        );
+        assert.equal(await page.title(), 'Head B | PPS');
+        assert.equal(await page.locator('meta[property="og:title"]').count(), 1);
+      } finally {
+        await context.close();
+        await browser.close();
+        await server.close();
+      }
+    });
+  });
+}
+
+describeLegacyReactApp('react 16 app', 'react16-app');
+describeLegacyReactApp('react 17 app', 'react17-app');
+
 describe('prerender integration: re-rendering apps', () => {
   it('detects an app that discards the prerendered markup instead of hydrating', async () => {
     const sourceDir = await buildFixture('react19-rerender-app');
