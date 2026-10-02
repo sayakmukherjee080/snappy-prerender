@@ -68,11 +68,13 @@
     "vite": "7.3.6"
   },
   "workspaces": [
+    "tests/fixtures/react16-app",
+    "tests/fixtures/react17-app",
     "tests/fixtures/react18-app"
   ],
   "peerDependencies": {
     "beasties": ">=0.4.1",
-    "react": ">=18.0.0",
+    "react": ">=16.8.0",
     "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
   },
   "peerDependenciesMeta": {

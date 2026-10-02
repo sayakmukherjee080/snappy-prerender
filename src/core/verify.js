@@ -7,6 +7,10 @@ const HYDRATION_PATTERNS = [
   /hydrat/i,
   /did not match/i,
   /server-rendered HTML/i,
+  // React 16 and 17 phrase their mismatch warnings differently and never use the
+  // minified codes, which only exist from React 18 on.
+  /did not expect server HTML/i,
+  /expected server HTML to contain/i,
   /react\.dev\/errors\/(418|419|421|422|423|424|425)/i,
   /Minified React error #(418|419|421|422|423|424|425)\b/i,
 ];

@@ -15,6 +15,21 @@ describe('isHydrationError', () => {
     );
   });
 
+  it('detects React 16 and 17 hydration messages', () => {
+    assert.equal(
+      isHydrationError('Warning: Text content did not match. Server: "A" Client: "B"'),
+      true,
+    );
+    assert.equal(
+      isHydrationError('Warning: Did not expect server HTML to contain a <div> in <div>.'),
+      true,
+    );
+    assert.equal(
+      isHydrationError('Warning: Expected server HTML to contain a matching <div> in <div>.'),
+      true,
+    );
+  });
+
   it('detects minified production error references', () => {
     assert.equal(
       isHydrationError('Minified React error #418; visit https://react.dev/errors/418'),
