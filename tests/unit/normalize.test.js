@@ -146,6 +146,21 @@ describe('normaliseHtml post-processing', () => {
     assert.equal(normaliseHtml(PAGE).stats.titleElements, 0);
   });
 
+  it('drops the volatile attributes the caller lists', () => {
+    const page = [
+      '<!DOCTYPE html><html><head></head><body>',
+      '<div data-menu-id="rc-menu-uuid-1" id="keep" aria-controls="rc-menu-uuid-1">x</div>',
+      '</body></html>',
+    ].join('');
+    const { html, stats } = normaliseHtml(page, {
+      removeAttributes: ['data-menu-id', /^aria-controls$/],
+    });
+    assert.equal(html.includes('data-menu-id'), false);
+    assert.equal(html.includes('aria-controls'), false);
+    assert.equal(html.includes('id="keep"'), true);
+    assert.equal(stats.removedAttributes, 2);
+  });
+
   it('keeps the persisted metadata element even when every other script is removed', () => {
     const page = [
       '<!DOCTYPE html><html><head>',

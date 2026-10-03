@@ -94,6 +94,7 @@ describe('resolveConfig', () => {
     assert.throws(() => resolveConfig({ maxRoutes: 1.5 }), /maxRoutes/);
     assert.throws(() => resolveConfig({ maxCachedBytes: 0 }), /maxCachedBytes/);
     assert.throws(() => resolveConfig({ maxCachedBytes: -1 }), /maxCachedBytes/);
+    assert.throws(() => resolveConfig({ removeAttributes: [42] }), /removeAttributes/);
     assert.throws(() => resolveConfig({ storageState: 'does-not-exist.json' }), /storageState/);
     assert.throws(() => resolveConfig({ userAgent: 42 }), /userAgent/);
     assert.throws(() => resolveConfig({ destination: 42 }), /destination/);
@@ -170,10 +171,21 @@ describe('resolveConfig', () => {
       'flatOutput',
       'dryRun',
       'externalScripts',
+      'sitemap',
+      'verifyChangedOnly',
     ]) {
       assert.throws(() => resolveConfig({ [key]: 'yes' }), new RegExp(key));
     }
     assert.equal(resolveConfig({ failOnPageError: true }).failOnPageError, true);
+  });
+
+  it('requires a public site URL for the sitemap', () => {
+    assert.throws(() => resolveConfig({ sitemap: true }), /sitemap/);
+    assert.equal(
+      resolveConfig({ sitemap: true, metadata: { siteUrl: 'https://example.com' } }).sitemap,
+      true,
+    );
+    assert.equal(resolveConfig({ sitemap: false }).sitemap, false);
   });
 
   it('validates the critical CSS preload choice', () => {

@@ -37,6 +37,7 @@ Options:
       --browser-download-hash <sha256>  Pin the fallback download to a SHA-256 digest
       --storage-state <file>  Playwright storage state for authenticated routes
       --no-verify             Skip the hydration verification pass
+      --verify-changed-only   Skip verification for routes whose HTML did not change
       --fail-on-hydration-error  Fail the build when hydration errors are found
       --fail-on-rerender      Fail when a route re-renders instead of hydrating
       --fail-on-page-error    Fail when a page throws while it is being rendered
@@ -65,6 +66,7 @@ Options:
       --no-preconnect-third-party  Disable preconnect hints
       --preload-images        Add preload hints for images on the page
       --preload-manifest      Write preload-manifest.json with Link header hints
+      --sitemap               Write sitemap.xml from the rendered routes (needs metadata.siteUrl)
       --ignore-for-preload <names>  File names excluded from the manifest, comma separated
       --cache-ajax-requests   Expose captured JSON responses as window.snapStore
       --remove-scripts        Strip every script tag from the output
@@ -73,6 +75,7 @@ Options:
       --external-scripts      Write injected state scripts as same-origin files, for a strict CSP
       --csp <mode>            off | strict: strict makes the output work under script-src 'self'
       --no-remove-blobs       Keep blob stylesheet links instead of dropping them
+      --remove-attributes <names>  Drop these attributes from the output, comma separated
       --ignore-https-errors   Ignore TLS errors while rendering
       --browser-args <args>   Extra browser launch arguments, comma separated
       --url <url>             App URL to connect to when using --serve-cmd
@@ -108,6 +111,7 @@ async function main() {
       'browser-download-hash': { type: 'string' },
       'storage-state': { type: 'string' },
       'no-verify': { type: 'boolean' },
+      'verify-changed-only': { type: 'boolean' },
       'fail-on-hydration-error': { type: 'boolean' },
       'fail-on-rerender': { type: 'boolean' },
       'fail-on-page-error': { type: 'boolean' },
@@ -136,6 +140,7 @@ async function main() {
       'no-preconnect-third-party': { type: 'boolean' },
       'preload-images': { type: 'boolean' },
       'preload-manifest': { type: 'boolean' },
+      sitemap: { type: 'boolean' },
       'ignore-for-preload': { type: 'string', multiple: true },
       'cache-ajax-requests': { type: 'boolean' },
       'remove-scripts': { type: 'boolean' },
@@ -143,6 +148,7 @@ async function main() {
       'async-scripts': { type: 'boolean' },
       'external-scripts': { type: 'boolean' },
       'no-remove-blobs': { type: 'boolean' },
+      'remove-attributes': { type: 'string', multiple: true },
       'ignore-https-errors': { type: 'boolean' },
       'browser-args': { type: 'string', multiple: true },
       url: { type: 'string' },
@@ -207,6 +213,7 @@ function cliOptions({ values, positionals }) {
   }
   if (values['storage-state'] !== undefined) options.storageState = values['storage-state'];
   if (values['no-verify']) options.verify = false;
+  if (values['verify-changed-only']) options.verifyChangedOnly = true;
   if (values['fail-on-hydration-error']) options.failOnHydrationError = true;
   if (values['fail-on-rerender']) options.failOnRerender = true;
   if (values['fail-on-page-error']) options.failOnPageError = true;
@@ -236,6 +243,7 @@ function cliOptions({ values, positionals }) {
   if (values['no-preconnect-third-party']) options.preconnectThirdParty = false;
   if (values['preload-images']) options.preloadImages = true;
   if (values['preload-manifest']) options.preloadManifest = true;
+  if (values.sitemap) options.sitemap = true;
   if (values['ignore-for-preload'] !== undefined) {
     options.ignoreForPreload = splitList(values['ignore-for-preload']);
   }
@@ -245,6 +253,9 @@ function cliOptions({ values, positionals }) {
   if (values['async-scripts']) options.asyncScriptTags = true;
   if (values['external-scripts']) options.externalScripts = true;
   if (values['no-remove-blobs']) options.removeBlobs = false;
+  if (values['remove-attributes'] !== undefined) {
+    options.removeAttributes = splitList(values['remove-attributes']);
+  }
   if (values['ignore-https-errors']) options.ignoreHTTPSErrors = true;
   if (values['browser-args'] !== undefined) options.browserArgs = splitList(values['browser-args']);
   if (values.url !== undefined) options.url = values.url;
@@ -435,7 +446,9 @@ function metadataOptions(values) {
 
 /**
  * Loads a JS config file. An explicitly requested file must exist; the implicit
- * snappy.config.js is optional. The default export must be a plain options object.
+ * snappy.config.js is optional. The default export is either a plain options object or an
+ * async function that returns one, which is how routes are computed from a CMS, a sitemap or
+ * a file listing without a separate prebuild script.
  */
 async function loadConfigFile(explicitPath) {
   if (explicitPath === undefined) {
@@ -445,9 +458,17 @@ async function loadConfigFile(explicitPath) {
     throw new Error(`Config file not found: ${explicitPath}`);
   }
   const module = await import(pathToFileURL(explicitPath).href);
-  const loaded = module.default ?? {};
+  const exported = module.default ?? {};
+  let loaded;
+  try {
+    loaded = typeof exported === 'function' ? await exported() : exported;
+  } catch (error) {
+    throw new Error(`Config file failed to load: ${error.message}`);
+  }
   if (typeof loaded !== 'object' || loaded === null || Array.isArray(loaded)) {
-    throw new Error(`Config file must export a plain options object: ${explicitPath}`);
+    throw new Error(
+      `Config file must export a plain options object or a function returning one: ${explicitPath}`,
+    );
   }
   return loaded;
 }

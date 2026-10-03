@@ -18,6 +18,7 @@ import { renderRoute } from './render.js';
 import { crawlRoots, filterRoutes, normaliseRoute, toPublicPath, withinDepth } from './routes.js';
 import { createPool } from './scheduler.js';
 import { startCommandServer, startStaticServer } from './server.js';
+import { buildSitemap, withSitemapDirective } from './sitemap.js';
 import { verifyRoutes } from './verify.js';
 
 /**
@@ -57,6 +58,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     duplicateTitles: [],
     verification: null,
     preloadManifest: null,
+    sitemap: null,
     truncated: null,
     ok: false,
     durationMs: 0,
@@ -94,6 +96,10 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     logNotFoundNotice(report, config, log);
     logDuplicateTitles(report, log);
 
+    if (config.sitemap) {
+      await writeSitemap({ outputDir, config, log, report });
+    }
+
     if (report.truncated) {
       log.error(
         `maxRoutes (${report.truncated.limit}) reached after ${report.truncated.routes} route(s); output is incomplete`,
@@ -115,13 +121,25 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
         'hydration verification is skipped with serveCmd: the command server decides which document it serves, so the written files cannot be checked',
       );
     }
-    if (canVerify && !config.serveCmd && verifiable.length > 0) {
+    // With verifyChangedOnly, a route whose file was left untouched is not reloaded: the HTML
+    // and the bundle are the same as the last time it was verified.
+    const toVerify = config.verifyChangedOnly
+      ? verifiable.filter(
+          (route) => report.files.find((file) => file.route === route)?.status !== 'unchanged',
+        )
+      : verifiable;
+    const skipped = verifiable.length - toVerify.length;
+    if (canVerify && !config.serveCmd && skipped > 0) {
+      log.info(`Verification skipped for ${skipped} unchanged route(s), as verifyChangedOnly asks`);
+    }
+    if (canVerify && !config.serveCmd && toVerify.length > 0) {
       report.verification = await verifyRoutes({
         browser,
         origin: server.origin,
-        routes: verifiable.sort(),
+        routes: toVerify.sort(),
         config,
       });
+      report.verification.skipped = skipped;
       logVerification(report.verification, config, log);
     }
   } finally {
@@ -360,6 +378,7 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
     removeScriptTags: config.removeScriptTags,
     asyncScriptTags: config.asyncScriptTags,
     removeBlobs: config.removeBlobs,
+    removeAttributes: config.removeAttributes,
     preconnectOrigins: config.preconnectThirdParty
       ? [...result.collector.thirdPartyOrigins].sort()
       : [],
@@ -369,12 +388,13 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
   });
   if (
     stats.removedElements > 0 ||
+    stats.removedAttributes > 0 ||
     stats.dedupedStyles > 0 ||
     stats.hints > 0 ||
     stats.textSeparators > 0
   ) {
     log.debug(
-      `  cleaned ${route}: ${stats.removedElements} element(s) removed, ${stats.dedupedStyles} duplicate style(s), ${stats.hints} hint(s), ${stats.textSeparators} text separator(s)`,
+      `  cleaned ${route}: ${stats.removedElements} element(s) removed, ${stats.removedAttributes} attribute(s) removed, ${stats.dedupedStyles} duplicate style(s), ${stats.hints} hint(s), ${stats.textSeparators} text separator(s)`,
     );
   }
   if ((result.inlineCssSkipped ?? []).length > 0) {
@@ -450,6 +470,63 @@ async function writePreloadManifest({ manifestEntries, outputDir, config, log })
   await fs.writeFile(path.join(outputDir, file), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   log.info(`Wrote preload manifest covering ${manifest.length} route(s)`);
   return { file, routes: manifest.length };
+}
+
+/**
+ * Writes sitemap.xml from the routes the run produced, and points an existing robots.txt at
+ * it. Every loc must be absolute, which is why the option needs metadata.siteUrl.
+ */
+async function writeSitemap({ outputDir, config, log, report }) {
+  if (config.saveAs !== 'html') {
+    log.warn(
+      `sitemap is skipped when saveAs writes ${config.saveAs} files, as there are no pages to list`,
+    );
+    return;
+  }
+  const sitemap = buildSitemap({ files: report.files, config });
+  if (!sitemap) {
+    log.warn('sitemap is skipped: no pages were written');
+    return;
+  }
+
+  const siteUrl = config.metadata.siteUrl.replace(/\/$/, '');
+  const sitemapUrl = `${siteUrl}${toPublicPath('/sitemap.xml', config.base)}`;
+  const robots = await fs.readFile(path.join(outputDir, 'robots.txt'), 'utf8').catch(() => null);
+  const patched = robots === null ? null : withSitemapDirective(robots, sitemapUrl);
+
+  if (config.dryRun) {
+    report.files.push({
+      route: null,
+      file: 'sitemap.xml',
+      status: 'dry-run',
+      bytes: Buffer.byteLength(sitemap.contents),
+    });
+    report.sitemap = { file: 'sitemap.xml', routes: sitemap.routes, robotsUpdated: false };
+    log.info(`Dry run: would write sitemap.xml listing ${sitemap.routes} route(s)`);
+    return;
+  }
+
+  const written = await writeFileIfChanged({
+    dir: outputDir,
+    file: 'sitemap.xml',
+    contents: sitemap.contents,
+  });
+  report.files.push({ route: null, ...written });
+  report.sitemap = {
+    file: 'sitemap.xml',
+    routes: sitemap.routes,
+    robotsUpdated: patched !== null,
+  };
+  log.info(`Wrote sitemap.xml listing ${sitemap.routes} route(s)`);
+
+  if (robots === null) {
+    log.info(`Add "Sitemap: ${sitemapUrl}" to a robots.txt so crawlers find it`);
+    return;
+  }
+  if (patched !== null) {
+    await writeFileIfChanged({ dir: outputDir, file: 'robots.txt', contents: patched });
+    log.info('Added the sitemap location to robots.txt');
+  }
 }
 
 // Notes when a not-found route is configured but was never rendered, so no 404.html

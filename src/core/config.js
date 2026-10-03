@@ -27,7 +27,14 @@ const NULLABLE_KEYS = [
   'url',
   'serveCmd',
 ];
-const ARRAY_KEYS = ['include', 'exclude', 'allowedHosts', 'browserArgs', 'ignoreForPreload'];
+const ARRAY_KEYS = [
+  'include',
+  'exclude',
+  'allowedHosts',
+  'browserArgs',
+  'ignoreForPreload',
+  'removeAttributes',
+];
 
 export const DEFAULTS = Object.freeze({
   sourceDir: 'dist',
@@ -68,6 +75,7 @@ export const DEFAULTS = Object.freeze({
   minifyHtml: false,
   minifyCss: false,
   removeBlobs: true,
+  removeAttributes: [],
   removeStyleTags: false,
   removeScriptTags: false,
   asyncScriptTags: false,
@@ -75,12 +83,14 @@ export const DEFAULTS = Object.freeze({
   preconnectThirdParty: true,
   preloadImages: false,
   preloadManifest: false,
+  sitemap: false,
   ignoreForPreload: ['service-worker.js'],
   cacheAjaxRequests: false,
   maxCachedBytes: 5 * 1024 * 1024,
   flatOutput: false,
   notFoundRoute: '/404',
   verify: true,
+  verifyChangedOnly: false,
   failOnHydrationError: false,
   failOnRerender: false,
   failOnPageError: false,
@@ -189,6 +199,7 @@ export function validateConfig(config) {
   stringList(config.allowedHosts, 'allowedHosts');
   stringList(config.browserArgs, 'browserArgs');
   stringList(config.ignoreForPreload, 'ignoreForPreload');
+  patternList(config.removeAttributes, 'removeAttributes');
   for (const key of ['readyFlag', 'readySelector', 'waitFor', 'notFoundRoute']) nullableString(key);
   for (const key of ['userAgent', 'destination']) nullableString(key);
   for (const key of BOOLEAN_KEYS) booleanOption(key);
@@ -271,6 +282,9 @@ export function validateConfig(config) {
     throw new TypeError(`saveAs must be one of: ${SAVE_AS_CHOICES.join(', ')}`);
   }
   validateMetadata(config);
+  if (config.sitemap && !config.metadata?.siteUrl) {
+    throw new TypeError('sitemap needs metadata.siteUrl so the sitemap can list absolute URLs');
+  }
 }
 
 // The metadata keys the head component reads, so a typo is reported instead of ignored.
