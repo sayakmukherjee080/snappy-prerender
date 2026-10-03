@@ -1214,6 +1214,111 @@ describe('prerender integration: capture and optimisation options', () => {
     assert.match(html, /<style>[\s\S]*\.hero[\s\S]*<\/style>/);
   });
 
+  it('drops volatile attributes and produces identical output on a rerun', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html':
+        '<!doctype html><html><head><title>Home page</title></head><body><h1>Home page</h1><div data-menu-id="rc-menu-uuid-12345">menu</div></body></html>',
+    });
+
+    const first = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      removeAttributes: ['data-menu-id'],
+    });
+    assert.equal(first.errors.length, 0);
+    const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
+    assert.equal(html.includes('data-menu-id'), false);
+    assert.match(html, /menu/);
+
+    const second = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      removeAttributes: ['data-menu-id'],
+    });
+    assert.equal(second.files[0].status, 'unchanged');
+  });
+
+  it('writes a sitemap and points an existing robots.txt at it', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html': page('Home page', ['/about']),
+      'robots.txt': 'User-agent: *\nDisallow:\n',
+    });
+
+    const report = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      sitemap: true,
+      metadata: { siteUrl: 'https://pps.example' },
+    });
+    assert.equal(report.errors.length, 0);
+
+    const sitemap = await fs.readFile(path.join(sourceDir, 'sitemap.xml'), 'utf8');
+    assert.match(sitemap, /<loc>https:\/\/pps\.example\/<\/loc>/);
+    assert.match(sitemap, /<loc>https:\/\/pps\.example\/about\/<\/loc>/);
+    assert.equal(report.sitemap.routes, 2);
+    assert.equal(report.sitemap.robotsUpdated, true);
+    assert.match(
+      await fs.readFile(path.join(sourceDir, 'robots.txt'), 'utf8'),
+      /Sitemap: https:\/\/pps\.example\/sitemap\.xml/,
+    );
+
+    // A second run leaves both files untouched.
+    const second = await prerender({
+      sourceDir,
+      logLevel: 'silent',
+      verify: false,
+      sitemap: true,
+      metadata: { siteUrl: 'https://pps.example' },
+    });
+    const stable = second.files.filter((file) => file.file === 'sitemap.xml');
+    assert.equal(stable[0].status, 'unchanged');
+  });
+
+  it('suggests a robots.txt line when there is no robots file', async () => {
+    const messages = [];
+    const log = {
+      level: 'info',
+      debug: () => {},
+      info: (message) => messages.push(message),
+      warn: (message) => messages.push(message),
+      error: (message) => messages.push(message),
+      success: (message) => messages.push(message),
+    };
+    const sourceDir = await makeStaticSite({ 'index.html': page('Home page', []) });
+
+    await prerender(
+      {
+        sourceDir,
+        logLevel: 'silent',
+        verify: false,
+        sitemap: true,
+        metadata: { siteUrl: 'https://pps.example' },
+      },
+      { log },
+    );
+
+    assert.equal(
+      messages.some((message) => message.includes('Sitemap: https://pps.example/sitemap.xml')),
+      true,
+    );
+    assert.equal(await exists(path.join(sourceDir, 'robots.txt')), false);
+  });
+
+  it('skips verification for unchanged routes when asked', async () => {
+    const sourceDir = await makeStaticSite({ 'index.html': page('Home page', []) });
+
+    const first = await prerender({ sourceDir, logLevel: 'silent', verifyChangedOnly: true });
+    assert.equal(first.verification.routes.length, 1);
+    assert.equal(first.verification.skipped, 0);
+
+    const second = await prerender({ sourceDir, logLevel: 'silent', verifyChangedOnly: true });
+    assert.equal(second.verification, null);
+    assert.equal(second.ok, true);
+  });
+
   it('writes preload manifest hints under the base path', async () => {
     const sourceDir = await makeStaticSite({
       'index.html': [
@@ -1525,6 +1630,50 @@ describe('prerender integration: cli', () => {
     assert.equal(cli.status, 1);
     assert.match(cli.stderr, /plain options object/);
     assert.match(cli.stderr, /at /);
+  });
+
+  it('accepts a config file that computes its options', async () => {
+    const sourceDir = await makeStaticSite({
+      'index.html': page('Home page', ['/about']),
+      'about/index.html': page('About page', []),
+    });
+    const dir = await makeStaticSite({
+      'snappy.config.js': [
+        'export default async function () {',
+        "  const routes = ['/', '/about'];",
+        `  return { sourceDir: ${JSON.stringify(sourceDir)}, include: routes, verify: false };`,
+        '}',
+        '',
+      ].join('\n'),
+    });
+
+    const cli = spawnSync(process.execPath, [cliPath], { encoding: 'utf8', cwd: dir });
+
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.equal(await exists(path.join(sourceDir, 'about', 'index.html')), true);
+  });
+
+  it('rejects a config function that does not return a plain object', async () => {
+    const dir = await makeStaticSite({
+      'snappy.config.js': "export default async function () { return 'nope'; }\n",
+    });
+
+    const cli = spawnSync(process.execPath, [cliPath], { encoding: 'utf8', cwd: dir });
+
+    assert.equal(cli.status, 1);
+    assert.match(cli.stderr, /function returning one/);
+  });
+
+  it('reports a config function that throws', async () => {
+    const dir = await makeStaticSite({
+      'snappy.config.js':
+        "export default async function () { throw new Error('routes API unreachable'); }\n",
+    });
+
+    const cli = spawnSync(process.execPath, [cliPath], { encoding: 'utf8', cwd: dir });
+
+    assert.equal(cli.status, 1);
+    assert.match(cli.stderr, /Config file failed to load: routes API unreachable/);
   });
 
   it('reports normalisation work at debug level', async () => {

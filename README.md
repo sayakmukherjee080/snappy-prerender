@@ -63,6 +63,7 @@ npx snappy-prerender dist --include /,/pricing,/blog/* --exclude /blog/drafts/*
 npx snappy-prerender dist --block-third-party --allowed-hosts cms.example.com
 npx snappy-prerender dist --metadata-site-url https://example.com --metadata-title-template '%s | Example'
 npx snappy-prerender dist --inline-css critical --minify-html --preload-manifest
+npx snappy-prerender dist --sitemap --verify-changed-only
 npx snappy-prerender dist --csp strict --inline-css critical
 ```
 
@@ -180,6 +181,8 @@ After writing the output, every route is loaded again with the real client bundl
 
 **React 16 and 17.** Hydration and boot modes are judged the same way, and their dev mismatch warnings ("Text content did not match", "Did not expect server HTML to contain") are recognised. Their production builds report nothing for a mismatch at all — no warning, no minified code — so on 16 and 17 the boot-mode report (`hydrated` versus `re-rendered`) is the signal that something drifted.
 
+**Rebuilds.** On a large site most routes are unchanged between builds, and reloading them proves nothing new. `verifyChangedOnly: true` skips the verification pass for routes whose HTML file was left untouched, which roughly halves rebuild time; the report notes how many routes were skipped, and the first run after a change still verifies everything that moved.
+
 ## Ready contract
 
 Most apps work with no configuration because the network-quiet heuristic is enough. Apps that fetch data after load can opt into a stronger signal:
@@ -244,6 +247,16 @@ snappy({ preconnectThirdParty: true, preloadImages: true, preloadManifest: true 
 
 react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome in v106), so the manifest is now a header list rather than a push list.
 
+### Sitemap
+
+```js
+snappy({ sitemap: true, metadata: { siteUrl: 'https://example.com' } });
+```
+
+`snappy` already knows every route it rendered, so it can write the sitemap for you. `sitemap.xml` is generated from the output files — a directory route becomes `/about/`, a `flatOutput` route becomes `/about.html` — with the base path applied and the not-found route left out. Each entry carries a `<lastmod>` of the run date.
+
+When the output directory already has a `robots.txt`, a `Sitemap:` line is appended to it if it does not point anywhere yet; an existing directive is left alone. Without a `robots.txt`, the run logs the exact line to add instead of creating a file you did not ask for.
+
 ### Tag surgery
 
 ```js
@@ -256,6 +269,24 @@ snappy({
 ```
 
 The persisted metadata element is exempt from `removeScriptTags`; everything else is removed as asked.
+
+### Removing volatile markup
+
+Mark any element with `data-prerender-remove` and it is dropped from the output:
+
+```jsx
+<div data-prerender-remove>{ads.render()}</div>
+```
+
+Use it for regions that only make sense after the client takes over — ads, chat widgets, anything injected after mount. The rule of thumb: remove markup that React will *not* render on its first client pass. Removing something React does expect causes the very hydration mismatch it was meant to avoid, which is exactly what the verifier would then report.
+
+Some libraries stamp values that change on every page load — antd's `rc-menu` writes `data-menu-id="rc-menu-uuid-…"` — which makes every rebuild rewrite every file and leaves `verifyChangedOnly` nothing to skip. List those attribute names (or RegExps) and they are dropped from the output:
+
+```js
+snappy({ removeAttributes: ['data-menu-id', 'aria-controls'] });
+```
+
+As with removed markup, only strip attributes React does not render as props; if you guess wrong, the hydration verifier tells you which route.
 
 ### Strict CSP
 
@@ -375,6 +406,23 @@ export default {
 };
 ```
 
+The config can also be an async function that returns the options. That is how routes get discovered from a CMS, a sitemap or a directory listing, without a separate prebuild script:
+
+```js
+// snappy.config.js
+export default async function () {
+  const response = await fetch('https://cms.example.com/api/posts?fields=slug');
+  const posts = await response.json();
+  return {
+    sourceDir: 'dist',
+    include: ['/', '/blog', ...posts.map((post) => `/blog/${post.slug}`)],
+    metadata: { siteUrl: 'https://example.com', siteName: 'Example' },
+  };
+}
+```
+
+The function is awaited once per run, and whatever it returns must be a plain options object. If it throws, the CLI reports the reason and stops before rendering anything.
+
 ## Options
 
 | Option | Default | Description |
@@ -418,9 +466,11 @@ export default {
 | `preloadImages` | `false` | Add preload hints for same-origin images |
 | `preloadManifest` | `false` | Write `preload-manifest.json` with Link header hints |
 | `ignoreForPreload` | `['service-worker.js']` | File names excluded from the manifest |
+| `sitemap` | `false` | Write `sitemap.xml` from the rendered routes and point an existing `robots.txt` at it; needs `metadata.siteUrl` |
 | `cacheAjaxRequests` | `false` | Expose captured JSON responses as `window.snapStore` |
 | `maxCachedBytes` | `5242880` | Largest JSON response cached per route, measured on the serialised body |
 | `removeBlobs` | `true` | Drop stylesheet links pointing at dead `blob:` URLs |
+| `removeAttributes` | `[]` | Attribute names or RegExps to drop from the output, for libraries that stamp per-load ids |
 | `removeStyleTags` | `false` | Strip every style tag from the output |
 | `removeScriptTags` | `false` | Strip every script tag from the output |
 | `asyncScriptTags` | `false` | Mark external scripts async |
@@ -430,6 +480,7 @@ export default {
 | `saveAs` | `html` | `html`, `png` or `jpeg` |
 | `metadata` | `null` | Defaults for the head component: `siteUrl`, `siteName`, `titleTemplate`, `defaultImage`, `trailingSlash`, `base` |
 | `verify` | `true` | Run the hydration verification pass |
+| `verifyChangedOnly` | `false` | Skip verification for routes whose HTML file did not change since the last run |
 | `failOnHydrationError` | `false` | Fail the run on hydration errors; off by default, where they are reported instead |
 | `failOnRerender` | `false` | Fail the run when a route re-renders instead of hydrating |
 | `failOnPageError` | `false` | Fail the run when a page throws while rendering; off by default, where page errors are reported |

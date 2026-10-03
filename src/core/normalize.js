@@ -16,6 +16,7 @@ export function normaliseHtml(html, options = {}) {
   const document = parse(html);
   const stats = {
     removedElements: 0,
+    removedAttributes: 0,
     dedupedStyles: 0,
     hints: 0,
     textSeparators: 0,
@@ -41,6 +42,9 @@ function cleanChildren(parent, stats, seenStyles, inHead, options) {
   for (const child of children) {
     const childInHead = inHead || child.tagName === 'head';
     if (shouldRemove(child, stats, options)) continue;
+    if (child.attrs && options.removeAttributes?.length > 0) {
+      stripAttributes(child, options.removeAttributes, stats);
+    }
     if (childInHead && child.tagName === 'style' && dedupeStyle(child, stats, seenStyles)) continue;
     if (childInHead && child.tagName === 'title') stats.titleElements += 1;
     if (childInHead) collectMetadataOrigins(child, stats);
@@ -65,6 +69,22 @@ function isText(node) {
 // own server rendering emits so hydration finds the same node boundaries.
 function createComment() {
   return { nodeName: '#comment', data: ' ', parentNode: null };
+}
+
+// Drops attributes whose names the caller marked as volatile, such as the per-load ids a UI
+// library writes into the DOM, so repeated runs produce identical output.
+function stripAttributes(node, patterns, stats) {
+  const kept = node.attrs.filter(
+    (attribute) => !patterns.some((pattern) => matchesAttribute(attribute.name, pattern)),
+  );
+  if (kept.length === node.attrs.length) return;
+  stats.removedAttributes += node.attrs.length - kept.length;
+  node.attrs = kept;
+}
+
+// Reports whether an attribute name matches a string exactly or a RegExp pattern.
+function matchesAttribute(name, pattern) {
+  return pattern instanceof RegExp ? pattern.test(name) : name === pattern;
 }
 
 // Reports whether a node is removed for any of the configured reasons. The metadata script is
