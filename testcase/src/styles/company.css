@@ -1,0 +1,364 @@
+.timeline {
+  position: relative;
+  display: grid;
+  gap: 2.25rem;
+  margin: 0 0 0 0.35rem;
+  padding: 0 0 0 2rem;
+  border-left: 1px solid var(--line);
+  list-style: none;
+}
+
+.timeline__item {
+  position: relative;
+}
+
+.timeline__item::before {
+  content: "";
+  position: absolute;
+  top: 0.35rem;
+  left: calc(-2rem - 4.5px);
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--paper);
+}
+
+.timeline__item--current::before {
+  border-color: var(--orange);
+  background: var(--orange);
+}
+
+.timeline__meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.timeline__year {
+  color: var(--orange-strong);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+}
+
+.timeline__status {
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.timeline__item h3 {
+  margin-top: 0.5rem;
+  font-size: 1.3rem;
+}
+
+.timeline__item p {
+  max-width: 44rem;
+  margin-top: 0.4rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.person {
+  padding: 1.25rem;
+  background: var(--paper-raised);
+}
+
+.person__portrait {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--paper-deep);
+}
+
+.person__portrait::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.7;
+}
+
+.person__portrait::after {
+  content: "";
+  position: absolute;
+  width: 44%;
+  height: 44%;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+}
+
+.person__portrait span {
+  position: relative;
+  z-index: 1;
+  font-size: 2.4rem;
+  font-weight: 600;
+  letter-spacing: -0.05em;
+}
+
+.person h3 {
+  margin-top: 1rem;
+  font-size: 1.05rem;
+}
+
+.person__role {
+  margin-top: 0.2rem;
+  color: var(--orange-strong);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.person__bio {
+  margin-top: 0.6rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.investor-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 2.5rem;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.investor-band .logo-row {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.jobs {
+  border-top: 1px solid var(--line);
+}
+
+.job {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.6fr) minmax(0, 0.4fr) 2rem;
+  gap: 1rem;
+  align-items: center;
+  padding: 1.35rem 0;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+}
+
+.job h3 {
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.job__meta {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.job__arrow {
+  justify-self: end;
+  color: var(--orange-strong);
+  font-size: 1.1rem;
+}
+
+.job:hover h3 {
+  color: var(--orange-strong);
+}
+
+.press-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: start;
+}
+
+.press-panel h2 {
+  margin-top: 1.5rem;
+  font-size: clamp(2.2rem, 4vw, 3.5rem);
+}
+
+.press-panel p {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.press-panel .text-link {
+  margin-top: 1.25rem;
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: start;
+}
+
+.contact-list {
+  display: grid;
+  gap: 1.4rem;
+  margin: 0;
+}
+
+.contact-list dt {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.contact-list dd {
+  margin: 0.25rem 0 0;
+  font-size: 0.95rem;
+}
+
+.contact-list a {
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+}
+
+.contact-list a:hover {
+  border-color: var(--orange);
+  color: var(--orange-strong);
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--line);
+  background: var(--paper-raised);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field--full {
+  grid-column: 1 / -1;
+}
+
+.field label {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--orange);
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+}
+
+.field textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.field__error {
+  color: var(--error);
+  font-size: 0.72rem;
+}
+
+.form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.form__note {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.form__status {
+  min-height: 1.5rem;
+  color: var(--orange-strong);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 960px) {
+  .press-panel,
+  .contact-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .team-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .job {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.4rem 1rem;
+  }
+
+  .job h3 {
+    grid-column: 1 / -1;
+  }
+
+  .job__arrow {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .team-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .timeline {
+    padding-left: 1.5rem;
+  }
+
+  .timeline__item::before {
+    left: calc(-1.5rem - 4.5px);
+  }
+}
