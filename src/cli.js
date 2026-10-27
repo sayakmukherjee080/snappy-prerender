@@ -66,6 +66,7 @@ Options:
       --flat                  Write about.html instead of about/index.html
       --not-found <route>     Route emitted as 404.html (default: /404)
       --destination <dir>     Write output to another directory (default: in place)
+      --clean-destination     Empty the destination before copying the build output
       --save-as <format>      html | png | jpeg (default: html)
       --user-agent <value>    User agent used while rendering (default: SnappyPrerender)
       --metadata-site-url <url>       Public site URL for canonical and og:url
@@ -163,6 +164,7 @@ async function main() {
       flat: { type: 'boolean' },
       'not-found': { type: 'string' },
       destination: { type: 'string' },
+      'clean-destination': { type: 'boolean' },
       'save-as': { type: 'string' },
       'user-agent': { type: 'string' },
       'metadata-site-url': { type: 'string' },
@@ -303,6 +305,7 @@ function cliOptions({ values, positionals }) {
   if (values.flat) options.flatOutput = true;
   if (values['not-found'] !== undefined) options.notFoundRoute = values['not-found'];
   if (values.destination !== undefined) options.destination = values.destination;
+  if (values['clean-destination']) options.cleanDestination = true;
   if (values['save-as'] !== undefined) options.saveAs = values['save-as'];
   if (values['user-agent'] !== undefined) options.userAgent = values['user-agent'];
   const metadata = metadataOptions(values);

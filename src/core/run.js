@@ -265,6 +265,7 @@ async function resolveOutputDir({ sourceDir, config, log }) {
     sourceDir,
     destination: config.destination ? path.resolve(config.destination) : null,
     log,
+    cleanDestination: config.cleanDestination,
   });
 }
 

@@ -40,6 +40,7 @@ const ARRAY_KEYS = [
 export const DEFAULTS = Object.freeze({
   sourceDir: 'dist',
   destination: null,
+  cleanDestination: false,
   base: '/',
   include: ['/'],
   exclude: [],
