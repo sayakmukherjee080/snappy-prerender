@@ -7,7 +7,7 @@
 [![node](https://img.shields.io/node/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![license](https://img.shields.io/npm/l/snappy-prerender.svg)](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/LICENSE)
 
-Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). While 2.6.0 is a release candidate it is published under the `next` tag, so install with `npm install --save-dev snappy-prerender@next`; the plain command below works once 2.6.0 is stable.
+Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). While 2.6.0 is a release candidate it is published under the `next` tag, so install with `npm install --save-dev snappy-prerender@next`; the plain command below works once 2.6.0 is stable. Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 - **No SSR entry, no framework migration, no app changes.** If it builds to a `dist` directory, it can be prerendered.
 - **React 16.8, 17, 18 and 19, Vite 6/7/8, or any static build.**
