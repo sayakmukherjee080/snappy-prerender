@@ -6,6 +6,8 @@ import Network from './pages/Network.jsx';
 import NotFound from './pages/NotFound.jsx';
 import Platform from './pages/Platform.jsx';
 import Pricing from './pages/Pricing.jsx';
+import Private from './pages/Private.jsx';
+import Seo from './pages/Seo.jsx';
 import { RouterProvider, useRouter } from './router.jsx';
 
 const ROUTES = {
@@ -14,6 +16,8 @@ const ROUTES = {
   '/network': Network,
   '/pricing': Pricing,
   '/company': Company,
+  '/seo': Seo,
+  '/private': Private,
 };
 
 /**

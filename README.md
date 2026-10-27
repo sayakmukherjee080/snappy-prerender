@@ -74,9 +74,10 @@ import { prerender } from 'snappy-prerender/core';
 
 const report = await prerender({ sourceDir: 'dist', include: ['/'] });
 if (!report.ok) {
-  for (const failure of report.verification.routes.filter((entry) => !entry.ok)) {
+  for (const failure of report.verification?.routes.filter((entry) => !entry.ok) ?? []) {
     console.error(failure.route, failure.hydrationErrors);
   }
+  for (const failure of report.errors) console.error(failure.route, failure.message);
 }
 ```
 
@@ -154,7 +155,7 @@ Rules worth knowing:
 - When no Head wants a tag any more, a generated one is removed and one the app wrote is restored to the value it had before the head layer touched it. That original is recorded into the page during prerendering, so a route change brings the template's fallback metadata back.
 - The component renders nothing, so it cannot affect hydration of the page content.
 - The title template applies unless the title already ends with the template's fixed part, or is the site name itself, so a title composed by hand is never suffixed twice.
-- Absolute URLs are required for `og:url`, `og:image` and canonical. Without `metadata.siteUrl` they fall back to the browser origin, which during prerendering is the build server — the run warns when that happens. The `trailingSlash` convention applies to page URLs only; asset URLs are left alone.
+- Absolute URLs are required for `og:url`, `og:image` and canonical. `metadata.siteUrl` must be an origin (no path); put a sub-path deployment in `base`. Without `siteUrl`, URLs that fall back to the build server are removed from the output by default (`stripBuildOriginMetadata: true`) and the run warns. The `trailingSlash` convention applies to page URLs only; asset URLs are left alone. Canonical, social and sitemap URLs share one page-path policy: directory output keeps its slash, flat output stays extensionless, and an explicit `trailingSlash` wins.
 - `metadata.base` overrides the base path used for absolute URLs and defaults to the `base` option.
 - On React 19, React hoists `<title>` and `<meta>` rendered in JSX and leaves an existing template tag alone, so a page can end up with two titles. Use React's native metadata or this component, not both; the run warns when the output carries more than one `<title>`.
 - Every metadata value has a CLI flag: `--metadata-site-url`, `--metadata-site-name`, `--metadata-title-template`, `--metadata-default-image`, `--metadata-trailing-slash`.
@@ -174,6 +175,8 @@ After writing the output, every route is loaded again with the real client bundl
 | `re-rendered` | The app discarded it and rendered from scratch. |
 | `undetected` | No React root was found on the container, so the mode could not be judged. |
 | `unknown` | The prerendered node was never seen, for example a container outside the usual ids. |
+
+A route whose verification navigation returns HTTP 4xx/5xx, or whose container renders no content, is reported as failed with its `status` or `empty` flag. `undetected` and `unknown` are reported as mode counts; set `failOnUndetected: true` to make any such route fail the build. A verification pass that cannot run is listed in `verification.errors`; set `failOnVerificationError: true` to fail on those separately from hydration errors.
 
 `re-rendered` matters because an app calling `createRoot` instead of `hydrateRoot` throws the prerendered DOM away on boot — and because `createRoot` cannot raise a hydration error, nothing else would ever tell you. It is reported per route as `verification.routes[].mode` and summarised in `verification.modes`, with a warning in the log. Set `failOnRerender: true` to make it fail the build as well.
 
@@ -243,7 +246,7 @@ snappy({ preconnectThirdParty: true, preloadImages: true, preloadManifest: true 
 
 - `preconnectThirdParty` (default `true`) records every third-party origin the page tried to reach — including ones blocked by `blockThirdParty` — and adds `<link rel="preconnect">` for each.
 - `preloadImages` adds `<link rel="preload" as="image">` for same-origin images the page loaded.
-- `preloadManifest` writes `preload-manifest.json` into the output directory: for each route, a `Link` header value listing the scripts and stylesheets it used, filtered by `ignoreForPreload` (default `['service-worker.js']`). Hints and route keys carry the base path, so serve these as Early Hints or `Link` response headers as they are.
+- `preloadManifest` writes `preload-manifest.json` into the output directory: for each route, a `Link` header value listing the scripts and stylesheets the final HTML still references, filtered by `ignoreForPreload` (default `['service-worker.js']`). Inline CSS and tag surgery are already reflected, the not-found route is omitted, and hints and route keys carry the base path, so serve these as Early Hints or `Link` response headers as they are.
 
 react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome in v106), so the manifest is now a header list rather than a push list.
 
@@ -253,7 +256,7 @@ react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome
 snappy({ sitemap: true, metadata: { siteUrl: 'https://example.com' } });
 ```
 
-`snappy` already knows every route it rendered, so it can write the sitemap for you. `sitemap.xml` is generated from the output files — a directory route becomes `/about/`, a `flatOutput` route becomes `/about.html` — with the base path applied and the not-found route left out. Each entry carries a `<lastmod>` of the run date.
+`snappy` already knows every route it rendered, so it can write the sitemap for you. `sitemap.xml` is generated from the routes that were written — using the same page path policy as canonical URLs, with the base path applied, `noindex` pages and the not-found route left out — and split behind a sitemap index when it exceeds 50,000 URLs. Entries carry no `<lastmod>`, because a build date would claim every page changed on every build.
 
 When the output directory already has a `robots.txt`, a `Sitemap:` line is appended to it if it does not point anywhere yet; an existing directive is left alone. Without a `robots.txt`, the run logs the exact line to add instead of creating a file you did not ask for.
 
@@ -430,13 +433,13 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `sourceDir` | `dist` | Built output directory |
 | `destination` | `null` | Copy the output here and write results here instead of in place |
 | `base` | `/` | Public base path |
-| `include` | `['/']` | Seed routes and allowlist. Wildcards (`/blog/*`) filter discovered routes, only concrete paths are seeded. Supplying your own list switches discovery off, so the listed routes are all that is rendered; leave it unset to render the root and crawl everything linked from it |
+| `include` | `['/']` | Seed routes and output allowlist. Wildcards (`/blog/*`) filter discovered routes, only concrete paths are seeded, and a seed that does not match the list is used for crawling but not written. Passing `['/']` is treated as the default: crawl everything linked from the root |
 | `exclude` | `[]` | Routes to skip, strings or RegExp |
 | `crawl` | `true` | Follow same-origin links from seeds |
 | `maxDepth` | `null` | Crawl depth limit, `null` is unlimited, `0` renders seeds only |
 | `maxRoutes` | `null` | Stop after this many routes; hitting the cap marks the run incomplete |
 | `concurrency` | derived | Parallel pages, derived from CPU count, capped at 8 |
-| `timeout` | `30000` | Per-route timeout in ms |
+| `timeout` | `30000` | Navigation, ready and network-settle timeout in ms; each wait gets this budget |
 | `quietPeriod` | `500` | Network must be idle this long before capture |
 | `readyFlag` | `__prerenderReady` | Window flag awaited when defined |
 | `readySelector` | `null` | Selector awaited when set |
@@ -447,6 +450,7 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `browser` | `auto` | `auto`, `chrome`, `msedge`, `chromium`, or a path to an executable |
 | `browserDownload` | `true` | Allow the Chrome for Testing fallback download |
 | `browserDownloadHash` | `null` | SHA-256 digest the fallback download must match, verified before use |
+| `browserDownloadVersion` | `null` | Chrome for Testing build id to use for the cache and download instead of resolving `stable` |
 | `browserArgs` | `[]` | Extra browser launch arguments |
 | `headless` | `true` | Run the browser headless |
 | `ignoreHTTPSErrors` | `false` | Ignore TLS errors while rendering |
@@ -464,31 +468,39 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `minifyCss` | `false` | Minify CSS with clean-css, also applied to inlined CSS |
 | `preconnectThirdParty` | `true` | Add preconnect hints for every third-party origin the page contacts |
 | `preloadImages` | `false` | Add preload hints for same-origin images |
-| `preloadManifest` | `false` | Write `preload-manifest.json` with Link header hints |
+| `preloadManifest` | `false` | Write `preload-manifest.json` with Link header hints, derived from the final HTML |
 | `ignoreForPreload` | `['service-worker.js']` | File names excluded from the manifest |
-| `sitemap` | `false` | Write `sitemap.xml` from the rendered routes and point an existing `robots.txt` at it; needs `metadata.siteUrl` |
+| `sitemap` | `false` | Write `sitemap.xml` (or a sitemap index above 50,000 URLs) from the routes that do not declare noindex, and point an existing `robots.txt` at it; needs `metadata.siteUrl` |
 | `cacheAjaxRequests` | `false` | Expose captured JSON responses as `window.snapStore` |
-| `maxCachedBytes` | `5242880` | Largest JSON response cached per route, measured on the serialised body |
+| `maxCachedBytes` | `5242880` | Largest JSON response cached per request, measured on the serialised body |
 | `removeBlobs` | `true` | Drop stylesheet links pointing at dead `blob:` URLs |
 | `removeAttributes` | `[]` | Attribute names or RegExps to drop from the output, for libraries that stamp per-load ids |
-| `removeStyleTags` | `false` | Strip every style tag from the output |
+| `stripBuildOriginMetadata` | `true` | Remove canonical and social tags whose URL points at the prerender server |
+| `pruneStaleRoutes` | `false` | Delete pages listed by the previous run's manifest that this run no longer writes |
+| `removeStyleTags` | `false` | Strip every style tag from the output; cannot be combined with `inlineCss` `'inline'` |
 | `removeScriptTags` | `false` | Strip every script tag from the output |
 | `asyncScriptTags` | `false` | Mark external scripts async |
 | `externalScripts` | `false` | Write injected state scripts as content-hashed same-origin files instead of inline; set by `csp: 'strict'` |
 | `flatOutput` | `false` | Write `about.html` instead of `about/index.html` |
-| `notFoundRoute` | `/404` | Route emitted as `404.html`; a notice is logged when it is never prerendered |
-| `saveAs` | `html` | `html`, `png` or `jpeg` |
-| `metadata` | `null` | Defaults for the head component: `siteUrl`, `siteName`, `titleTemplate`, `defaultImage`, `trailingSlash`, `base` |
+| `notFoundRoute` | `/404` | Route emitted as `404.html` with a robots noindex tag; a notice is logged when it is never prerendered |
+| `saveAs` | `html` | `html`, `png` or `jpeg`; identical screenshots are left untouched |
+| `metadata` | `null` | Defaults for the head component: `siteUrl` (origin only), `siteName`, `titleTemplate`, `defaultImage`, `trailingSlash`, `base` |
 | `verify` | `true` | Run the hydration verification pass |
 | `verifyChangedOnly` | `false` | Skip verification for routes whose HTML file did not change since the last run |
 | `failOnHydrationError` | `false` | Fail the run on hydration errors; off by default, where they are reported instead |
 | `failOnRerender` | `false` | Fail the run when a route re-renders instead of hydrating |
 | `failOnPageError` | `false` | Fail the run when a page throws while rendering; off by default, where page errors are reported |
+| `failOnEmptyPage` | `true` | Fail when a route renders no app content |
+| `failOnConsoleError` | `false` | Fail when the browser logs a console error while rendering |
+| `failOnFailedRequest` | `false` | Fail when a same-origin request fails while rendering |
+| `failOnDuplicateContent` | `false` | Fail when two routes produce byte-identical HTML |
+| `failOnUndetected` | `false` | Fail when verification cannot classify any route as hydrated or re-rendered |
+| `failOnVerificationError` | `false` | Fail when the verification pass cannot run on a route |
 | `failOnError` | `true` | Fail the run on route render errors |
 | `dryRun` | `false` | Render and report without writing |
 | `logLevel` | `info` | `silent`, `error`, `warn`, `info`, `debug` |
 | `serveCmd` | `null` | Command that starts the app server instead of static serving |
-| `url` | `null` | App URL, required with `serveCmd` |
+| `url` | `null` | App origin, required with `serveCmd`; put a sub-path in `base` instead |
 | `serveCmdTimeout` | `30000` | How long to wait for `serveCmd` to answer |
 | `shutdownTimeout` | `5000` | Grace period before force-killing `serveCmd` |
 
@@ -501,13 +513,14 @@ import { prerender } from 'snappy-prerender/core';
 
 const report = await prerender({ sourceDir: 'dist', include: ['/'] });
 if (!report.ok) {
-  for (const failure of report.verification.routes.filter((entry) => !entry.ok)) {
+  for (const failure of report.verification?.routes.filter((entry) => !entry.ok) ?? []) {
     console.error(failure.route, failure.hydrationErrors);
   }
+  for (const failure of report.errors) console.error(failure.route, failure.message);
 }
 ```
 
-The report exposes `routes`, `files` (with per-route `status`), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `duplicateTitles` (routes shipping more than one title), `verification` (per-route `mode` plus a `modes` summary), `preloadManifest`, `truncated`, and `ok`.
+The report exposes `routes`, `files` (with per-route `status` and `noindex`), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `consoleErrors`, `failedRequests`, `emptyPages`, `duplicatePages`, `duplicateTitles` (routes shipping more than one title), `verification` (nullable; per-route `mode`, `status` and `empty` plus a `modes` summary), `preloadManifest`, `sitemap`, `pruned`, `truncated`, and `ok`.
 
 `snappy-prerender` exports `DEFAULTS`, `prerender` and `resolveConfig`; the default export is the Vite plugin.
 
@@ -531,16 +544,22 @@ Dropped: `sourceMaps` (declared but never referenced in react-snap's code), `fix
 - Crawling is unbounded unless `maxRoutes` is set; hitting the cap marks the run as failed so incomplete output is never shipped silently. Which routes are cut is concurrency-dependent on a large site — narrow `include`/`exclude` instead when you need a deterministic set.
 - **React 19 native metadata.** React hoists `<title>` and `<meta>` rendered in JSX and leaves an existing template title in place, so using both systems produces two titles in the output. Use one of them; the run warns when a page ships more than one `<title>`.
 - If two routes would write the same file — such as `/` and `/index` with `flatOutput` — neither is written and the run fails with a collision error.
-- Screenshots are viewport-width full-page captures, so they reflect the configured `viewport`, not a device matrix.
-- Output files from routes that no longer exist are left in place; clean the output directory or use a fresh `destination` when route sets shrink.
+- Screenshots are viewport-width full-page captures, so they reflect the configured `viewport`, not a device matrix. Identical screenshots are left untouched.
+- **Output files from routes that no longer exist** are left in place unless `pruneStaleRoutes` is enabled, which deletes only files listed in the previous run's `.snappy-manifest.json`.
+- **Dead extensionless links** are indistinguishable from SPA routes to the static server, so a missing page can render the shell or the app's catch-all 404. Duplicate output is reported; set `failOnDuplicateContent` to enforce it, and use an app-level 404 marker where possible.
+- **Metadata pointing at the build server** is removed by default (`stripBuildOriginMetadata: true`) and reported. Set `metadata.siteUrl` so canonical and social URLs survive.
+- **`inlineCss`** rebases relative font and image URLs against each stylesheet. A sheet that uses `@import` is left as a link because concatenating it would change the cascade.
+- **`verifyChangedOnly` compares the generated HTML only.** If a bundle keeps the same filename while its contents change, that route's HTML is unchanged and its verification is skipped; content-hashed asset names (Vite and CRA defaults) make the HTML change as well.
+- **Destination directories are merged, not cleaned.** Point `destination` at a fresh directory when assets are removed from the build; `pruneStaleRoutes` only removes pages the run itself generated.
+- **`removeStyleTags`** cannot be combined with `inlineCss: 'inline'` or `true`; the config is rejected instead of silently shipping pages without CSS.
 
 ## Requirements
 
-- Node.js >= 20.19
+- Node.js >= 22.12
 - Chrome or Edge installed (detected automatically), or allow the one-time Chrome for Testing download fallback
 - `beasties` only if you use `inlineCss: 'critical'` (optional peer dependency)
 
-Browser resolution order: installed Chrome, installed Edge, a Playwright-managed browser, then a Chrome for Testing download from Google's version-pinned HTTPS bucket into `SNAPPY_BROWSER_CACHE_DIR` (defaults to the platform cache directory). Chrome for Testing publishes no checksum feed, so that archive is trusted on the strength of HTTPS and the pinned URL unless you set `browserDownloadHash`, which makes the download fail if the SHA-256 does not match. Set `browserDownload: false` to forbid downloads entirely.
+Browser resolution order: installed Chrome, installed Edge, a Playwright-managed browser, a Chrome for Testing build already in the tool cache, then a Chrome for Testing download from Google's version-pinned HTTPS bucket into `SNAPPY_BROWSER_CACHE_DIR` (defaults to the platform cache directory). An explicit `browser` choice never falls back to another engine. Set `browserDownloadVersion` to pin the build id and `browserDownloadHash` to pin the archive digest; without a hash the download is trusted on the strength of HTTPS and the pinned URL. Set `browserDownload: false` to forbid downloads entirely.
 
 ## Contributing
 

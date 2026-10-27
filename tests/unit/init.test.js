@@ -36,10 +36,23 @@ describe('detectProjectDefaults', () => {
     });
     assert.deepEqual(await detectProjectDefaults(dir), {
       sourceDir: 'dist',
+      base: '/',
       usesVite: true,
       runner: 'npm',
       installed: false,
     });
+  });
+
+  it('reads a Create React App homepage into the base path', async () => {
+    const dir = await makeDir({
+      'package.json': JSON.stringify({
+        dependencies: { 'react-scripts': '5.0.1' },
+        homepage: 'https://user.github.io/repo',
+      }),
+    });
+    const detected = await detectProjectDefaults(dir);
+    assert.equal(detected.sourceDir, 'build');
+    assert.equal(detected.base, '/repo/');
   });
 
   it('prefers the Create React App build directory', async () => {

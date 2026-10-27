@@ -7,6 +7,7 @@ import {
   findOutputCollisions,
   routeToFile,
   routeToScreenshotFile,
+  writeBufferIfChanged,
   writeFileIfChanged,
   writeRouteHtml,
 } from '../../src/core/output.js';
@@ -73,6 +74,24 @@ describe('findOutputCollisions', () => {
   it('flags routes that map to the same screenshot', () => {
     const collisions = findOutputCollisions(['/', '/index'], { saveAs: 'png' });
     assert.deepEqual([...collisions], [['index.png', ['/', '/index']]]);
+  });
+
+  it('flags routes that differ only by case when the filesystem is case-insensitive', () => {
+    const collisions = findOutputCollisions(
+      ['/About', '/about'],
+      { notFoundRoute: null },
+      { caseInsensitive: true },
+    );
+    assert.equal(collisions.size, 1);
+  });
+
+  it('keeps case-distinct routes apart on a case-sensitive filesystem', () => {
+    const collisions = findOutputCollisions(
+      ['/About', '/about'],
+      { notFoundRoute: null },
+      { caseInsensitive: false },
+    );
+    assert.equal(collisions.size, 0);
   });
 });
 
@@ -143,5 +162,30 @@ describe('writeFileIfChanged', () => {
     );
     // The temporary file used for the atomic rename is never left behind.
     assert.deepEqual(await fs.readdir(path.join(dir, 'snappy')), ['state-abc.js']);
+  });
+});
+
+describe('writeBufferIfChanged', () => {
+  it('leaves an identical screenshot untouched and rewrites a changed one', async () => {
+    const dir = await makeTempDir();
+    const first = await writeBufferIfChanged({
+      dir,
+      file: 'index.png',
+      buffer: Buffer.from([1, 2, 3]),
+    });
+    const second = await writeBufferIfChanged({
+      dir,
+      file: 'index.png',
+      buffer: Buffer.from([1, 2, 3]),
+    });
+    const third = await writeBufferIfChanged({
+      dir,
+      file: 'index.png',
+      buffer: Buffer.from([4, 5, 6]),
+    });
+    assert.equal(first.status, 'written');
+    assert.equal(second.status, 'unchanged');
+    assert.equal(third.status, 'written');
+    assert.deepEqual(await fs.readFile(path.join(dir, 'index.png')), Buffer.from([4, 5, 6]));
   });
 });

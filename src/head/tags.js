@@ -1,4 +1,5 @@
 import { collectBuildOrigins } from '../core/metadata-origin.js';
+import { pagePath, withTrailingSlash } from '../core/url-policy.js';
 
 const ABSOLUTE = /^https?:\/\//i;
 const PROTOCOL_RELATIVE = /^\/\//;
@@ -34,7 +35,7 @@ export function buildHeadEntries(props = {}, defaults = {}) {
     entries.push(metaProp('og:type', props.type ?? 'website'));
     if (siteName) entries.push(metaProp('og:site_name', siteName));
     if (props.locale) entries.push(metaProp('og:locale', props.locale));
-    const url = pageUrl(props.canonical ?? currentPath(), defaults);
+    const url = pageUrl(props.canonical ?? defaultPagePath(defaults), defaults);
     if (url) entries.push(metaProp('og:url', url));
     if (image) entries.push(metaProp('og:image', absoluteUrl(image, defaults)));
   }
@@ -45,7 +46,7 @@ export function buildHeadEntries(props = {}, defaults = {}) {
   }
 
   if (props.canonical !== false) {
-    const url = pageUrl(props.canonical ?? currentPath(), defaults);
+    const url = pageUrl(props.canonical ?? defaultPagePath(defaults), defaults);
     if (url)
       entries.push({ kind: 'link', key: 'rel:canonical', attrs: { rel: 'canonical', href: url } });
   }
@@ -139,23 +140,24 @@ function encodeSpaces(url) {
   return url.replace(/ /g, '%20');
 }
 
-// Applies the site's trailing slash convention to a URL, leaving the root alone.
-function withTrailingSlash(url, convention) {
-  if (convention !== 'always' && convention !== 'never') return url;
-  const [path, query] = url.split('?');
-  const isRoot = /^https?:\/\/[^/]+\/?$/i.test(path);
-  if (convention === 'always') {
-    const next = path.endsWith('/') ? path : `${path}/`;
-    return query ? `${next}?${query}` : next;
-  }
-  if (isRoot) return query ? `${path.replace(/\/$/, '/')}?${query}` : path.replace(/\/?$/, '/');
-  const next = path.replace(/\/+$/, '');
-  return query ? `${next}?${query}` : next;
+// Reads the route being rendered, which under prerendering is the page being captured,
+// and removes the public base path so absoluteUrl does not add it a second time.
+function currentPath(defaults = {}) {
+  const pathname = typeof location === 'undefined' ? '/' : location.pathname;
+  const base = defaults.base ?? '/';
+  if (base === '/') return pathname;
+  const prefix = base.replace(/\/$/, '');
+  if (pathname === prefix) return '/';
+  if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
+  return pathname;
 }
 
-// Reads the route being rendered, which under prerendering is the page being captured.
-function currentPath() {
-  return typeof location === 'undefined' ? '/' : location.pathname;
+// Builds the default canonical path from the current route and the output's URL policy.
+function defaultPagePath(defaults) {
+  return pagePath(currentPath(defaults), {
+    flatOutput: defaults.flatOutput === true,
+    trailingSlash: defaults.trailingSlash,
+  });
 }
 
 function metaName(name, content) {

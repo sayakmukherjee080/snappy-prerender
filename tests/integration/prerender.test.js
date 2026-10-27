@@ -276,13 +276,16 @@ describe('prerender integration: react 18 app', () => {
     // Tags carry the manager's owner attribute, so the patterns tolerate any attribute order.
     assert.match(page, /<title[^>]*>Head A \| PPS<\/title>/);
     assert.match(page, /<meta[^>]*property="og:title"[^>]*content="Head A \| PPS"/);
-    assert.match(page, /<meta[^>]*property="og:url"[^>]*content="https:\/\/pps\.example\/head-a"/);
+    assert.match(
+      page,
+      /<meta[^>]*property="og:url"[^>]*content="https:\/\/pps\.example\/head-a\/?"/,
+    );
     assert.match(
       page,
       /<meta[^>]*property="og:image"[^>]*content="https:\/\/pps\.example\/share-a\.png"/,
     );
     assert.match(page, /<meta[^>]*name="twitter:card"[^>]*content="summary_large_image"/);
-    assert.match(page, /<link[^>]*rel="canonical"[^>]*href="https:\/\/pps\.example\/head-a"/);
+    assert.match(page, /<link[^>]*rel="canonical"[^>]*href="https:\/\/pps\.example\/head-a\/?"/);
     assert.match(page, /<meta[^>]*name="robots"[^>]*content="index,follow"/);
     // The page's Head and the template both provide a description; the page's value wins
     // and never leaves two tags behind.
@@ -438,9 +441,9 @@ function describeLegacyReactApp(label, fixture) {
       assert.match(page, /<title[^>]*>Head A \| PPS<\/title>/);
       assert.match(
         page,
-        /<meta[^>]*property="og:url"[^>]*content="https:\/\/pps\.example\/head-a"/,
+        /<meta[^>]*property="og:url"[^>]*content="https:\/\/pps\.example\/head-a\/?"/,
       );
-      assert.match(page, /<link[^>]*rel="canonical"[^>]*href="https:\/\/pps\.example\/head-a"/);
+      assert.match(page, /<link[^>]*rel="canonical"[^>]*href="https:\/\/pps\.example\/head-a\/?"/);
     });
 
     it('updates the head on client-side navigation without a reload', async () => {
@@ -984,7 +987,7 @@ describe('prerender integration: capture and optimisation options', () => {
 
     const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
     assert.equal(html.includes('rel="stylesheet"'), false);
-    assert.match(html, /<style>\.hero \{ color: rgb\(1, 2, 3\); \}<\/style>/);
+    assert.match(html, /<style[^>]*>\.hero \{ color: rgb\(1, 2, 3\); \}<\/style>/);
   });
 
   it('inlines critical CSS with the critical strategy', async () => {
@@ -1176,7 +1179,7 @@ describe('prerender integration: capture and optimisation options', () => {
     // Attribute sorting means the property and content order is not fixed.
     assert.match(
       html,
-      /<meta(?=[^>]*property="og:url")(?=[^>]*content="https:\/\/pps\.example\/head-a")[^>]*>/,
+      /<meta(?=[^>]*property="og:url")(?=[^>]*content="https:\/\/pps\.example\/head-a\/?")[^>]*>/,
     );
     // The external bundle is marked async; the inert metadata element is left alone.
     assert.match(html, /<script[^>]*async[^>]*src=/);
@@ -1539,7 +1542,7 @@ describe('prerender integration: cli', () => {
     assert.equal(cli.status, 0, cli.stderr);
     const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
     assert.equal(html.includes('rel="stylesheet"'), false);
-    assert.match(html, /<style>\.hero\s*\{[^}]*rgb\(7, 8, 9\)[^}]*\}<\/style>/);
+    assert.match(html, /<style[^>]*>\.hero\s*\{[^}]*rgb\(7, 8, 9\)[^}]*\}<\/style>/);
     assert.equal(html.includes('\n  '), false);
   });
 
@@ -1601,7 +1604,10 @@ describe('prerender integration: cli', () => {
     assert.equal(cli.status, 0, cli.stderr);
     const html = await fs.readFile(path.join(sourceDir, 'head-a', 'index.html'), 'utf8');
     assert.match(html, /<title[^>]*>Head A \| CLI<\/title>/);
-    assert.match(html, /<meta[^>]*property="og:url"[^>]*content="https:\/\/cli\.example\/head-a"/);
+    assert.match(
+      html,
+      /<meta[^>]*property="og:url"[^>]*content="https:\/\/cli\.example\/head-a\/?"/,
+    );
   });
 
   it('rejects a config file that does not export a plain object', async () => {

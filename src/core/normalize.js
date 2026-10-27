@@ -17,14 +17,17 @@ export function normaliseHtml(html, options = {}) {
   const stats = {
     removedElements: 0,
     removedAttributes: 0,
+    removedMetadata: 0,
     dedupedStyles: 0,
     hints: 0,
     textSeparators: 0,
     titleElements: 0,
+    noindex: false,
     metadataOrigins: [],
   };
   const seenStyles = new Set();
   cleanChildren(document, stats, seenStyles, false, options);
+  if (options.noindex && !stats.noindex) stats.noindex = appendNoindex(document);
 
   const preconnectOrigins = options.preconnectOrigins ?? [];
   const preloadImages = options.preloadImages ?? [];
@@ -41,6 +44,7 @@ function cleanChildren(parent, stats, seenStyles, inHead, options) {
   const kept = [];
   for (const child of children) {
     const childInHead = inHead || child.tagName === 'head';
+    if (shouldStripMetadata(child, options, stats)) continue;
     if (shouldRemove(child, stats, options)) continue;
     if (child.attrs && options.removeAttributes?.length > 0) {
       stripAttributes(child, options.removeAttributes, stats);
@@ -48,6 +52,7 @@ function cleanChildren(parent, stats, seenStyles, inHead, options) {
     if (childInHead && child.tagName === 'style' && dedupeStyle(child, stats, seenStyles)) continue;
     if (childInHead && child.tagName === 'title') stats.titleElements += 1;
     if (childInHead) collectMetadataOrigins(child, stats);
+    if (childInHead) collectRobots(child, stats);
     if (options.asyncScriptTags && child.tagName === 'script') markScriptAsync(child);
     cleanChildren(child, stats, seenStyles, childInHead, options);
     if (child.content) cleanChildren(child.content, stats, seenStyles, childInHead, options);
@@ -84,13 +89,34 @@ function stripAttributes(node, patterns, stats) {
 
 // Reports whether an attribute name matches a string exactly or a RegExp pattern.
 function matchesAttribute(name, pattern) {
-  return pattern instanceof RegExp ? pattern.test(name) : name === pattern;
+  if (!(pattern instanceof RegExp)) return name === pattern;
+  pattern.lastIndex = 0;
+  const matched = pattern.test(name);
+  pattern.lastIndex = 0;
+  return matched;
+}
+
+// Removes metadata whose absolute URL points at the build server, so a loopback
+// canonical or share image never ships. The origin is recorded first so the run can
+// explain what was dropped.
+function shouldStripMetadata(node, options, stats) {
+  if (!options.stripBuildOriginMetadata || !isMetadataUrlNode(node)) return false;
+  const origins = collectBuildOrigins(metadataUrlValue(node));
+  if (origins.length === 0) return false;
+  for (const origin of origins) {
+    if (stats.metadataOrigins.length >= MAX_METADATA_ORIGINS) break;
+    if (!stats.metadataOrigins.includes(origin)) stats.metadataOrigins.push(origin);
+  }
+  stats.removedMetadata += 1;
+  stats.removedElements += 1;
+  return true;
 }
 
 // Reports whether a node is removed for any of the configured reasons. The metadata script is
 // exempt: the head layer reads it on the client, so stripping it would lose the site defaults.
 function shouldRemove(node, stats, options) {
   if (node.tagName === 'script' && hasAttribute(node, 'data-snappy-meta', null)) return false;
+  if (node.tagName === 'style' && hasAttribute(node, 'data-snappy-inline', null)) return false;
   const reason =
     (node.tagName === 'style' && hasAttribute(node, 'id', FREEZE_STYLE_ID)) ||
     hasAttribute(node, REMOVE_ATTRIBUTE, null) ||
@@ -113,6 +139,14 @@ function collectMetadataOrigins(node, stats) {
   }
 }
 
+// Records a robots noindex so the sitemap can leave the page out.
+function collectRobots(node, stats) {
+  if (node.tagName !== 'meta') return;
+  if (attributeValue(node, 'name').toLowerCase() !== 'robots') return;
+  const content = attributeValue(node, 'content').toLowerCase();
+  if (/\b(noindex|none)\b/.test(content)) stats.noindex = true;
+}
+
 // Drops a style tag whose text was already seen, reporting it through stats.
 function dedupeStyle(node, stats, seenStyles) {
   const text = textContent(node);
@@ -124,9 +158,11 @@ function dedupeStyle(node, stats, seenStyles) {
   return false;
 }
 
-// Adds async to external scripts that are neither async nor defer yet.
+// Adds async to external scripts that are neither async nor defer yet. The injected state
+// script is exempt because it must run before the app bundle so snapStore is available.
 function markScriptAsync(node) {
   const attrs = node.attrs ?? [];
+  if (attrs.some((attribute) => attribute.name === 'data-snappy-state')) return;
   if (!attrs.some((attribute) => attribute.name === 'src')) return;
   if (attrs.some((attribute) => attribute.name === 'async' || attribute.name === 'defer')) return;
   attrs.push({ name: 'async', value: '' });
@@ -137,6 +173,20 @@ function isBlobStylesheet(node) {
   if (node.tagName !== 'link') return false;
   if (attributeValue(node, 'rel').toLowerCase() !== 'stylesheet') return false;
   return attributeValue(node, 'href').startsWith('blob:');
+}
+
+// Adds a robots noindex meta to the not-found page, which may be served with a 200 by
+// a host that does not apply 404 status codes. Returns true when the tag was added.
+function appendNoindex(document) {
+  const head = findHead(document);
+  if (!head) return false;
+  head.childNodes.push(
+    createElement('meta', [
+      { name: 'name', value: 'robots' },
+      { name: 'content', value: 'noindex' },
+    ]),
+  );
+  return true;
 }
 
 // Appends preconnect and image preload links to the head, skipping duplicates.

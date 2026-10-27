@@ -46,11 +46,40 @@ describe('startStaticServer', () => {
     }
   });
 
-  it('falls back to index.html for unknown SPA routes', async () => {
+  it('falls back to index.html for unknown SPA navigations', async () => {
     const dir = await makeSite();
     const server = await startStaticServer({ dir, base: '/' });
     try {
-      const response = await fetch(`${server.origin}/deep/link`);
+      const response = await fetch(`${server.origin}/deep/link`, {
+        headers: { accept: 'text/html' },
+      });
+      assert.equal(response.status, 200);
+      assert.match(await response.text(), /home/);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not serve index.html for a missing asset', async () => {
+    const dir = await makeSite();
+    const server = await startStaticServer({ dir, base: '/' });
+    try {
+      const response = await fetch(`${server.origin}/missing.js`, {
+        headers: { accept: '*/*' },
+      });
+      assert.equal(response.status, 404);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('serves an SPA navigation whose last segment contains a dot', async () => {
+    const dir = await makeSite();
+    const server = await startStaticServer({ dir, base: '/' });
+    try {
+      const response = await fetch(`${server.origin}/releases/v1.2`, {
+        headers: { accept: 'text/html' },
+      });
       assert.equal(response.status, 200);
       assert.match(await response.text(), /home/);
     } finally {

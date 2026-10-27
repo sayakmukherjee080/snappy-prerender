@@ -5,7 +5,7 @@
  */
 const config = {
   sourceDir: 'dist',
-  include: ['/', '/platform', '/network', '/pricing', '/company', '/404'],
+  include: ['/', '/platform', '/network', '/pricing', '/company', '/seo', '/private', '/404'],
   notFoundRoute: '/404',
   metadata: {
     siteUrl: 'https://aethercompute.space',

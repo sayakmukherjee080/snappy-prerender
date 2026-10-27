@@ -49,6 +49,7 @@ export function createResourceCollector({
         const url = request.url();
         const parsed = parseUrl(url);
         if (!parsed || parsed.origin !== origin) return;
+        if (response.status() >= 400) return;
         const path = toAppPath(url, base);
         if (!path) return;
 

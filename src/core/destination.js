@@ -8,8 +8,14 @@ import path from 'node:path';
  * before it is overwritten, and entries that cannot be copied are counted.
  */
 export async function prepareDestination({ sourceDir, destination, log }) {
-  if (!destination || path.resolve(destination) === path.resolve(sourceDir)) {
-    return sourceDir;
+  if (!destination) return path.resolve(sourceDir);
+  const source = path.resolve(sourceDir);
+  const target = path.resolve(destination);
+  if (target === source) return source;
+  if (target.startsWith(`${source}${path.sep}`)) {
+    throw new Error(
+      `destination cannot be inside sourceDir: ${target} is inside ${source}. Use a sibling directory.`,
+    );
   }
   const existing = await fs.readdir(destination).catch(() => []);
   if (existing.length > 0) {

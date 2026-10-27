@@ -1,9 +1,12 @@
+import { hasImportRule, rewriteCssUrls } from './css-url.js';
 import { minifyCss } from './minify.js';
 
 /**
  * Inlines every same-origin stylesheet the page loaded, replacing the links with a
  * single style tag. Blob-backed stylesheets work too because the text is read from
- * the live page. Stylesheets that cannot be fetched are left in place.
+ * the live page. Stylesheets that cannot be fetched, or that use @import, are left in
+ * place. Relative url() values are rebased against each sheet before joining so fonts
+ * and images keep working on nested routes.
  */
 export async function inlineStylesheets({ page, minifyCssOptions }) {
   const collected = await page.evaluate(async () => {
@@ -11,7 +14,7 @@ export async function inlineStylesheets({ page, minifyCssOptions }) {
     // applies, so a print stylesheet is left as a link instead of becoming active.
     const INLINEABLE_MEDIA = new Set(['', 'all', 'screen']);
     const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
-    const parts = [];
+    const sheets = [];
     const skipped = [];
     for (const link of links) {
       const media = (link.getAttribute('media') ?? '').trim().toLowerCase();
@@ -22,23 +25,41 @@ export async function inlineStylesheets({ page, minifyCssOptions }) {
       try {
         const response = await fetch(link.href);
         if (!response.ok) throw new Error(String(response.status));
-        parts.push(await response.text());
-        link.remove();
+        sheets.push({ css: await response.text(), href: link.href });
       } catch {
         skipped.push(link.href);
       }
     }
-    return { css: parts.join('\n'), skipped };
+    return { sheets, skipped };
   });
 
-  if (collected.css.trim().length === 0) return { skipped: collected.skipped };
-  const css = minifyCssOptions ? minifyCss(collected.css, minifyCssOptions) : collected.css;
-  await page.evaluate((text) => {
-    const style = document.createElement('style');
-    style.textContent = text;
-    document.head.appendChild(style);
-  }, css);
-  return { skipped: collected.skipped };
+  const inlineable = [];
+  const skipped = [...collected.skipped];
+  for (const sheet of collected.sheets) {
+    if (hasImportRule(sheet.css)) skipped.push(sheet.href);
+    else inlineable.push(sheet);
+  }
+  if (inlineable.length === 0) return { skipped };
+
+  const pageOrigin = new URL(page.url()).origin;
+  const joined = inlineable
+    .map((sheet) => rewriteCssUrls(sheet.css, sheet.href, pageOrigin))
+    .join('\n');
+  const css = minifyCssOptions ? minifyCss(joined, minifyCssOptions) : joined;
+  await page.evaluate(
+    ({ text, hrefs }) => {
+      const style = document.createElement('style');
+      style.setAttribute('data-snappy-inline', '');
+      style.textContent = text;
+      document.head.appendChild(style);
+      const inlined = new Set(hrefs);
+      for (const link of document.querySelectorAll('link[rel="stylesheet"]')) {
+        if (inlined.has(link.href)) link.remove();
+      }
+    },
+    { text: css, hrefs: inlineable.map((sheet) => sheet.href) },
+  );
+  return { skipped };
 }
 
 /**

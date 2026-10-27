@@ -8,18 +8,32 @@ import sirv from 'sirv';
  * an ephemeral loopback port so parallel runs never collide.
  */
 export async function startStaticServer({ dir, base }) {
-  const handler = sirv(dir, { dev: true, etag: true, single: true });
+  const handler = sirv(dir, { dev: true, etag: true });
+  const indexHandler = sirv(dir, { dev: true, etag: true });
   const server = http.createServer((request, response) => {
     if (base !== '/') {
       const stripped = stripBase(request.url, base);
       if (stripped === null) {
-        response.statusCode = 404;
-        response.end('Not found');
+        notFound(response);
         return;
       }
       request.url = stripped;
     }
-    handler(request, response);
+    handler(request, response, () => {
+      // Navigation requests can be SPA routes that only exist in the router. Assets,
+      // fetches and websockets ask for something else and must see their real 404.
+      if (!acceptsHtml(request)) {
+        notFound(response);
+        return;
+      }
+      const original = request.url;
+      request.url = '/index.html';
+      try {
+        indexHandler(request, response, () => notFound(response));
+      } finally {
+        request.url = original;
+      }
+    });
   });
 
   await new Promise((resolve, reject) => {
@@ -35,6 +49,18 @@ export async function startStaticServer({ dir, base }) {
       await new Promise((resolve) => server.close(resolve));
     },
   };
+}
+
+// Reports whether a request is a document navigation rather than an asset or fetch.
+function acceptsHtml(request) {
+  const accept = request.headers.accept ?? '';
+  return accept.includes('text/html') || accept.includes('application/xhtml+xml');
+}
+
+// Answers a request no handler could serve.
+function notFound(response) {
+  response.statusCode = 404;
+  response.end('Not found');
 }
 
 /**
