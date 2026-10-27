@@ -36,7 +36,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "snappy-prerender": "./src/cli.js"
+    "snappy-prerender": "src/cli.js"
   },
   "files": [
     "src",
