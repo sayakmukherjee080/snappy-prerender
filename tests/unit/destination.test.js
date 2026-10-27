@@ -13,6 +13,13 @@ async function makeDir() {
   return dir;
 }
 
+async function exists(target) {
+  return fs
+    .stat(target)
+    .then(() => true)
+    .catch(() => false);
+}
+
 after(async () => {
   for (const dir of tempDirs) await fs.rm(dir, { recursive: true, force: true });
 });
@@ -65,6 +72,30 @@ describe('prepareDestination', () => {
       messages.some((message) => message.includes('is not empty')),
       true,
     );
+  });
+
+  it('empties the destination first when cleanDestination is on', async () => {
+    const sourceDir = await makeDir();
+    await fs.writeFile(path.join(sourceDir, 'index.html'), 'home');
+    const destination = await makeDir();
+    await fs.writeFile(path.join(destination, 'stale.html'), 'old');
+
+    await prepareDestination({ sourceDir, destination, cleanDestination: true });
+
+    assert.equal(await exists(path.join(destination, 'stale.html')), false);
+    assert.equal(await fs.readFile(path.join(destination, 'index.html'), 'utf8'), 'home');
+  });
+
+  it('refuses to clean a destination that contains the source', async () => {
+    const destination = await makeDir();
+    const sourceDir = path.join(destination, 'dist');
+    await fs.mkdir(sourceDir);
+    await fs.writeFile(path.join(sourceDir, 'index.html'), 'home');
+    await assert.rejects(
+      prepareDestination({ sourceDir, destination, cleanDestination: true }),
+      /cleanDestination would delete sourceDir/,
+    );
+    assert.equal(await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8'), 'home');
   });
 
   it('stays quiet when the destination does not exist yet', async () => {

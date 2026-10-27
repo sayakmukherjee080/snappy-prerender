@@ -7,7 +7,12 @@ import path from 'node:path';
  * HTML and the source directory stays untouched. An existing destination is reported
  * before it is overwritten, and entries that cannot be copied are counted.
  */
-export async function prepareDestination({ sourceDir, destination, log }) {
+export async function prepareDestination({
+  sourceDir,
+  destination,
+  log,
+  cleanDestination = false,
+}) {
   if (!destination) return path.resolve(sourceDir);
   const source = path.resolve(sourceDir);
   const target = path.resolve(destination);
@@ -16,6 +21,20 @@ export async function prepareDestination({ sourceDir, destination, log }) {
     throw new Error(
       `destination cannot be inside sourceDir: ${target} is inside ${source}. Use a sibling directory.`,
     );
+  }
+  if (cleanDestination) {
+    const sourceInsideTarget = path.relative(target, source);
+    if (
+      sourceInsideTarget.length > 0 &&
+      !sourceInsideTarget.startsWith('..') &&
+      !path.isAbsolute(sourceInsideTarget)
+    ) {
+      throw new Error(
+        `cleanDestination would delete sourceDir: ${source} is inside ${target}. Choose a destination outside the build output.`,
+      );
+    }
+    await fs.rm(target, { recursive: true, force: true });
+    log?.debug(`cleaned destination ${destination}`);
   }
   const existing = await fs.readdir(destination).catch(() => []);
   if (existing.length > 0) {

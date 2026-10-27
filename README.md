@@ -432,6 +432,7 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | --- | --- | --- |
 | `sourceDir` | `dist` | Built output directory |
 | `destination` | `null` | Copy the output here and write results here instead of in place |
+| `cleanDestination` | `false` | Empty the destination before copying, so removed assets do not linger |
 | `base` | `/` | Public base path |
 | `include` | `['/']` | Seed routes and output allowlist. Wildcards (`/blog/*`) filter discovered routes, only concrete paths are seeded, and a seed that does not match the list is used for crawling but not written. Passing `['/']` is treated as the default: crawl everything linked from the root |
 | `exclude` | `[]` | Routes to skip, strings or RegExp |
@@ -550,7 +551,7 @@ Dropped: `sourceMaps` (declared but never referenced in react-snap's code), `fix
 - **Metadata pointing at the build server** is removed by default (`stripBuildOriginMetadata: true`) and reported. Set `metadata.siteUrl` so canonical and social URLs survive.
 - **`inlineCss`** rebases relative font and image URLs against each stylesheet. A sheet that uses `@import` is left as a link because concatenating it would change the cascade.
 - **`verifyChangedOnly` compares the generated HTML only.** If a bundle keeps the same filename while its contents change, that route's HTML is unchanged and its verification is skipped; content-hashed asset names (Vite and CRA defaults) make the HTML change as well.
-- **Destination directories are merged, not cleaned.** Point `destination` at a fresh directory when assets are removed from the build; `pruneStaleRoutes` only removes pages the run itself generated.
+- **Destination directories are merged unless `cleanDestination` is on.** That option empties the destination first; `pruneStaleRoutes` separately removes pages the run itself generated.
 - **`removeStyleTags`** cannot be combined with `inlineCss: 'inline'` or `true`; the config is rejected instead of silently shipping pages without CSS.
 
 ## Requirements
