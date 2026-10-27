@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-  buildHeadEntries,
-  findBuildOriginUrls,
-  headKey,
-  mergeHeadEntries,
-} from '../../src/head/tags.js';
+import { findBuildOriginUrls } from '../../src/core/build-origin.js';
+import { buildHeadEntries, headKey, mergeHeadEntries } from '../../src/head/tags.js';
 
 const defaults = {
   siteUrl: 'https://pps.example',
@@ -253,5 +249,12 @@ describe('findBuildOriginUrls', () => {
       findBuildOriginUrls('<meta property="og:url" content="https://pps.example/a">'),
       [],
     );
+  });
+
+  it('ignores loopback URLs outside metadata tags', () => {
+    const html =
+      '<!doctype html><html><head><meta property="og:title" content="A"></head>' +
+      '<body><script>window.api = "http://127.0.0.1:5500/api";</script></body></html>';
+    assert.deepEqual(findBuildOriginUrls(html), []);
   });
 });

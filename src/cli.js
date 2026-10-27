@@ -54,6 +54,7 @@ Options:
       --fail-on-console-error Fail when the browser logs a console error while rendering
       --fail-on-failed-request  Fail when a same-origin request fails while rendering
       --fail-on-duplicate-content  Fail when two routes produce identical HTML
+      --fail-on-build-origin-metadata  Fail when metadata still points at the prerender server
       --fail-on-undetected    Fail when verification cannot find a framework root
       --fail-on-verification-error  Fail when the verification pass cannot run
       --block-third-party     Block third-party requests while rendering
@@ -152,6 +153,7 @@ async function main() {
       'fail-on-console-error': { type: 'boolean' },
       'fail-on-failed-request': { type: 'boolean' },
       'fail-on-duplicate-content': { type: 'boolean' },
+      'fail-on-build-origin-metadata': { type: 'boolean' },
       'fail-on-undetected': { type: 'boolean' },
       'fail-on-verification-error': { type: 'boolean' },
       'no-block-third-party': { type: 'boolean' },
@@ -292,6 +294,7 @@ function cliOptions({ values, positionals }) {
   if (values['fail-on-console-error']) options.failOnConsoleError = true;
   if (values['fail-on-failed-request']) options.failOnFailedRequest = true;
   if (values['fail-on-duplicate-content']) options.failOnDuplicateContent = true;
+  if (values['fail-on-build-origin-metadata']) options.failOnBuildOriginMetadata = true;
   if (values['fail-on-undetected']) options.failOnUndetected = true;
   if (values['fail-on-verification-error']) options.failOnVerificationError = true;
   if (values['no-block-third-party']) options.blockThirdParty = false;

@@ -7,7 +7,7 @@
 [![node](https://img.shields.io/node/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![license](https://img.shields.io/npm/l/snappy-prerender.svg)](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/LICENSE)
 
-Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). While 2.6.0 is a release candidate it is published under the `next` tag, so install with `npm install --save-dev snappy-prerender@next`; the plain command below works once 2.6.0 is stable. Release notes are in [CHANGELOG.md](CHANGELOG.md).
+Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). Install with `npm install --save-dev snappy-prerender`. Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 - **No SSR entry, no framework migration, no app changes.** If it builds to a `dist` directory, it can be prerendered.
 - **React 16.8, 17, 18 and 19, Vite 6/7/8, or any static build.**
@@ -477,6 +477,7 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `removeBlobs` | `true` | Drop stylesheet links pointing at dead `blob:` URLs |
 | `removeAttributes` | `[]` | Attribute names or RegExps to drop from the output, for libraries that stamp per-load ids |
 | `stripBuildOriginMetadata` | `true` | Remove canonical and social tags whose URL points at the prerender server |
+| `failOnBuildOriginMetadata` | `false` | Fail when metadata still points at the prerender server after stripping |
 | `pruneStaleRoutes` | `false` | Delete pages listed by the previous run's manifest that this run no longer writes |
 | `removeStyleTags` | `false` | Strip every style tag from the output; cannot be combined with `inlineCss` `'inline'` |
 | `removeScriptTags` | `false` | Strip every script tag from the output |

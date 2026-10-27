@@ -110,4 +110,26 @@ describe('prepareDestination', () => {
     assert.deepEqual(messages, []);
     assert.equal(await fs.readFile(path.join(destination, 'index.html'), 'utf8'), 'home');
   });
+
+  it('counts non-file entries such as symlinks that cannot be copied', async (t) => {
+    const sourceDir = await makeDir();
+    await fs.writeFile(path.join(sourceDir, 'index.html'), 'home');
+    try {
+      await fs.symlink('index.html', path.join(sourceDir, 'linked.html'));
+    } catch (error) {
+      t.skip(`symlinks need privileges on this platform: ${error.code}`);
+      return;
+    }
+    const destination = await makeDir();
+
+    const messages = [];
+    const log = { warn: (message) => messages.push(message), debug: () => {} };
+    await prepareDestination({ sourceDir, destination, log });
+
+    assert.equal(
+      messages.some((message) => message.includes('skipped 1 non-file')),
+      true,
+    );
+    assert.equal(await exists(path.join(destination, 'linked.html')), false);
+  });
 });
