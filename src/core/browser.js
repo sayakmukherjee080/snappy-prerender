@@ -96,6 +96,30 @@ function firstLine(message) {
 }
 
 /**
+ * Chooses a cached Chrome for Testing install. Kept pure so the offline/version-pinned
+ * selection can be tested without touching the machine's browser cache.
+ */
+export function selectCachedChrome(
+  installed,
+  { browser = 'chrome', platform, buildId = null, executableExists = () => true },
+) {
+  return (
+    installed.find(
+      (entry) =>
+        entry.browser === browser &&
+        entry.platform === platform &&
+        (!buildId || entry.buildId === buildId) &&
+        executableExists(entry.executablePath),
+    ) ?? null
+  );
+}
+
+// Formats download progress for the debug log; a missing content length reports 0%.
+export function downloadPercent(downloaded, total) {
+  return total > 0 ? Math.round((downloaded / total) * 100) : 0;
+}
+
+/**
  * Finds a Chrome for Testing build already present in the tool's cache, so a rebuild
  * never needs the version feed or a download when a browser is available offline.
  * Honours browserDownloadVersion when one is configured.
@@ -105,14 +129,12 @@ async function findCachedChrome(config) {
   const platform = browsers.detectBrowserPlatform();
   if (!platform) return null;
   const installed = browsers.getInstalledBrowsers({ cacheDir: browserCacheDir() });
-  const match = installed.find(
-    (entry) =>
-      entry.browser === browsers.Browser.CHROME &&
-      entry.platform === platform &&
-      (!config.browserDownloadVersion || entry.buildId === config.browserDownloadVersion) &&
-      fs.existsSync(entry.executablePath),
-  );
-  return match ?? null;
+  return selectCachedChrome(installed, {
+    browser: browsers.Browser.CHROME,
+    platform,
+    buildId: config.browserDownloadVersion,
+    executableExists: fs.existsSync,
+  });
 }
 
 /**
@@ -147,7 +169,7 @@ async function downloadChrome(config, log) {
     cacheDir,
     expectedHash: config.browserDownloadHash ?? undefined,
     downloadProgressCallback: (downloaded, total) =>
-      log.debug(`  downloaded ${total > 0 ? Math.round((downloaded / total) * 100) : 0}%`),
+      log.debug(`  downloaded ${downloadPercent(downloaded, total)}%`),
   });
   if (!fs.existsSync(installed.executablePath)) {
     throw new Error(`Chrome download reported success but ${installed.executablePath} is missing`);

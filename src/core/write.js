@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { findBuildOriginUrls } from './build-origin.js';
 import { inlineCriticalCss } from './inline-css.js';
 import { minifyHtml } from './minify.js';
 import { normaliseHtml } from './normalize.js';
@@ -212,6 +213,14 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
     state,
   });
   if (stats.titleElements > 1) report.duplicateTitles.push(route);
+  if (config.failOnBuildOriginMetadata) {
+    const origins = findBuildOriginUrls(output);
+    if (origins.length > 0) {
+      const message = `metadata still points at the build server: ${origins.join(', ')}`;
+      report.errors.push({ route, message });
+      log.error(`  ${route}: ${message}`);
+    }
+  }
   const file = await writeRouteHtml({ dir: outputDir, route, html: output, config });
   const resources = config.preloadManifest
     ? collectPageResources(output, { base: config.base, route })

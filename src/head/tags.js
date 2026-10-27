@@ -1,4 +1,3 @@
-import { collectBuildOrigins } from '../core/metadata-origin.js';
 import { pagePath, withTrailingSlash } from '../core/url-policy.js';
 
 const ABSOLUTE = /^https?:\/\//i;
@@ -87,14 +86,6 @@ export function headKey(entry) {
   const httpEquiv = attrsValue(entry.attrs, 'http-equiv');
   if (httpEquiv) return `meta:http-equiv:${httpEquiv}`;
   return `meta:${attrsKey(entry.attrs)}`;
-}
-
-/**
- * Collects the absolute metadata URLs in a document that point at the machine the
- * prerenderer ran on, which happens when no public siteUrl was configured.
- */
-export function findBuildOriginUrls(html) {
-  return collectBuildOrigins(html);
 }
 
 // Applies the site's title template unless the title already carries its suffix or is the

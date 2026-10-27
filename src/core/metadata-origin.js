@@ -25,6 +25,15 @@ export function collectBuildOrigins(text, limit = 3) {
   return [...new Set(matches)].slice(0, limit);
 }
 
+/**
+ * Scans a serialized document for build-server origins. Used only when the optional
+ * `failOnBuildOriginMetadata` gate is enabled, so a caller that turns stripping off can
+ * still make loopback metadata a build failure.
+ */
+export function findBuildOriginUrls(html) {
+  return collectBuildOrigins(html);
+}
+
 // Reports whether a meta key names a URL, such as og:url, og:image or twitter:image.
 function isUrlKey(key) {
   const [prefix, ...rest] = key.toLowerCase().split(':');

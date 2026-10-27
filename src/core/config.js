@@ -104,6 +104,7 @@ export const DEFAULTS = Object.freeze({
   failOnFailedRequest: false,
   failOnDuplicateContent: false,
   stripBuildOriginMetadata: true,
+  failOnBuildOriginMetadata: false,
   pruneStaleRoutes: false,
   metadata: null,
   failOnError: true,

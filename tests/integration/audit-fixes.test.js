@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -32,6 +34,41 @@ async function exists(target) {
     .stat(target)
     .then(() => true)
     .catch(() => false);
+}
+
+/**
+ * Minimal WebSocket server that completes the HTTP upgrade and counts how many
+ * connections reach it. Enough to prove a third-party socket was blocked before the
+ * handshake, without adding a production dependency just for tests.
+ */
+async function startWebSocketServer() {
+  let connections = 0;
+  const sockets = new Set();
+  const server = http.createServer();
+  server.on('upgrade', (request, socket) => {
+    connections += 1;
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+    socket.on('error', () => {});
+    const key = request.headers['sec-websocket-key'] ?? '';
+    const accept = createHash('sha1')
+      .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest('base64');
+    socket.write(
+      'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+        `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
+    );
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    port: server.address().port,
+    connections: () => connections,
+    close: () =>
+      new Promise((resolve) => {
+        for (const socket of sockets) socket.destroy();
+        server.close(resolve);
+      }),
+  };
 }
 
 describe('audit fixes', () => {
@@ -116,6 +153,25 @@ describe('audit fixes', () => {
     await prerender({ sourceDir, verify: false, logLevel: 'silent' });
     const html = await fs.readFile(path.join(sourceDir, 'index.html'), 'utf8');
     assert.equal(html.includes('127.0.0.1'), false);
+  });
+
+  it('can gate leftover build-origin metadata when stripping is disabled', async () => {
+    const sourceDir = await makeSite({
+      'index.html':
+        '<!doctype html><html><head><link rel="canonical" href="http://127.0.0.1:4321/"></head><body><h1>Home</h1></body></html>',
+    });
+    const report = await prerender({
+      sourceDir,
+      stripBuildOriginMetadata: false,
+      failOnBuildOriginMetadata: true,
+      verify: false,
+      logLevel: 'silent',
+    });
+    assert.equal(report.ok, false);
+    assert.equal(
+      report.errors.some((entry) => entry.message.includes('build server')),
+      true,
+    );
   });
 
   it('verifies changed HTML even when its shared state script is unchanged', async () => {
@@ -219,6 +275,71 @@ describe('audit fixes', () => {
       report.failedRequests.some((entry) => entry.url.endsWith('/missing.png')),
       true,
     );
+  });
+
+  it('reports console errors and enforces the console gate', async () => {
+    const sourceDir = await makeSite({
+      'index.html':
+        '<!doctype html><html><body><h1>Console</h1><script>console.error("boom")</script></body></html>',
+    });
+    const report = await prerender({
+      sourceDir,
+      verify: false,
+      failOnConsoleError: true,
+      logLevel: 'silent',
+    });
+    assert.equal(report.ok, false);
+    assert.equal(
+      report.consoleErrors.some((entry) => entry.message.includes('boom')),
+      true,
+    );
+  });
+
+  it('can fail when verification cannot find a framework root', async () => {
+    const sourceDir = await makeSite({
+      'index.html': '<!doctype html><html><body><h1>Static</h1></body></html>',
+    });
+    const report = await prerender({
+      sourceDir,
+      failOnUndetected: true,
+      logLevel: 'silent',
+    });
+    assert.equal(report.verification.modes.undetected > 0, true);
+    assert.equal(report.ok, false);
+  });
+
+  it('blocks third-party WebSockets and allows them when blocking is off', async () => {
+    const socketServer = await startWebSocketServer();
+    try {
+      const sourceDir = await makeSite({
+        'index.html': [
+          '<!doctype html><html><body><h1>Home</h1><script>',
+          'window.__prerenderReady = false;',
+          `const socket = new WebSocket('ws://127.0.0.1:${socketServer.port}/ws');`,
+          'const done = () => { window.__prerenderReady = true; };',
+          'socket.onopen = done; socket.onerror = done; socket.onclose = done;',
+          '</script></body></html>',
+        ].join(''),
+      });
+
+      await prerender({
+        sourceDir,
+        blockThirdParty: true,
+        verify: false,
+        logLevel: 'silent',
+      });
+      assert.equal(socketServer.connections(), 0);
+
+      await prerender({
+        sourceDir,
+        blockThirdParty: false,
+        verify: false,
+        logLevel: 'silent',
+      });
+      assert.equal(socketServer.connections() > 0, true);
+    } finally {
+      await socketServer.close();
+    }
   });
 
   it('leaves an identical screenshot untouched on a rerun', async () => {

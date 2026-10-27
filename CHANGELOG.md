@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
-## [Unreleased]
+## [2.6.0] - 2026-10-27
 
 ### Added
 
@@ -15,8 +15,8 @@ the release tags; see the Git history for those changes.
 - `pruneStaleRoutes` removes pages recorded by the previous run's `.snappy-manifest.json`
   when they are no longer produced, without touching assets or user files.
 - New build gates: `failOnEmptyPage` (on by default), `failOnConsoleError`,
-  `failOnFailedRequest`, `failOnDuplicateContent`, `failOnUndetected` and
-  `failOnVerificationError`.
+  `failOnFailedRequest`, `failOnDuplicateContent`, `failOnUndetected`,
+  `failOnVerificationError` and the optional `failOnBuildOriginMetadata`.
 - `browserDownloadVersion` pins the Chrome for Testing build id; a cached build is now
   used without contacting the version feed, so offline rebuilds work.
 - `stripBuildOriginMetadata` removes canonical and social tags that point at the
