@@ -1,31 +1,31 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { writePreloadManifest, writeSitemap } from './artifacts.js';
 import { launchBrowser } from './browser.js';
 import { resolveConfig } from './config.js';
 import { prepareDestination } from './destination.js';
-import { inlineCriticalCss } from './inline-css.js';
 import { createLogger } from './log.js';
-import { minifyHtml } from './minify.js';
-import { normaliseHtml } from './normalize.js';
-import {
-  findOutputCollisions,
-  routeToScreenshotFile,
-  writeFileIfChanged,
-  writeRouteHtml,
-} from './output.js';
-import { buildPreloadManifest } from './preload-manifest.js';
+import { routeToFile } from './output.js';
+import { pruneStaleFiles, readPruneManifest, writePruneManifest } from './prune.js';
 import { renderRoute } from './render.js';
-import { crawlRoots, filterRoutes, normaliseRoute, toPublicPath, withinDepth } from './routes.js';
+import {
+  crawlRoots,
+  filterRoutes,
+  isIncludedRoute,
+  normaliseRoute,
+  withinDepth,
+} from './routes.js';
 import { createPool } from './scheduler.js';
 import { startCommandServer, startStaticServer } from './server.js';
-import { buildSitemap, withSitemapDirective } from './sitemap.js';
 import { verifyRoutes } from './verify.js';
+import { writeAllRoutes } from './write.js';
 
 /**
  * Entry point of the prerenderer: serves the built output, crawls and renders
  * routes in a real browser, post-processes and writes one file per route, then
- * verifies hydration. Returns a report instead of throwing so callers decide how to
- * fail.
+ * verifies hydration. Route, page, verification and artifact failures are returned
+ * in the report; setup errors such as invalid config, a missing source directory or
+ * a browser that cannot start are thrown so the caller can stop immediately.
  */
 export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   const config = resolveConfig(userOptions);
@@ -36,6 +36,8 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
 
   await assertSourceDir(sourceDir, config);
   const outputDir = await resolveOutputDir({ sourceDir, config, log });
+  const previousManifest =
+    config.pruneStaleRoutes && !config.dryRun ? await readPruneManifest(outputDir) : null;
 
   if (config.saveAs !== 'html' && config.verify) {
     log.warn(`saveAs: '${config.saveAs}' writes images, so hydration verification is skipped`);
@@ -55,10 +57,15 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     files: [],
     errors: [],
     pageErrors: [],
+    consoleErrors: [],
+    failedRequests: [],
+    emptyPages: [],
     duplicateTitles: [],
+    duplicatePages: [],
     verification: null,
     preloadManifest: null,
     sitemap: null,
+    pruned: [],
     truncated: null,
     ok: false,
     durationMs: 0,
@@ -78,9 +85,11 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       config,
       log,
       report,
-      manifestEntries,
-      outputDir,
     });
+    if (report.routes.length === 0) {
+      report.errors.push({ route: null, message: 'no routes were rendered' });
+      log.error('No routes were rendered; check include, exclude and sourceDir');
+    }
     const pageErrors = report.pageErrors.length;
     log.info(
       `Rendered ${report.routes.length} route(s)${pageErrors > 0 ? `, ${pageErrors} page error(s)` : ''}`,
@@ -91,13 +100,26 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       );
     }
 
-    const verifiable = await writeAllRoutes({ rendered, outputDir, config, log, report, state });
+    const verifiable = await writeAllRoutes({
+      rendered,
+      outputDir,
+      config,
+      log,
+      report,
+      state,
+      manifestEntries,
+    });
     logFileSummary(report, log);
     logNotFoundNotice(report, config, log);
     logDuplicateTitles(report, log);
 
     if (config.sitemap) {
-      await writeSitemap({ outputDir, config, log, report });
+      try {
+        await writeSitemap({ outputDir, config, log, report });
+      } catch (error) {
+        report.errors.push({ route: null, message: `sitemap write failed: ${error.message}` });
+        log.error(`sitemap write failed: ${error.message}`);
+      }
     }
 
     if (report.truncated) {
@@ -106,13 +128,22 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       );
     }
 
-    if (config.preloadManifest && !config.dryRun) {
-      report.preloadManifest = await writePreloadManifest({
-        manifestEntries,
-        outputDir,
-        config,
-        log,
-      });
+    if (config.preloadManifest) {
+      try {
+        report.preloadManifest = await writePreloadManifest({
+          manifestEntries,
+          outputDir,
+          config,
+          log,
+          report,
+        });
+      } catch (error) {
+        report.errors.push({
+          route: null,
+          message: `preload manifest write failed: ${error.message}`,
+        });
+        log.error(`preload manifest write failed: ${error.message}`);
+      }
     }
 
     const canVerify = config.verify && !config.dryRun && config.saveAs === 'html';
@@ -121,12 +152,16 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
         'hydration verification is skipped with serveCmd: the command server decides which document it serves, so the written files cannot be checked',
       );
     }
-    // With verifyChangedOnly, a route whose file was left untouched is not reloaded: the HTML
+    // With verifyChangedOnly, a route whose HTML file was left untouched is not reloaded: the HTML
     // and the bundle are the same as the last time it was verified.
     const toVerify = config.verifyChangedOnly
-      ? verifiable.filter(
-          (route) => report.files.find((file) => file.route === route)?.status !== 'unchanged',
-        )
+      ? verifiable.filter((route) => {
+          const file = routeToFile(route, config);
+          const entry = report.files.find(
+            (candidate) => candidate.route === route && candidate.file === file,
+          );
+          return entry?.status !== 'unchanged';
+        })
       : verifiable;
     const skipped = verifiable.length - toVerify.length;
     if (canVerify && !config.serveCmd && skipped > 0) {
@@ -142,6 +177,31 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       report.verification.skipped = skipped;
       logVerification(report.verification, config, log);
     }
+
+    if (
+      config.pruneStaleRoutes &&
+      !config.dryRun &&
+      report.errors.length === 0 &&
+      report.truncated === null
+    ) {
+      try {
+        report.pruned = await pruneStaleFiles({
+          dir: outputDir,
+          previous: previousManifest,
+          current: report.files.map((file) => file.file).filter(Boolean),
+          log,
+        });
+        await writePruneManifest({
+          dir: outputDir,
+          files: report.files.map((file) => file.file).filter(Boolean),
+        });
+        if (report.pruned.length > 0) {
+          log.info(`Pruned ${report.pruned.length} stale file(s)`);
+        }
+      } catch (error) {
+        log.warn(`could not prune stale output: ${error.message}`);
+      }
+    }
   } finally {
     if (browser) await browser.close();
     const stopped = await server.close();
@@ -152,10 +212,19 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
 
   report.durationMs = Date.now() - startedAt;
   const reRendered = report.verification?.modes['re-rendered'] ?? 0;
+  const undetected = report.verification
+    ? (report.verification.modes.undetected ?? 0) + (report.verification.modes.unknown ?? 0)
+    : 0;
   report.ok =
     !(config.failOnError && (report.errors.length > 0 || report.truncated !== null)) &&
     !(config.failOnPageError && report.pageErrors.length > 0) &&
+    !(config.failOnEmptyPage && report.emptyPages.length > 0) &&
+    !(config.failOnConsoleError && report.consoleErrors.length > 0) &&
+    !(config.failOnFailedRequest && report.failedRequests.length > 0) &&
+    !(config.failOnDuplicateContent && report.duplicatePages.length > 0) &&
     !(config.failOnHydrationError && report.verification && !report.verification.ok) &&
+    !(config.failOnVerificationError && report.verification?.errors.length > 0) &&
+    !(config.failOnUndetected && undetected > 0) &&
     !(config.failOnRerender && reRendered > 0);
   return report;
 }
@@ -169,6 +238,19 @@ async function assertSourceDir(sourceDir, config) {
   const stats = await fs.stat(sourceDir).catch(() => null);
   if (!stats?.isDirectory()) {
     throw new Error(`sourceDir does not exist or is not a directory: ${sourceDir}`);
+  }
+  const hasIndex = await Promise.all(
+    ['index.html', 'index.htm'].map((name) =>
+      fs
+        .stat(path.join(sourceDir, name))
+        .then((entry) => entry.isFile())
+        .catch(() => false),
+    ),
+  );
+  if (!hasIndex.some(Boolean)) {
+    throw new Error(
+      `sourceDir has no index.html: ${sourceDir}. Point sourceDir at the built app, not its assets folder.`,
+    );
   }
 }
 
@@ -190,22 +272,16 @@ async function resolveOutputDir({ sourceDir, config, log }) {
  * Runs the crawl and render pool. Each rendered page contributes its output, any new
  * same-origin routes, and the resources recorded for the link-hint features.
  */
-async function renderAllRoutes({
-  browser,
-  server,
-  config,
-  log,
-  report,
-  manifestEntries,
-  outputDir,
-}) {
+async function renderAllRoutes({ browser, server, config, log, report }) {
   const visited = new Set();
   const scheduled = new Set();
   const rendered = new Map();
   const cap = config.maxRoutes ?? Number.POSITIVE_INFINITY;
 
   // Queues routes up to maxRoutes, flagging the report the first time the cap bites.
-  const accept = (routes) => {
+  // A seed used only to reach wildcard routes is given output: false and is rendered
+  // for its links without being written.
+  const accept = (routes, outputFor = () => true) => {
     const accepted = [];
     for (const route of routes) {
       if (scheduled.has(route)) continue;
@@ -214,48 +290,69 @@ async function renderAllRoutes({
         break;
       }
       scheduled.add(route);
-      accepted.push(route);
+      accepted.push({ route, output: outputFor(route) });
     }
     return accepted;
   };
 
   const pool = createPool({
     concurrency: config.concurrency,
-    handler: async ({ route, depth }) => {
+    handler: async ({ route, depth, output }) => {
       if (visited.has(route)) return;
       visited.add(route);
-      log.debug(`rendering ${route}`);
+      log.debug(`rendering ${route}${output ? '' : ' as a crawl seed'}`);
       try {
-        const screenshotPath =
-          config.saveAs !== 'html' && !config.dryRun
-            ? path.join(outputDir, routeToScreenshotFile(route, config))
-            : null;
         const result = await renderRoute({
           browser,
           origin: server.origin,
           route,
           config,
-          screenshotPath,
+          screenshot: config.saveAs !== 'html',
         });
-        rendered.set(route, result);
-        report.routes.push(route);
-        manifestEntries.push({
-          route,
-          scripts: [...result.collector.scripts],
-          styles: [...result.collector.styles],
-        });
+        if (output && result.empty) {
+          report.emptyPages.push(route);
+          if (config.failOnEmptyPage) {
+            report.errors.push({ route, message: 'rendered an empty page' });
+            log.error(`  empty page ${route}: no app content was found`);
+            return;
+          }
+          log.warn(`  empty page ${route}: no app content was found`);
+        }
+        if (output) {
+          rendered.set(route, result);
+          report.routes.push(route);
+        }
         for (const message of result.pageErrors) {
           report.pageErrors.push({ route, message });
           log.warn(`  page error on ${route}: ${message}`);
+        }
+        for (const message of result.consoleErrors) {
+          report.consoleErrors.push({ route, message });
+        }
+        if (result.consoleErrors.length > 0) {
+          log.debug(`  console error on ${route}: ${result.consoleErrors[0]}`);
+          if (config.failOnConsoleError) {
+            report.errors.push({ route, message: `console error: ${result.consoleErrors[0]}` });
+          }
+        }
+        for (const failure of result.failedRequests) {
+          report.failedRequests.push({ route, ...failure });
+          const detail = failure.status ? `HTTP ${failure.status}` : failure.error;
+          log.warn(`  failed request on ${route}: ${failure.url} (${detail})`);
+        }
+        if (result.failedRequests.length > 0 && config.failOnFailedRequest) {
+          const first = result.failedRequests[0];
+          report.errors.push({
+            route,
+            message: `failed request: ${first.url}${first.status ? ` (HTTP ${first.status})` : ''}`,
+          });
         }
         if (config.crawl && withinDepth(depth + 1, config.maxDepth)) {
           const discovered = filterRoutes(result.links, {
             include: config.includeProvided ? config.include : [],
             exclude: config.exclude,
           }).filter((candidate) => !scheduled.has(candidate));
-          pool.push(
-            accept(discovered).map((candidate) => ({ route: candidate, depth: depth + 1 })),
-          );
+          pool.push(accept(discovered).map((item) => ({ ...item, depth: depth + 1 })));
         }
       } catch (error) {
         report.errors.push({ route, message: error.message });
@@ -264,187 +361,17 @@ async function renderAllRoutes({
     },
   });
 
-  const roots = accept(crawlRoots(config));
-  pool.push(roots.map((route) => ({ route, depth: 0 })));
+  const roots = accept(
+    crawlRoots(config),
+    (route) => !config.includeProvided || isIncludedRoute(route, config.include),
+  );
+  pool.push(roots.map((item) => ({ ...item, depth: 0 })));
   const { errors } = await pool.run();
   for (const { item, error } of errors) {
     report.errors.push({ route: item.route, message: error.message });
     log.error(`  pool error on ${item.route}: ${error.message}`);
   }
   return rendered;
-}
-
-/**
- * Writes every rendered route and returns the routes that can be verified. A write
- * failure is recorded against its route instead of aborting the remaining writes.
- */
-async function writeAllRoutes({ rendered, outputDir, config, log, report, state }) {
-  const sorted = [...report.routes].sort();
-  const conflicted = reportOutputCollisions({ routes: sorted, config, log, report });
-
-  await writeStateScripts({ rendered, outputDir, config, log, report });
-
-  const verifiable = [];
-  for (const route of sorted) {
-    if (conflicted.has(route)) continue;
-    try {
-      const file = await writeRouteOutput({
-        route,
-        result: rendered.get(route),
-        outputDir,
-        config,
-        log,
-        state,
-        report,
-      });
-      report.files.push(file);
-      verifiable.push(route);
-    } catch (error) {
-      report.errors.push({ route, message: `write failed: ${error.message}` });
-      log.error(`  write failed for ${route}: ${error.message}`);
-    }
-  }
-  return verifiable;
-}
-
-/**
- * Writes the captured-state scripts routes reference when externalScripts is on. The payload
- * is content-addressed, so routes that inject the same state share one file and a rerun
- * leaves it untouched.
- */
-async function writeStateScripts({ rendered, outputDir, config, log, report }) {
-  const seen = new Set();
-  for (const [route, result] of rendered) {
-    const stateScript = result?.stateScript;
-    if (!stateScript || seen.has(stateScript.file)) continue;
-    seen.add(stateScript.file);
-    if (config.dryRun) {
-      report.files.push({
-        route,
-        file: stateScript.file,
-        status: 'dry-run',
-        bytes: Buffer.byteLength(stateScript.contents),
-      });
-      continue;
-    }
-    try {
-      const written = await writeFileIfChanged({
-        dir: outputDir,
-        file: stateScript.file,
-        contents: stateScript.contents,
-      });
-      report.files.push({ route, ...written });
-      log.debug(`  wrote ${stateScript.file}: ${written.status}`);
-    } catch (error) {
-      report.errors.push({ route, message: `write failed: ${error.message}` });
-      log.error(`  write failed for ${stateScript.file}: ${error.message}`);
-    }
-  }
-}
-
-/**
- * Records an error for every route involved in an output file collision and returns
- * the routes to skip, so an ambiguous write can never overwrite another route.
- */
-function reportOutputCollisions({ routes, config, log, report }) {
-  const conflicted = new Set();
-  for (const [file, colliding] of findOutputCollisions(routes, config)) {
-    for (const route of colliding) {
-      conflicted.add(route);
-      const others = colliding.filter((other) => other !== route).join(', ');
-      report.errors.push({
-        route,
-        message: `output file collision: ${file} is also written by ${others}`,
-      });
-    }
-    log.error(`  output file collision on ${file}: ${colliding.join(', ')}`);
-  }
-  return conflicted;
-}
-
-/**
- * Applies the configured post-processing to one rendered route and writes it: DOM
- * cleanups and link hints, critical CSS extraction, then optional minification.
- */
-async function writeRouteOutput({ route, result, outputDir, config, log, state, report }) {
-  if (result.screenshot) {
-    const file = routeToScreenshotFile(route, config);
-    const stats = await fs.stat(path.join(outputDir, file));
-    return { route, file, status: 'written', bytes: stats.size };
-  }
-
-  const { html, stats } = normaliseHtml(result.html, {
-    removeStyleTags: config.removeStyleTags,
-    removeScriptTags: config.removeScriptTags,
-    asyncScriptTags: config.asyncScriptTags,
-    removeBlobs: config.removeBlobs,
-    removeAttributes: config.removeAttributes,
-    preconnectOrigins: config.preconnectThirdParty
-      ? [...result.collector.thirdPartyOrigins].sort()
-      : [],
-    preloadImages: config.preloadImages
-      ? [...result.collector.images].sort().map((image) => toPublicPath(image, config.base))
-      : [],
-  });
-  if (
-    stats.removedElements > 0 ||
-    stats.removedAttributes > 0 ||
-    stats.dedupedStyles > 0 ||
-    stats.hints > 0 ||
-    stats.textSeparators > 0
-  ) {
-    log.debug(
-      `  cleaned ${route}: ${stats.removedElements} element(s) removed, ${stats.removedAttributes} attribute(s) removed, ${stats.dedupedStyles} duplicate style(s), ${stats.hints} hint(s), ${stats.textSeparators} text separator(s)`,
-    );
-  }
-  if ((result.inlineCssSkipped ?? []).length > 0) {
-    log.debug(`  inline css: left ${result.inlineCssSkipped.length} stylesheet(s) as links`);
-  }
-
-  let output = html;
-  if (config.inlineCss === 'critical') {
-    output = await applyCriticalCss({ output, outputDir, config, log, state });
-  }
-  if (config.minifyHtml) {
-    output = await minifyHtml(output, config.minifyHtml, config.minifyCss);
-  }
-  warnOnBuildOriginMetadata({ origins: stats.metadataOrigins, route, log, state });
-  if (stats.titleElements > 1) report.duplicateTitles.push(route);
-  return writeRouteHtml({ dir: outputDir, route, html: output, config });
-}
-
-/**
- * Inlines critical CSS, or explains once why it cannot: the strategy reads stylesheets from
- * the output directory, which a command server does not have to serve.
- */
-async function applyCriticalCss({ output, outputDir, config, log, state }) {
-  if (!config.serveCmd) {
-    return inlineCriticalCss({
-      html: output,
-      outputDir,
-      base: config.base,
-      preload: config.criticalCssPreload,
-    });
-  }
-  if (!state.warnedCriticalCssSkipped) {
-    state.warnedCriticalCssSkipped = true;
-    log.warn(
-      "inlineCss: 'critical' is skipped with serveCmd: stylesheets are read from the output directory, which the command server does not have to serve",
-    );
-  }
-  return output;
-}
-
-/**
- * Warns once when metadata contains the build server's origin, which means the page was
- * composed without a public siteUrl and og:url, og:image or canonical would ship wrong.
- */
-function warnOnBuildOriginMetadata({ origins, route, log, state }) {
-  if (state.warnedBuildOriginMetadata || origins.length === 0) return;
-  state.warnedBuildOriginMetadata = true;
-  log.warn(
-    `metadata on ${route} points at the build server (${origins.join(', ')}); set metadata.siteUrl so og:url, og:image and canonical match the deployed site`,
-  );
 }
 
 // Notes routes whose output carries more than one title, which is what React 19 native
@@ -455,78 +382,6 @@ function logDuplicateTitles(report, log) {
   log.warn(
     `${report.duplicateTitles.length} route(s) contain more than one <title> element: ${sample}${report.duplicateTitles.length > 5 ? ', …' : ''}. React 19 native metadata and the head layer can each write one, so use one system.`,
   );
-}
-
-/**
- * Writes the preload manifest: per route, the scripts and stylesheets it loaded,
- * as Link header values a host can serve for Early Hints or HTTP headers.
- */
-async function writePreloadManifest({ manifestEntries, outputDir, config, log }) {
-  const manifest = buildPreloadManifest(manifestEntries, {
-    ignoreForPreload: config.ignoreForPreload,
-    base: config.base,
-  });
-  const file = 'preload-manifest.json';
-  await fs.writeFile(path.join(outputDir, file), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-  log.info(`Wrote preload manifest covering ${manifest.length} route(s)`);
-  return { file, routes: manifest.length };
-}
-
-/**
- * Writes sitemap.xml from the routes the run produced, and points an existing robots.txt at
- * it. Every loc must be absolute, which is why the option needs metadata.siteUrl.
- */
-async function writeSitemap({ outputDir, config, log, report }) {
-  if (config.saveAs !== 'html') {
-    log.warn(
-      `sitemap is skipped when saveAs writes ${config.saveAs} files, as there are no pages to list`,
-    );
-    return;
-  }
-  const sitemap = buildSitemap({ files: report.files, config });
-  if (!sitemap) {
-    log.warn('sitemap is skipped: no pages were written');
-    return;
-  }
-
-  const siteUrl = config.metadata.siteUrl.replace(/\/$/, '');
-  const sitemapUrl = `${siteUrl}${toPublicPath('/sitemap.xml', config.base)}`;
-  const robots = await fs.readFile(path.join(outputDir, 'robots.txt'), 'utf8').catch(() => null);
-  const patched = robots === null ? null : withSitemapDirective(robots, sitemapUrl);
-
-  if (config.dryRun) {
-    report.files.push({
-      route: null,
-      file: 'sitemap.xml',
-      status: 'dry-run',
-      bytes: Buffer.byteLength(sitemap.contents),
-    });
-    report.sitemap = { file: 'sitemap.xml', routes: sitemap.routes, robotsUpdated: false };
-    log.info(`Dry run: would write sitemap.xml listing ${sitemap.routes} route(s)`);
-    return;
-  }
-
-  const written = await writeFileIfChanged({
-    dir: outputDir,
-    file: 'sitemap.xml',
-    contents: sitemap.contents,
-  });
-  report.files.push({ route: null, ...written });
-  report.sitemap = {
-    file: 'sitemap.xml',
-    routes: sitemap.routes,
-    robotsUpdated: patched !== null,
-  };
-  log.info(`Wrote sitemap.xml listing ${sitemap.routes} route(s)`);
-
-  if (robots === null) {
-    log.info(`Add "Sitemap: ${sitemapUrl}" to a robots.txt so crawlers find it`);
-    return;
-  }
-  if (patched !== null) {
-    await writeFileIfChanged({ dir: outputDir, file: 'robots.txt', contents: patched });
-    log.info('Added the sitemap location to robots.txt');
-  }
 }
 
 // Notes when a not-found route is configured but was never rendered, so no 404.html
@@ -560,12 +415,24 @@ function logFileSummary(report, log) {
 // markup, surfaces errors the client logged while booting, and notes when hydration failures
 // were reported but not enforced.
 function logVerification(verification, config, log) {
+  const modes = verification.modes ?? {};
+  log.info(
+    `Hydration modes: ${modes.hydrated ?? 0} hydrated, ${modes['re-rendered'] ?? 0} re-rendered, ${modes.undetected ?? 0} undetected, ${modes.unknown ?? 0} unknown`,
+  );
+  const notDetected = (modes.undetected ?? 0) + (modes.unknown ?? 0);
+  if (notDetected > 0) {
+    log.warn(
+      `${notDetected} route(s) could not be classified for hydration. Check that the app mounts into #root, #app or #__next${config.failOnUndetected ? '' : '; set failOnUndetected to fail the build'}.`,
+    );
+  }
   if (verification.ok) {
     log.success(`Hydration verified for ${verification.routes.length} route(s)`);
   } else {
     const failed = verification.routes.filter((route) => !route.ok);
     for (const entry of failed) {
       log.warn(`Hydration failed on ${entry.route}:`);
+      if (entry.status && entry.status >= 400) log.warn(`  HTTP ${entry.status}`);
+      if (entry.empty) log.warn('  the page rendered no app content');
       for (const message of entry.hydrationErrors) log.warn(`  ${message.split('\n')[0]}`);
     }
     for (const error of verification.errors) {
@@ -574,6 +441,11 @@ function logVerification(verification, config, log) {
     if (failed.length > 0 && !config.failOnHydrationError) {
       log.warn(
         `Hydration failures are reported, not enforced, so the prerendered HTML still shipped. Set failOnHydrationError to fail the build instead.`,
+      );
+    }
+    if (verification.errors.length > 0 && !config.failOnVerificationError) {
+      log.warn(
+        'Verification could not run on some routes; the prerendered HTML still shipped. Set failOnVerificationError to fail the build instead.',
       );
     }
   }

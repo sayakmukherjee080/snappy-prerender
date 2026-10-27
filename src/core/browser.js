@@ -1,14 +1,26 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import * as browsers from '@puppeteer/browsers';
 import { chromium } from 'playwright-core';
 import { isExecutablePath } from './config.js';
 
 /**
- * Resolves a usable Chromium-compatible browser, preferring the browser already on
- * the machine, then any Playwright cache, then a one-time Chrome for Testing
- * download. Returns the launched browser plus a human-readable source for logs.
+ * Lists the resolution steps for a browser option. Explicit choices only ever try the
+ * browser they name, so a machine without Chrome cannot silently prerender in Edge;
+ * `auto` is the only choice that falls through the machine, the Playwright cache, a
+ * cached Chrome for Testing, and finally a download.
+ */
+export function browserSteps(browser) {
+  if (browser === 'auto') return ['chrome', 'msedge', 'playwright', 'cache', 'download'];
+  if (browser === 'chromium') return ['playwright'];
+  if (browser === 'chrome' || browser === 'msedge') return [browser];
+  return [];
+}
+
+/**
+ * Resolves a usable Chromium-compatible browser. Explicit channel choices fail rather
+ * than falling back, while `auto` prefers the machine's browser, then any cached
+ * download, then a one-time Chrome for Testing install.
  */
 export async function launchBrowser(config, log) {
   if (isExecutablePath(config.browser)) {
@@ -19,27 +31,13 @@ export async function launchBrowser(config, log) {
   }
 
   const attempts = [];
-  const channels =
-    config.browser === 'auto'
-      ? ['chrome', 'msedge']
-      : config.browser === 'chromium'
-        ? []
-        : [config.browser];
-
-  for (const channel of channels) {
+  for (const step of browserSteps(config.browser)) {
     try {
-      const browser = await launch(config, { channel });
-      return { browser, source: `system ${channel}` };
+      const launched = await runStep(step, config, log);
+      if (launched) return launched;
     } catch (error) {
-      attempts.push(`${channel}: ${firstLine(error.message)}`);
+      attempts.push(`${step}: ${firstLine(error.message)}`);
     }
-  }
-
-  try {
-    const browser = await launch(config, {});
-    return { browser, source: 'playwright cache' };
-  } catch (error) {
-    attempts.push(`playwright cache: ${firstLine(error.message)}`);
   }
 
   if (!config.browserDownload) {
@@ -47,12 +45,40 @@ export async function launchBrowser(config, log) {
       `No usable browser found and browserDownload is disabled. Tried:\n  ${attempts.join('\n  ')}`,
     );
   }
+  if (config.browser === 'chromium') {
+    throw new Error(
+      `No Playwright-managed Chromium is installed. Run "npx playwright install chromium", or set browser to auto or chrome. Tried:\n  ${attempts.join('\n  ')}`,
+    );
+  }
+  throw new Error(`No usable browser found. Tried:\n  ${attempts.join('\n  ')}`);
+}
 
-  const executablePath = await downloadChrome(config, log);
-  return {
-    browser: await launch(config, { executablePath }),
-    source: `downloaded ${executablePath}`,
-  };
+// Runs one browser resolution step and returns the launched browser, or null when the
+// step has nothing to offer on this machine.
+async function runStep(step, config, log) {
+  if (step === 'chrome' || step === 'msedge') {
+    return { browser: await launch(config, { channel: step }), source: `system ${step}` };
+  }
+  if (step === 'playwright') {
+    return { browser: await launch(config, {}), source: 'playwright cache' };
+  }
+  if (step === 'cache') {
+    const cached = await findCachedChrome(config);
+    if (!cached) return null;
+    return {
+      browser: await launch(config, { executablePath: cached.executablePath }),
+      source: `cached Chrome for Testing ${cached.buildId}`,
+    };
+  }
+  if (step === 'download') {
+    if (!config.browserDownload) return null;
+    const executablePath = await downloadChrome(config, log);
+    return {
+      browser: await launch(config, { executablePath }),
+      source: `downloaded ${executablePath}`,
+    };
+  }
+  return null;
 }
 
 // Launches Chromium with the configured headless mode, extra args and target.
@@ -70,20 +96,42 @@ function firstLine(message) {
 }
 
 /**
- * Downloads Chrome for Testing into the tool's own cache directory. Used only when
- * neither a system browser nor a Playwright-managed browser is available. The
- * archive comes from Google's version-pinned HTTPS bucket via @puppeteer/browsers,
- * which verifies it against browserDownloadHash when one is configured and deletes
- * it on a mismatch. Without a configured hash the download is trusted on the
- * strength of HTTPS alone, which is logged as a warning.
+ * Finds a Chrome for Testing build already present in the tool's cache, so a rebuild
+ * never needs the version feed or a download when a browser is available offline.
+ * Honours browserDownloadVersion when one is configured.
+ */
+async function findCachedChrome(config) {
+  const browsers = await import('@puppeteer/browsers');
+  const platform = browsers.detectBrowserPlatform();
+  if (!platform) return null;
+  const installed = browsers.getInstalledBrowsers({ cacheDir: browserCacheDir() });
+  const match = installed.find(
+    (entry) =>
+      entry.browser === browsers.Browser.CHROME &&
+      entry.platform === platform &&
+      (!config.browserDownloadVersion || entry.buildId === config.browserDownloadVersion) &&
+      fs.existsSync(entry.executablePath),
+  );
+  return match ?? null;
+}
+
+/**
+ * Downloads Chrome for Testing into the tool's own cache directory. The archive comes
+ * from Google's version-pinned HTTPS bucket via @puppeteer/browsers, which verifies it
+ * against browserDownloadHash when one is configured and deletes it on a mismatch.
+ * Without a configured hash the download is trusted on the strength of HTTPS alone,
+ * which is logged as a warning.
  */
 async function downloadChrome(config, log) {
+  const browsers = await import('@puppeteer/browsers');
+  const platform = browsers.detectBrowserPlatform();
+  if (!platform) {
+    throw new Error(`Cannot download a browser for ${os.platform()} (${os.arch()})`);
+  }
   const cacheDir = browserCacheDir();
-  const buildId = await browsers.resolveBuildId(
-    browsers.Browser.CHROME,
-    browsers.detectBrowserPlatform(),
-    'stable',
-  );
+  const buildId =
+    config.browserDownloadVersion ??
+    (await browsers.resolveBuildId(browsers.Browser.CHROME, platform, 'stable'));
   if (config.browserDownloadHash) {
     log.info(
       `Downloading Chrome for Testing ${buildId}, verifying SHA-256 against browserDownloadHash`,

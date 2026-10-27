@@ -45,7 +45,7 @@ export function Head(props) {
  */
 export function setHead(id, props) {
   sequence += 1;
-  registerHead(id, sequence, buildHeadEntries(props, readDefaults()));
+  registerHead(id, sequence, buildHeadEntries(props, readMetadataDefaults()));
 }
 
 /**

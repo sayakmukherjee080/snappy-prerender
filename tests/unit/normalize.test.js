@@ -92,6 +92,16 @@ describe('normaliseHtml post-processing', () => {
     assert.match(html, /<script>inline\(\)<\/script>/);
   });
 
+  it('never marks the injected state script async', () => {
+    const page =
+      '<!DOCTYPE html><html><head></head><body>' +
+      '<script data-snappy-state src="/snappy/state-abc.js"></script>' +
+      '<script src="/app.js"></script></body></html>';
+    const { html } = normaliseHtml(page, { asyncScriptTags: true });
+    assert.match(html, /<script data-snappy-state="" src="\/snappy\/state-abc\.js"><\/script>/);
+    assert.match(html, /<script src="\/app\.js" async=""><\/script>/);
+  });
+
   it('drops dead blob stylesheets and keeps real ones', () => {
     const { html } = normaliseHtml(PAGE, { removeBlobs: true });
     assert.equal(html.includes('blob:'), false);
@@ -139,11 +149,34 @@ describe('normaliseHtml post-processing', () => {
     assert.deepEqual(normaliseHtml(page).stats.metadataOrigins, []);
   });
 
+  it('removes metadata that points at the build server when asked', () => {
+    const page = [
+      '<!DOCTYPE html><html><head>',
+      '<link rel="canonical" href="http://127.0.0.1:5500/a">',
+      '<meta property="og:image:secure_url" content="http://localhost:5500/share.png">',
+      '<meta property="og:title" content="Still here">',
+      '</head><body></body></html>',
+    ].join('');
+    const { html, stats } = normaliseHtml(page, { stripBuildOriginMetadata: true });
+    assert.equal(html.includes('127.0.0.1'), false);
+    assert.equal(html.includes('localhost'), false);
+    assert.equal(html.includes('Still here'), true);
+    assert.equal(stats.removedMetadata, 2);
+    assert.deepEqual(stats.metadataOrigins, ['http://127.0.0.1:5500', 'http://localhost:5500']);
+  });
+
   it('counts title elements so duplicate titles can be reported', () => {
     const page =
       '<!DOCTYPE html><html><head><title>One</title><title>Two</title></head><body></body></html>';
     assert.equal(normaliseHtml(page).stats.titleElements, 2);
     assert.equal(normaliseHtml(PAGE).stats.titleElements, 0);
+  });
+
+  it('adds a robots noindex to the not-found page when asked', () => {
+    const page = '<!DOCTYPE html><html><head></head><body><h1>Not found</h1></body></html>';
+    const { html, stats } = normaliseHtml(page, { noindex: true });
+    assert.match(html, /<meta name="robots" content="noindex">/);
+    assert.equal(stats.noindex, true);
   });
 
   it('drops the volatile attributes the caller lists', () => {
@@ -159,6 +192,17 @@ describe('normaliseHtml post-processing', () => {
     assert.equal(html.includes('aria-controls'), false);
     assert.equal(html.includes('id="keep"'), true);
     assert.equal(stats.removedAttributes, 2);
+  });
+
+  it('keeps a global attribute RegExp consistent across repeated matches', () => {
+    const page = [
+      '<!DOCTYPE html><html><head></head><body>',
+      '<div data-a="1" data-b="2" data-c="3"></div>',
+      '</body></html>',
+    ].join('');
+    const { html, stats } = normaliseHtml(page, { removeAttributes: [/^data-/g] });
+    assert.equal(html.includes('data-'), false);
+    assert.equal(stats.removedAttributes, 3);
   });
 
   it('keeps the persisted metadata element even when every other script is removed', () => {

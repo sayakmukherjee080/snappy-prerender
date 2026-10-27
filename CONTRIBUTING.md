@@ -2,7 +2,7 @@
 
 ## Development setup
 
-Requires Node.js 20.19 or newer and a Chrome or Edge install (the integration tests render real pages; a Chrome for Testing download is used only as a fallback).
+Requires Node.js 22.12 or newer and a Chrome or Edge install (the integration tests render real pages; a Chrome for Testing download is used only as a fallback).
 
 ```sh
 npm ci

@@ -1,4 +1,4 @@
-const BUILD_ORIGIN = /https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?/gi;
+const BUILD_ORIGIN = /https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?(?![\w.:-])/gi;
 
 /**
  * Recognises the metadata tags whose value is an absolute URL, and finds URLs pointing at a
@@ -30,7 +30,7 @@ function isUrlKey(key) {
   const [prefix, ...rest] = key.toLowerCase().split(':');
   if (prefix !== 'og' && prefix !== 'twitter') return false;
   const last = rest.at(-1);
-  return last === 'url' || last === 'image';
+  return last === 'url' || last === 'image' || last === 'secure_url';
 }
 
 // Reads an attribute value, defaulting to an empty string.

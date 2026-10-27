@@ -26,7 +26,7 @@
     "playwright"
   ],
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.12.0"
   },
   "main": "./src/index.js",
   "exports": {
@@ -43,7 +43,9 @@
     "LICENSE",
     "README.md"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./src/head/manager.js"
+  ],
   "scripts": {
     "test": "node scripts/run-tests.mjs tests/unit",
     "test:integration": "node scripts/run-tests.mjs tests/integration",

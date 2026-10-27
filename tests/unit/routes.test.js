@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   crawlRoots,
   filterRoutes,
+  isIncludedRoute,
   matchesPattern,
   normaliseRoute,
   toAppRoute,
@@ -133,6 +134,18 @@ describe('crawlRoots', () => {
 
   it('drops excluded seeds so exclude cannot be bypassed by include', () => {
     assert.deepEqual(crawlRoots({ include: ['/', '/admin'], exclude: ['/admin'] }), ['/']);
+  });
+});
+
+describe('isIncludedRoute', () => {
+  it('allows every route when no include list is supplied', () => {
+    assert.equal(isIncludedRoute('/anything', []), true);
+  });
+
+  it('treats a supplied include list as an output allowlist', () => {
+    assert.equal(isIncludedRoute('/blog/a', ['/blog/*']), true);
+    assert.equal(isIncludedRoute('/', ['/blog/*']), false);
+    assert.equal(isIncludedRoute('/about', ['/about']), true);
   });
 });
 

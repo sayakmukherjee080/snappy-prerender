@@ -27,6 +27,12 @@ describe('metadata URL scanning', () => {
       true,
     );
     assert.equal(
+      isMetadataUrlNode(
+        node('meta', { property: 'og:image:secure_url', content: 'https://a.example/i' }),
+      ),
+      true,
+    );
+    assert.equal(
       isMetadataUrlNode(node('meta', { property: 'og:title', content: 'https://a.example' })),
       false,
     );
@@ -56,5 +62,8 @@ describe('metadata URL scanning', () => {
     );
     assert.deepEqual(collectBuildOrigins('/assets/app.js'), []);
     assert.deepEqual(collectBuildOrigins(undefined), []);
+    // A public host that merely starts with "localhost" must not be flagged.
+    assert.deepEqual(collectBuildOrigins('https://localhost.example/a'), []);
+    assert.deepEqual(collectBuildOrigins('https://127.0.0.1.example/a'), []);
   });
 });

@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { normaliseRoute } from './routes.js';
 
 export const CONFIG_FILE = 'snappy.config.js';
@@ -23,12 +25,53 @@ export async function detectProjectDefaults(dir = process.cwd()) {
   const dependencies = { ...manifest?.dependencies, ...manifest?.devDependencies };
   const usesVite = Boolean(dependencies.vite) || (await anyExists(dir, VITE_CONFIGS));
   const usesCreateReactApp = Boolean(dependencies['react-scripts']) && !usesVite;
+  const vite = usesVite ? await detectViteConfig(dir) : null;
   return {
-    sourceDir: usesCreateReactApp ? 'build' : 'dist',
+    sourceDir: vite?.sourceDir ?? (usesCreateReactApp ? 'build' : 'dist'),
+    base: vite?.base ?? homepageBase(manifest?.homepage) ?? '/',
     usesVite,
     runner: await detectRunner(dir),
     installed: PACKAGE_NAME in dependencies,
   };
+}
+
+/**
+ * Reads the project's real Vite output directory and base when Vite can be resolved
+ * from that project. Falls back to the conventional defaults when the config is
+ * missing, imports an unavailable plugin, or Vite is not installed.
+ */
+async function detectViteConfig(dir) {
+  try {
+    const require = createRequire(path.join(dir, 'package.json'));
+    const entry = require.resolve('vite');
+    const { resolveConfig } = await import(pathToFileURL(entry).href);
+    const resolved = await resolveConfig({ root: dir, logLevel: 'silent' }, 'build');
+    const relative = path.relative(dir, resolved.build.outDir);
+    return {
+      sourceDir: relative.startsWith('..') ? resolved.build.outDir : relative || '.',
+      base: detectedBase(resolved.base),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Keeps a detected base usable by normaliseBase: only root-relative bases apply here.
+function detectedBase(base) {
+  if (typeof base !== 'string' || !base.startsWith('/') || base.startsWith('//')) return '/';
+  return base.endsWith('/') ? base : `${base}/`;
+}
+
+// Reads Create React App's homepage into a base path, ignoring absolute deployments
+// and values that are not a path.
+function homepageBase(homepage) {
+  if (typeof homepage !== 'string' || homepage.length === 0) return null;
+  try {
+    const url = new URL(homepage, 'https://example.invalid');
+    return url.pathname.endsWith('/') ? url.pathname : `${url.pathname}/`;
+  } catch {
+    return null;
+  }
 }
 
 /**

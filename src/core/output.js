@@ -27,18 +27,24 @@ export function routeToScreenshotFile(route, { saveAs = 'png' } = {}) {
 
 /**
  * Finds routes that would write the same output file. Two routes can collide, most
- * obviously with flatOutput where both "/" and "/index" map to index.html. Callers
+ * obviously with flatOutput where both "/" and "/index" map to index.html. On a
+ * case-insensitive filesystem, paths that differ only by case collide too. Callers
  * use this to refuse the ambiguous writes instead of letting one overwrite the other.
  */
-export function findOutputCollisions(routes, config) {
+export function findOutputCollisions(
+  routes,
+  config,
+  { caseInsensitive = process.platform === 'darwin' || process.platform === 'win32' } = {},
+) {
   const byFile = new Map();
   const saveAs = config.saveAs ?? 'html';
   for (const route of routes) {
     const file =
       saveAs === 'html' ? routeToFile(route, config) : routeToScreenshotFile(route, config);
-    const existing = byFile.get(file);
+    const key = caseInsensitive ? file.toLowerCase() : file;
+    const existing = byFile.get(key);
     if (existing) existing.push(route);
-    else byFile.set(file, [route]);
+    else byFile.set(key, [route]);
   }
   return new Map([...byFile].filter(([, list]) => list.length > 1));
 }
@@ -61,17 +67,34 @@ export async function writeRouteHtml({ dir, route, html, config }) {
  * files routes reference both go through here so a rebuild only touches what changed.
  */
 export async function writeFileIfChanged({ dir, file, contents }) {
+  return writeIfChanged({ dir, file, contents });
+}
+
+/**
+ * Writes a generated binary file, leaving an identical one untouched. Screenshots use
+ * this so a rebuild only replaces images whose pixels changed.
+ */
+export async function writeBufferIfChanged({ dir, file, buffer }) {
+  return writeIfChanged({ dir, file, contents: buffer });
+}
+
+// Compares the existing file with the new value, handling text and binary payloads,
+// then writes through a temporary file so an interrupted run cannot leave a partial
+// file behind for a host to serve.
+async function writeIfChanged({ dir, file, contents }) {
   const bytes = Buffer.byteLength(contents);
   const target = path.join(dir, file);
-  const existing = await fs.readFile(target, 'utf8').catch(() => null);
-  if (existing === contents) return { file, status: 'unchanged', bytes };
+  const existing = await fs.readFile(target).catch(() => null);
+  const unchanged =
+    typeof contents === 'string'
+      ? existing?.toString('utf8') === contents
+      : existing !== null && Buffer.compare(existing, contents) === 0;
+  if (unchanged) return { file, status: 'unchanged', bytes };
 
   await fs.mkdir(path.dirname(target), { recursive: true });
-  // Written through a temporary file and renamed, so an interrupted run cannot leave a
-  // half-written file behind for a host to serve.
   const temporary = `${target}.snappy-tmp`;
   try {
-    await fs.writeFile(temporary, contents, 'utf8');
+    await fs.writeFile(temporary, contents);
     await fs.rename(temporary, target);
   } catch (error) {
     await fs.rm(temporary, { force: true }).catch(() => {});

@@ -24,6 +24,7 @@ const NULLABLE_KEYS = [
   'userAgent',
   'destination',
   'browserDownloadHash',
+  'browserDownloadVersion',
   'url',
   'serveCmd',
 ];
@@ -59,6 +60,7 @@ export const DEFAULTS = Object.freeze({
   browser: 'auto',
   browserDownload: true,
   browserDownloadHash: null,
+  browserDownloadVersion: null,
   browserArgs: [],
   headless: true,
   ignoreHTTPSErrors: false,
@@ -94,6 +96,14 @@ export const DEFAULTS = Object.freeze({
   failOnHydrationError: false,
   failOnRerender: false,
   failOnPageError: false,
+  failOnEmptyPage: true,
+  failOnUndetected: false,
+  failOnVerificationError: false,
+  failOnConsoleError: false,
+  failOnFailedRequest: false,
+  failOnDuplicateContent: false,
+  stripBuildOriginMetadata: true,
+  pruneStaleRoutes: false,
   metadata: null,
   failOnError: true,
   dryRun: false,
@@ -106,6 +116,19 @@ export const DEFAULTS = Object.freeze({
 // Options whose default is boolean but which accept other shapes, so their own validators
 // below decide what is allowed.
 const MULTI_TYPE_KEYS = new Set(['inlineCss', 'minifyHtml', 'minifyCss']);
+
+// Freeze the nested list defaults as well, so a consumer cannot mutate the defaults
+// used by every later run in the same process.
+for (const key of [
+  'include',
+  'exclude',
+  'allowedHosts',
+  'browserArgs',
+  'ignoreForPreload',
+  'removeAttributes',
+]) {
+  Object.freeze(DEFAULTS[key]);
+}
 
 // Every boolean option is validated, derived from the defaults so a new flag cannot be
 // forgotten in a hand-maintained list.
@@ -126,7 +149,9 @@ export function resolveConfig(userOptions = {}) {
   config.concurrency =
     userOptions.concurrency ??
     Math.max(1, Math.min(os.availableParallelism(), MAX_DEFAULT_CONCURRENCY));
-  config.includeProvided = userOptions.include !== undefined;
+  config.includeProvided =
+    userOptions.include !== undefined &&
+    !(config.include.length === 1 && config.include[0] === '/');
   // The CSP dial decides the defaults for the pieces that can move. Explicit options still
   // win, so a project can take 'strict' and put one part back.
   if (userOptions.externalScripts === undefined) config.externalScripts = config.csp === 'strict';
@@ -135,7 +160,85 @@ export function resolveConfig(userOptions = {}) {
   }
   config.warnings = [];
   validateConfig(config);
+  addConfigWarnings(config, userOptions);
   return config;
+}
+
+/**
+ * Reports options that do nothing in the current combination, so a build does not
+ * quietly skip a gate the caller believes is active.
+ */
+function addConfigWarnings(config, userOptions) {
+  const warn = (message) => config.warnings.push(message);
+  for (const key of Object.keys(userOptions)) {
+    if (!Object.hasOwn(DEFAULTS, key)) {
+      warn(`unknown option "${key}" is ignored; check the spelling`);
+    }
+  }
+  if (!config.verify) {
+    for (const key of [
+      'verifyChangedOnly',
+      'failOnHydrationError',
+      'failOnRerender',
+      'failOnUndetected',
+      'failOnVerificationError',
+    ]) {
+      if (config[key]) warn(`${key} has no effect because verify is false`);
+    }
+  }
+  if (config.verify && (config.serveCmd || config.saveAs !== 'html')) {
+    for (const key of [
+      'failOnHydrationError',
+      'failOnRerender',
+      'failOnUndetected',
+      'failOnVerificationError',
+    ]) {
+      if (config[key]) {
+        warn(
+          `${key} has no effect because hydration verification is skipped with ${config.serveCmd ? 'serveCmd' : `saveAs: '${config.saveAs}'`}`,
+        );
+      }
+    }
+  }
+  if (
+    userOptions.criticalCssPreload !== undefined &&
+    config.criticalCssPreload !== false &&
+    config.inlineCss !== 'critical'
+  ) {
+    warn('criticalCssPreload has no effect unless inlineCss is "critical"');
+  }
+  if (config.minifyCss && !config.minifyHtml && !config.inlineCss) {
+    warn('minifyCss has no effect unless minifyHtml or inlineCss is enabled');
+  }
+  if (config.allowedHosts.length > 0 && !config.blockThirdParty) {
+    warn('allowedHosts has no effect unless blockThirdParty is true');
+  }
+  if (config.csp === 'strict' && config.inlineCss) {
+    warn(
+      "csp controls script-src; inlineCss emits inline styles, which need style-src 'unsafe-inline' or hashes",
+    );
+  }
+  if (
+    config.csp === 'strict' &&
+    userOptions.criticalCssPreload !== undefined &&
+    config.criticalCssPreload !== false
+  ) {
+    warn(
+      "criticalCssPreload emits an inline onload handler that a script-src 'self' policy blocks",
+    );
+  }
+  if (config.removeStyleTags && config.inlineCss === 'critical') {
+    warn('removeStyleTags removes CSS-in-JS styles before critical CSS is extracted');
+  }
+  if (config.sitemap && config.saveAs !== 'html') {
+    warn(`sitemap has no effect when saveAs is '${config.saveAs}'`);
+  }
+  const metadataBase = config.metadata?.base;
+  if (metadataBase && metadataBase !== config.base) {
+    warn(
+      `metadata.base (${metadataBase}) differs from base (${config.base}); canonical, social URLs and routing will disagree`,
+    );
+  }
 }
 
 /**
@@ -201,7 +304,7 @@ export function validateConfig(config) {
   stringList(config.ignoreForPreload, 'ignoreForPreload');
   patternList(config.removeAttributes, 'removeAttributes');
   for (const key of ['readyFlag', 'readySelector', 'waitFor', 'notFoundRoute']) nullableString(key);
-  for (const key of ['userAgent', 'destination']) nullableString(key);
+  for (const key of ['userAgent', 'destination', 'browserDownloadVersion']) nullableString(key);
   for (const key of BOOLEAN_KEYS) booleanOption(key);
 
   if (config.browserDownloadHash !== null && !/^[a-f0-9]{64}$/i.test(config.browserDownloadHash)) {
@@ -257,6 +360,14 @@ export function validateConfig(config) {
   if (config.url !== null && !/^https?:\/\//.test(config.url)) {
     throw new TypeError('url must be an absolute http(s) URL');
   }
+  if (config.serveCmd !== null && config.url) {
+    const parsed = new URL(config.url);
+    if (parsed.pathname !== '/' && parsed.pathname !== '') {
+      throw new TypeError(
+        'url must be an origin without a path when serveCmd is used; set base for a sub-path deployment',
+      );
+    }
+  }
   if (!INLINE_CSS_STRATEGIES.includes(config.inlineCss)) {
     throw new TypeError("inlineCss must be false, true, 'inline' or 'critical'");
   }
@@ -280,6 +391,11 @@ export function validateConfig(config) {
   }
   if (!SAVE_AS_CHOICES.includes(config.saveAs)) {
     throw new TypeError(`saveAs must be one of: ${SAVE_AS_CHOICES.join(', ')}`);
+  }
+  if (config.removeStyleTags && (config.inlineCss === true || config.inlineCss === 'inline')) {
+    throw new TypeError(
+      "removeStyleTags cannot be combined with inlineCss 'inline' or true: it would strip the CSS the inline step just added",
+    );
   }
   validateMetadata(config);
   if (config.sitemap && !config.metadata?.siteUrl) {
@@ -318,6 +434,14 @@ function validateMetadata(config) {
   }
   if (metadata.siteUrl && !/^https?:\/\//.test(metadata.siteUrl)) {
     throw new TypeError('metadata.siteUrl must be an absolute http(s) URL');
+  }
+  if (metadata.siteUrl) {
+    const parsed = new URL(metadata.siteUrl);
+    if (parsed.pathname !== '/' && parsed.pathname !== '') {
+      throw new TypeError(
+        'metadata.siteUrl must be an origin without a path; set base for a sub-path deployment',
+      );
+    }
   }
   if (metadata.base && !metadata.base.startsWith('/')) {
     throw new TypeError('metadata.base must start with a slash, for example /app/');

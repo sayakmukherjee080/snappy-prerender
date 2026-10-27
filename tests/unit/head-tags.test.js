@@ -114,6 +114,26 @@ describe('buildHeadEntries', () => {
     assert.equal(entries.get('link:rel:canonical').attrs.href, 'https://elsewhere.example/x');
   });
 
+  it('does not double the base path in the default canonical', () => {
+    const previous = globalThis.location;
+    globalThis.location = { pathname: '/app/about', origin: 'http://127.0.0.1:1234' };
+    try {
+      const entries = byKey(
+        buildHeadEntries(
+          { title: 'Awards' },
+          { ...defaults, base: '/app/', trailingSlash: 'preserve' },
+        ),
+      );
+      assert.equal(entries.get('link:rel:canonical').attrs.href, 'https://pps.example/app/about/');
+      assert.equal(
+        entries.get('meta:property:og:url').attrs.content,
+        'https://pps.example/app/about/',
+      );
+    } finally {
+      globalThis.location = previous;
+    }
+  });
+
   it('passes protocol-relative, non-http and spaced values through as usable URLs', () => {
     const relative = byKey(buildHeadEntries({ image: '//cdn.example/i.png' }, defaults));
     assert.equal(relative.get('meta:property:og:image').attrs.content, '//cdn.example/i.png');

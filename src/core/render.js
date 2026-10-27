@@ -1,7 +1,6 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { captureFormState } from './form-state.js';
 import { inlineStylesheets } from './inline-css.js';
+import { isPageEmpty } from './page-content.js';
 import { createResourceCollector } from './resources.js';
 import { toAppRoute, toServerUrl } from './routes.js';
 import { captureRuntimeStyles } from './runtime-styles.js';
@@ -27,20 +26,43 @@ function escapeForScript(value) {
  * storage from leaking between routes. When a screenshot path is supplied the route
  * is captured as an image instead of HTML.
  */
-export async function renderRoute({ browser, origin, route, config, screenshotPath }) {
+export async function renderRoute({ browser, origin, route, config, screenshot = false }) {
   const context = await browser.newContext({
     viewport: config.viewport,
     storageState: config.storageState ?? undefined,
     userAgent: config.userAgent ?? undefined,
     ignoreHTTPSErrors: config.ignoreHTTPSErrors,
     reducedMotion: config.freezeAnimations ? 'reduce' : 'no-preference',
+    serviceWorkers: 'block',
   });
   const page = await context.newPage();
   const pageErrors = [];
+  const consoleErrors = [];
+  const failedRequests = [];
   let inlineCssSkipped = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  // Only same-origin failures are the build's own to fix; a blocked analytics host is
+  // not a broken page. Aborted requests are navigations or cancelled fetches, not 404s.
+  page.on('response', (response) => {
+    if (response.status() < 400) return;
+    const parsed = parseHttpUrl(response.url());
+    if (parsed?.origin !== origin) return;
+    failedRequests.push({ url: response.url(), status: response.status() });
+  });
+  page.on('requestfailed', (request) => {
+    const parsed = parseHttpUrl(request.url());
+    if (parsed?.origin !== origin) return;
+    const error = request.failure()?.errorText ?? 'request failed';
+    if (error.includes('ERR_ABORTED')) return;
+    failedRequests.push({ url: request.url(), status: null, error });
+  });
 
-  const metadataDefaults = config.metadata ? { base: config.base, ...config.metadata } : null;
+  const metadataDefaults = config.metadata
+    ? { base: config.base, flatOutput: config.flatOutput, ...config.metadata }
+    : null;
   if (metadataDefaults) {
     await page.addInitScript((defaults) => {
       window.__SNAPPY_META__ = defaults;
@@ -58,11 +80,17 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
   await collector.install(page);
   const tracker = trackNetwork(page);
   try {
-    await page.goto(toServerUrl(route, config.base, origin), {
+    const response = await page.goto(toServerUrl(route, config.base, origin), {
       waitUntil: 'domcontentloaded',
       timeout: config.timeout,
     });
+    if (response && response.status() >= 400) {
+      throw new Error(
+        `route responded with HTTP ${response.status()}${response.statusText() ? ` ${response.statusText()}` : ''}`,
+      );
+    }
     await settlePage(page, config, tracker);
+    const empty = await isPageEmpty(page);
 
     if (config.captureRuntimeStyles) await captureRuntimeStyles(page);
     if (config.captureFormState) await captureFormState(page);
@@ -82,22 +110,38 @@ export async function renderRoute({ browser, origin, route, config, screenshotPa
 
     const links = await collectLinks(page, config.base, origin);
 
-    if (screenshotPath) {
-      await fs.mkdir(path.dirname(screenshotPath), { recursive: true });
-      await page.screenshot({ path: screenshotPath, fullPage: true });
+    if (screenshot) {
+      const buffer = await page.screenshot({
+        fullPage: true,
+        type: config.saveAs === 'jpeg' ? 'jpeg' : 'png',
+      });
       return {
         route,
         links,
         pageErrors,
+        consoleErrors,
+        failedRequests,
         collector,
         inlineCssSkipped,
         stateScript,
-        screenshot: true,
+        screenshot: buffer,
+        empty,
       };
     }
 
     const html = await page.content();
-    return { route, html, links, pageErrors, collector, inlineCssSkipped, stateScript };
+    return {
+      route,
+      html,
+      links,
+      pageErrors,
+      consoleErrors,
+      failedRequests,
+      collector,
+      inlineCssSkipped,
+      stateScript,
+      empty,
+    };
   } finally {
     tracker.stop();
     await context.close();
@@ -225,4 +269,14 @@ async function collectLinks(page, base, origin) {
     if (route) routes.push(route);
   }
   return routes;
+}
+
+// Parses an HTTP URL, returning null for data, blob and other non-network URLs.
+function parseHttpUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed : null;
+  } catch {
+    return null;
+  }
 }

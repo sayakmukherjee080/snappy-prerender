@@ -1,11 +1,14 @@
 import { blockThirdPartyRequests } from './blocking.js';
+import { DEFAULTS } from './config.js';
+import { isPageEmpty } from './page-content.js';
 import { toServerUrl } from './routes.js';
 import { mapLimit } from './scheduler.js';
 import { settlePage, trackNetwork } from './settle.js';
 
 const HYDRATION_PATTERNS = [
   /hydrat/i,
-  /did not match/i,
+  /text content did not match/i,
+  /prop [`"].+?[`"] did not match/i,
   /server-rendered HTML/i,
   // React 16 and 17 phrase their mismatch warnings differently and never use the
   // minified codes, which only exist from React 18 on.
@@ -94,8 +97,11 @@ async function verifyRoute({ browser, origin, route, config }) {
   const context = await browser.newContext({
     viewport: config.viewport,
     storageState: config.storageState ?? undefined,
-    userAgent: config.userAgent ?? undefined,
+    userAgent:
+      config.userAgent === DEFAULTS.userAgent ? undefined : (config.userAgent ?? undefined),
     ignoreHTTPSErrors: config.ignoreHTTPSErrors,
+    reducedMotion: config.freezeAnimations ? 'reduce' : 'no-preference',
+    serviceWorkers: 'block',
   });
   const page = await context.newPage();
   const hydrationErrors = [];
@@ -117,11 +123,13 @@ async function verifyRoute({ browser, origin, route, config }) {
       await blockThirdPartyRequests(page, origin, config.allowedHosts);
     }
     await page.addInitScript(bootProbe);
-    await page.goto(toServerUrl(route, config.base, origin), {
+    const response = await page.goto(toServerUrl(route, config.base, origin), {
       waitUntil: 'domcontentloaded',
       timeout: config.timeout,
     });
+    const status = response?.status() ?? null;
     await settlePage(page, config, tracker);
+    const empty = await isPageEmpty(page);
 
     const boot = await page.evaluate((selector) => {
       const probe = window.__snappyBoot ?? {};
@@ -138,10 +146,12 @@ async function verifyRoute({ browser, origin, route, config }) {
 
     return {
       route,
+      status,
+      empty,
       hydrationErrors,
       consoleErrors,
       pageErrors,
-      ok: hydrationErrors.length === 0,
+      ok: hydrationErrors.length === 0 && (status === null || status < 400) && !empty,
       mode: classifyBoot(boot),
       markupPreserved: boot.markupPreserved,
     };

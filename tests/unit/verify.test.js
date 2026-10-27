@@ -55,6 +55,8 @@ describe('isHydrationError', () => {
   it('ignores generic mismatch wording from non-React sources', () => {
     assert.equal(isHydrationError('Origin does not match the allowed list'), false);
     assert.equal(isHydrationError('CSP header does not match policy'), false);
+    assert.equal(isHydrationError('Password did not match'), false);
+    assert.equal(isHydrationError('The two values did not match'), false);
   });
 });
 

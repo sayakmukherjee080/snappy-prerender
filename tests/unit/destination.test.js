@@ -28,6 +28,14 @@ describe('prepareDestination', () => {
     assert.equal(await prepareDestination({ sourceDir, destination: sourceDir }), sourceDir);
   });
 
+  it('rejects a destination inside the source directory', async () => {
+    const sourceDir = await makeDir();
+    await assert.rejects(
+      prepareDestination({ sourceDir, destination: path.join(sourceDir, 'out') }),
+      /destination cannot be inside sourceDir/,
+    );
+  });
+
   it('copies the tree and leaves the source untouched', async () => {
     const sourceDir = await makeDir();
     await fs.mkdir(path.join(sourceDir, 'assets'));

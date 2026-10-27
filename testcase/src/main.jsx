@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, hydrateRoot } from 'react-dom/client';
 import App from './App.jsx';
 import './styles/tokens.css';
 import './styles/layout.css';
@@ -10,8 +10,13 @@ import './styles/pricing.css';
 import './styles/company.css';
 import './styles/pages.css';
 
-createRoot(document.getElementById('root')).render(
+const container = document.getElementById('root');
+const app = (
   <StrictMode>
     <App />
-  </StrictMode>,
+  </StrictMode>
 );
+
+// Prerendered HTML hydrates; a plain dev build mounts normally.
+if (container.hasChildNodes()) hydrateRoot(container, app);
+else createRoot(container).render(app);

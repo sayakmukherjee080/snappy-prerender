@@ -43,6 +43,15 @@ export function matchesPattern(route, pattern) {
 function matchesAny(route, patterns) {
   return patterns.some((pattern) => matchesPattern(route, pattern));
 }
+
+/**
+ * Reports whether a route belongs in the output. An empty pattern list allows every
+ * route; a supplied list is an allowlist for output as well as for discovery, so a
+ * seed used only to reach wildcard routes is not written itself.
+ */
+export function isIncludedRoute(route, patterns = []) {
+  return patterns.length === 0 || matchesAny(route, patterns);
+}
 /**
  * Reports whether a route is safe to map onto the output directory. Literal dot
  * segments are already resolved, so this catches the encoded forms: percent-encoded

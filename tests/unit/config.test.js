@@ -67,6 +67,7 @@ describe('resolveConfig', () => {
 
   it('tracks whether include was supplied so defaults do not act as an allowlist', () => {
     assert.equal(resolveConfig().includeProvided, false);
+    assert.equal(resolveConfig({ include: ['/'] }).includeProvided, false);
     assert.equal(resolveConfig({ include: ['/about'] }).includeProvided, true);
   });
 
@@ -151,6 +152,10 @@ describe('resolveConfig', () => {
       /metadata\.siteURL/,
     );
     assert.equal(resolveConfig({ metadata: { base: '/app/' } }).metadata.base, '/app/');
+    assert.throws(
+      () => resolveConfig({ metadata: { siteUrl: 'https://x.example/app' } }),
+      /origin without a path/,
+    );
 
     const warned = resolveConfig({ metadata: { titleTemplate: 'Example' } });
     assert.equal(
@@ -223,6 +228,33 @@ describe('resolveConfig', () => {
     }, TypeError);
   });
 
+  it('freezes the list defaults so one run cannot change another', () => {
+    assert.throws(() => {
+      DEFAULTS.include.push('/mutated');
+    }, TypeError);
+    assert.throws(() => {
+      DEFAULTS.allowedHosts.push('mutated.example');
+    }, TypeError);
+  });
+
+  it('warns about unknown option names instead of silently ignoring them', () => {
+    const config = resolveConfig({ inlineCSS: 'inline' });
+    assert.match(config.warnings.join('\n'), /unknown option "inlineCSS"/);
+  });
+
+  it('warns when metadata.base differs from the routing base', () => {
+    const config = resolveConfig({ base: '/app/', metadata: { base: '/other/' } });
+    assert.match(config.warnings.join('\n'), /metadata\.base/);
+  });
+
+  it('validates a pinned browser download version', () => {
+    assert.equal(
+      resolveConfig({ browserDownloadVersion: '131.0.6778.85' }).browserDownloadVersion,
+      '131.0.6778.85',
+    );
+    assert.throws(() => resolveConfig({ browserDownloadVersion: 42 }), /browserDownloadVersion/);
+  });
+
   it('normalises explicitly undefined optionals to null', () => {
     const config = resolveConfig({
       url: undefined,
@@ -240,6 +272,40 @@ describe('resolveConfig', () => {
     assert.throws(() => resolveConfig({ serveCmd: 'node server.js' }), /url is required/);
     const config = resolveConfig({ serveCmd: 'node server.js', url: 'http://127.0.0.1:3000' });
     assert.equal(config.serveCmd, 'node server.js');
+    assert.throws(
+      () =>
+        resolveConfig({
+          serveCmd: 'node server.js',
+          url: 'http://127.0.0.1:3000/app',
+        }),
+      /origin without a path/,
+    );
+  });
+
+  it('rejects a style strip that would remove inlined CSS', () => {
+    assert.throws(
+      () => resolveConfig({ inlineCss: 'inline', removeStyleTags: true }),
+      /removeStyleTags cannot be combined/,
+    );
+    assert.equal(
+      resolveConfig({ inlineCss: 'critical', removeStyleTags: true }).removeStyleTags,
+      true,
+    );
+  });
+
+  it('warns when a gate or optimisation has no effect', () => {
+    const config = resolveConfig({
+      verify: false,
+      failOnHydrationError: true,
+      criticalCssPreload: 'body',
+      minifyCss: true,
+      allowedHosts: ['api.example.com'],
+    });
+    const warnings = config.warnings.join('\n');
+    assert.match(warnings, /failOnHydrationError has no effect/);
+    assert.match(warnings, /criticalCssPreload has no effect/);
+    assert.match(warnings, /minifyCss has no effect/);
+    assert.match(warnings, /allowedHosts has no effect/);
   });
 });
 
