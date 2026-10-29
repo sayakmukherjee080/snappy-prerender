@@ -102,6 +102,51 @@ describe('buildSitemap', () => {
     });
     assert.match(sitemap.files[0].contents, /<loc>https:\/\/example\.com\/a&amp;b\/<\/loc>/);
   });
+
+  it('adds hreflang alternates and reports the listed locs', () => {
+    const sitemap = buildSitemap({
+      files: [
+        {
+          route: '/seo',
+          file: 'seo/index.html',
+          status: 'written',
+          alternates: [
+            { hreflang: 'en', href: 'https://example.com/en/seo/' },
+            { hreflang: 'x-default', href: '/seo/' },
+            { hreflang: 'en', href: 'https://example.com/en/seo/' },
+          ],
+        },
+      ],
+      config: config(),
+    });
+    const contents = sitemap.files[0].contents;
+    assert.match(contents, /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/);
+    assert.match(contents, /hreflang="en" href="https:\/\/example\.com\/en\/seo\/"/);
+    assert.match(contents, /hreflang="x-default" href="https:\/\/example\.com\/seo\/"/);
+    assert.equal(contents.match(/hreflang="en"/g).length, 1);
+    assert.deepEqual(sitemap.locs, ['https://example.com/seo/']);
+  });
+
+  it('adds same-origin images only when the image sitemap is enabled', () => {
+    const entry = {
+      route: '/',
+      file: 'index.html',
+      status: 'written',
+      images: ['/hero.png', 'https://cdn.example.net/remote.png', '/hero.png'],
+    };
+    const disabled = buildSitemap({ files: [entry], config: config() });
+    assert.equal(disabled.files[0].contents.includes('image:image'), false);
+
+    const enabled = buildSitemap({
+      files: [entry],
+      config: config({ imageSitemap: true }),
+    });
+    const contents = enabled.files[0].contents;
+    assert.match(contents, /xmlns:image=/);
+    assert.equal(contents.includes('https://example.com/hero.png'), true);
+    assert.equal(contents.includes('cdn.example.net'), false);
+    assert.equal(contents.match(/<image:loc>/g).length, 1);
+  });
 });
 
 describe('withSitemapDirective', () => {

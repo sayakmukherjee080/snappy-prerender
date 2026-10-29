@@ -18,6 +18,7 @@ export function createResourceCollector({
   const images = new Set();
   const scripts = new Set();
   const styles = new Set();
+  const fonts = new Map();
   const json = new Map();
   const pending = [];
 
@@ -26,6 +27,7 @@ export function createResourceCollector({
     images,
     scripts,
     styles,
+    fonts,
     json,
     // Waits for in-flight JSON body reads so the cache is complete before injection.
     async settled() {
@@ -57,7 +59,9 @@ export function createResourceCollector({
         if (resourceType === 'image') images.add(path);
         else if (resourceType === 'script') scripts.add(path);
         else if (resourceType === 'stylesheet') styles.add(path);
-        else if (collectJson && isJson(response)) {
+        else if (resourceType === 'font') {
+          fonts.set(path, response.headers()['content-type'] ?? null);
+        } else if (collectJson && isJson(response)) {
           const length = Number(response.headers()['content-length'] ?? Number.NaN);
           if (Number.isFinite(length) && length > maxCachedBytes) return;
           const capture = response

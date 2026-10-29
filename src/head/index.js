@@ -26,7 +26,7 @@ export function Head(props) {
     sequenceRef.current = sequence;
   }
 
-  const entries = buildHeadEntries(props, readMetadataDefaults());
+  const entries = buildHeadEntries(props, readMetadataDefaults(), idRef.current);
 
   // A layout effect so a route change updates the head before the browser paints, and a
   // plain effect on the server, where layout effects never run.
@@ -45,7 +45,7 @@ export function Head(props) {
  */
 export function setHead(id, props) {
   sequence += 1;
-  registerHead(id, sequence, buildHeadEntries(props, readMetadataDefaults()));
+  registerHead(id, sequence, buildHeadEntries(props, readMetadataDefaults(), id));
 }
 
 /**

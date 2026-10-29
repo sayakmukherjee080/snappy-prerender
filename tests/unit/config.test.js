@@ -318,3 +318,98 @@ describe('isExecutablePath', () => {
     assert.equal(isExecutablePath(undefined), false);
   });
 });
+
+describe('resolveConfig 2.7 options', () => {
+  it('applies the report, audit and output defaults', () => {
+    const config = resolveConfig();
+    assert.equal(config.audit, true);
+    assert.equal(config.failOnAuditError, false);
+    assert.deepEqual(config.auditIgnoreLinks, []);
+    assert.equal(config.reportPath, null);
+    assert.deepEqual(config.routePriority, []);
+    assert.deepEqual(config.routeOverrides, []);
+    assert.equal(config.transformHtml, null);
+    assert.equal(config.routesFile, null);
+    assert.equal(config.routesFromSitemap, null);
+    assert.equal(config.preloadLinks, false);
+    assert.equal(config.imageSitemap, false);
+    assert.equal(config.framework, 'auto');
+    assert.equal(config.retries, 0);
+    assert.equal(config.retryDelay, 500);
+    assert.equal(config.traceOnError, false);
+  });
+
+  it('makes hash mode imply external scripts and no preload swap handler', () => {
+    const config = resolveConfig({ csp: 'hash' });
+    assert.equal(config.externalScripts, true);
+    assert.equal(config.criticalCssPreload, false);
+
+    const overridden = resolveConfig({
+      csp: 'hash',
+      externalScripts: false,
+      criticalCssPreload: 'media',
+    });
+    assert.equal(overridden.externalScripts, false);
+    assert.equal(overridden.criticalCssPreload, 'media');
+  });
+
+  it('accepts a transform function and rejects any other value', () => {
+    const transform = (html) => html;
+    assert.equal(resolveConfig({ transformHtml: transform }).transformHtml, transform);
+    assert.throws(
+      () => resolveConfig({ transformHtml: 'nope' }),
+      /transformHtml must be a function/,
+    );
+  });
+
+  it('validates retry counts and delays', () => {
+    assert.equal(resolveConfig({ retries: 2, retryDelay: 10 }).retries, 2);
+    assert.throws(() => resolveConfig({ retries: -1 }), /retries/);
+    assert.throws(() => resolveConfig({ retries: 1.5 }), /retries/);
+    assert.throws(() => resolveConfig({ retryDelay: 0 }), /retryDelay/);
+  });
+
+  it('validates the framework choice', () => {
+    assert.equal(resolveConfig({ framework: 'vue' }).framework, 'vue');
+    assert.throws(() => resolveConfig({ framework: 'angular' }), /framework must be one of/);
+  });
+
+  it('validates route priority and audit ignore patterns', () => {
+    assert.deepEqual(resolveConfig({ routePriority: ['/', /^\/product/] }).routePriority, [
+      '/',
+      /^\/product/,
+    ]);
+    assert.throws(() => resolveConfig({ routePriority: [42] }), /routePriority/);
+    assert.throws(() => resolveConfig({ auditIgnoreLinks: [42] }), /auditIgnoreLinks/);
+  });
+
+  it('warns that a preload swap handler is blocked under hash mode', () => {
+    const config = resolveConfig({ csp: 'hash', criticalCssPreload: 'media' });
+    assert.match(config.warnings.join('\n'), /inline onload handler/);
+  });
+
+  it('warns when a new option cannot take effect', () => {
+    const config = resolveConfig({
+      audit: false,
+      failOnAuditError: true,
+      auditIgnoreLinks: ['/api/*'],
+      verify: false,
+      framework: 'vue',
+      preloadLinks: true,
+      removeScriptTags: true,
+      saveAs: 'png',
+      imageSitemap: true,
+      sitemap: false,
+      traceOnError: true,
+      dryRun: true,
+    });
+    const warnings = config.warnings.join('\n');
+    assert.match(warnings, /failOnAuditError has no effect/);
+    assert.match(warnings, /auditIgnoreLinks has no effect/);
+    assert.match(warnings, /framework has no effect/);
+    assert.match(warnings, /preloadLinks has no effect/);
+    assert.match(warnings, /preloadLinks skips script hints/);
+    assert.match(warnings, /imageSitemap has no effect/);
+    assert.match(warnings, /traceOnError has no effect/);
+  });
+});

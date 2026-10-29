@@ -178,3 +178,111 @@ describe('writeConfigFile', () => {
     assert.equal(await fs.readFile(path.join(dir, CONFIG_FILE), 'utf8'), 'export default {};\n');
   });
 });
+
+describe('react-snap migration', () => {
+  it('maps renamed options and passes through the shared ones', async () => {
+    const dir = await makeDir({
+      'package.json': JSON.stringify({
+        reactSnap: {
+          source: 'build',
+          include: ['/', '/about'],
+          puppeteerArgs: ['--no-sandbox'],
+          puppeteerIgnoreHTTPSErrors: true,
+          skipThirdPartyRequests: true,
+          fixInsertRule: false,
+          fixFormFields: false,
+          http2PushManifest: true,
+          cacheAjaxRequests: true,
+          timeout: 60000,
+          port: 3000,
+          sourceMaps: true,
+          unknownOption: 'x',
+        },
+      }),
+    });
+    const detected = await detectProjectDefaults(dir);
+    assert.equal(detected.reactSnap.values.sourceDir, 'build');
+    assert.deepEqual(detected.reactSnap.values.include, ['/', '/about']);
+    assert.deepEqual(detected.reactSnap.values.browserArgs, ['--no-sandbox']);
+    assert.equal(detected.reactSnap.values.ignoreHTTPSErrors, true);
+    assert.equal(detected.reactSnap.values.blockThirdParty, true);
+    assert.equal(detected.reactSnap.values.captureRuntimeStyles, false);
+    assert.equal(detected.reactSnap.values.captureFormState, false);
+    assert.equal(detected.reactSnap.values.preloadManifest, true);
+    assert.equal(detected.reactSnap.values.cacheAjaxRequests, true);
+    assert.equal(detected.reactSnap.values.timeout, 60000);
+    assert.deepEqual(
+      detected.reactSnap.ignored.map((entry) => entry.key),
+      ['port', 'sourceMaps'],
+    );
+    assert.deepEqual(detected.reactSnap.unknown, ['unknownOption']);
+  });
+
+  it('normalises a single-string reactSnap include', async () => {
+    const dir = await makeDir({
+      'package.json': JSON.stringify({ reactSnap: { include: '/about' } }),
+    });
+    const detected = await detectProjectDefaults(dir);
+    assert.deepEqual(detected.reactSnap.values.include, ['/about']);
+    const contents = renderConfigFile({
+      sourceDir: 'dist',
+      include: detected.reactSnap.values.include,
+    });
+    const configDir = await makeDir({ [CONFIG_FILE]: contents });
+    const loaded = (await import(pathToFileURL(path.join(configDir, CONFIG_FILE)).href)).default;
+    assert.deepEqual(resolveConfig(loaded).include, ['/about']);
+  });
+
+  it('omits the migration block when there is no reactSnap configuration', async () => {
+    const dir = await makeDir({ 'package.json': JSON.stringify({ dependencies: {} }) });
+    assert.equal((await detectProjectDefaults(dir)).reactSnap, undefined);
+  });
+
+  it('writes mapped options into a config the resolver accepts', async () => {
+    const dir = await makeDir({
+      'package.json': JSON.stringify({
+        reactSnap: {
+          source: 'build',
+          include: ['/', '/about'],
+          puppeteerArgs: ['--no-sandbox'],
+          skipThirdPartyRequests: true,
+          http2PushManifest: true,
+          inlineCss: 'critical',
+          timeout: 60000,
+          viewport: { width: 800, height: 600 },
+        },
+      }),
+    });
+    const detected = await detectProjectDefaults(dir);
+    const contents = renderConfigFile({
+      sourceDir: detected.reactSnap.values.sourceDir,
+      include: detected.reactSnap.values.include,
+      extraOptions: detected.reactSnap.values,
+    });
+    const configDir = await makeDir({ [CONFIG_FILE]: contents });
+    const loaded = (await import(pathToFileURL(path.join(configDir, CONFIG_FILE)).href)).default;
+    const config = resolveConfig(loaded);
+    assert.equal(config.sourceDir, 'build');
+    assert.deepEqual(config.browserArgs, ['--no-sandbox']);
+    assert.equal(config.blockThirdParty, true);
+    assert.equal(config.preloadManifest, true);
+    assert.equal(config.inlineCss, 'critical');
+    assert.equal(config.timeout, 60000);
+    assert.deepEqual(config.viewport, { width: 800, height: 600 });
+    assert.equal(contents.includes('sourceDir: "build"'), true);
+  });
+
+  it('skips a function or RegExp value instead of writing broken syntax', () => {
+    const contents = renderConfigFile({
+      sourceDir: 'dist',
+      extraOptions: {
+        timeout: 1000,
+        transformHtml: () => 'x',
+        include: [/regex/],
+      },
+    });
+    assert.equal(contents.includes('timeout: 1000'), true);
+    assert.equal(contents.includes('transformHtml'), false);
+    assert.equal(contents.includes('regex'), false);
+  });
+});

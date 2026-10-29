@@ -1,24 +1,17 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { blockThirdPartyRequests } from './blocking.js';
 import { DEFAULTS } from './config.js';
+import { frameworkFromMarkers, isHydrationError } from './frameworks.js';
+import { compareContainers } from './hydration-diff.js';
+import { routeToFile } from './output.js';
 import { isPageEmpty } from './page-content.js';
-import { toServerUrl } from './routes.js';
+import { resolveRouteConfig } from './route-config.js';
+import { normaliseRoute, toServerUrl } from './routes.js';
 import { mapLimit } from './scheduler.js';
 import { settlePage, trackNetwork } from './settle.js';
 
-const HYDRATION_PATTERNS = [
-  /hydrat/i,
-  /text content did not match/i,
-  /prop [`"].+?[`"] did not match/i,
-  /server-rendered HTML/i,
-  // React 16 and 17 phrase their mismatch warnings differently and never use the
-  // minified codes, which only exist from React 18 on.
-  /did not expect server HTML/i,
-  /expected server HTML to contain/i,
-  /react\.dev\/errors\/(418|419|421|422|423|424|425)/i,
-  /Minified React error #(418|419|421|422|423|424|425)\b/i,
-];
-
-// Containers used by the common React setups, so the probe can find the prerendered
+// Containers used by the common setups, so the probe can find the prerendered
 // subtree without configuration.
 const CONTAINER_SELECTOR = '#root, #app, #__next';
 
@@ -49,18 +42,8 @@ function bootProbe() {
 }
 
 /**
- * Classifies a console or page error as a React hydration failure. Exported so the
- * pattern set is testable without a browser. Patterns stay narrow on purpose: a
- * false positive fails a user's build, so unrelated 4xx React codes and generic
- * "does not match" messages are deliberately not treated as hydration errors.
- */
-export function isHydrationError(message) {
-  return HYDRATION_PATTERNS.some((pattern) => pattern.test(message));
-}
-
-/**
  * Classifies how a prerendered page booted. `hydrated` means the app adopted the
- * markup, `re-rendered` means it discarded it, `undetected` means no React root was
+ * markup, `re-rendered` means it discarded it, `undetected` means no framework root was
  * found on the container, and `unknown` means the prerendered child was never seen.
  */
 export function classifyBoot({ markupPreserved, frameworkMounted }) {
@@ -74,16 +57,22 @@ export function classifyBoot({ markupPreserved, frameworkMounted }) {
  * hydration errors plus how each route booted. This is the pass that catches markup
  * that only breaks once the app re-attaches, and apps that never attach to it at all.
  */
-export async function verifyRoutes({ browser, origin, routes, config }) {
+export async function verifyRoutes({ browser, origin, routes, config, outputDir = null }) {
   const { results, errors } = await mapLimit(routes, config.concurrency, (route) =>
-    verifyRoute({ browser, origin, route, config }),
+    verifyRoute({ browser, origin, route, config: resolveRouteConfig(config, route), outputDir }),
   );
   const verified = results.filter(Boolean);
   const modes = { hydrated: 0, 're-rendered': 0, undetected: 0, unknown: 0 };
-  for (const entry of verified) modes[entry.mode] += 1;
+  const frameworks = {};
+  for (const entry of verified) {
+    modes[entry.mode] += 1;
+    const name = entry.framework ?? 'unknown';
+    frameworks[name] = (frameworks[name] ?? 0) + 1;
+  }
   return {
     routes: verified,
     modes,
+    frameworks,
     ok: verified.every((entry) => entry.ok) && errors.length === 0,
     errors: errors.map(({ item, error }) => ({ route: item, message: error.message })),
   };
@@ -93,7 +82,7 @@ export async function verifyRoutes({ browser, origin, routes, config }) {
  * Verifies one route against the same request rules as the render pass, so what is
  * verified matches what was rendered.
  */
-async function verifyRoute({ browser, origin, route, config }) {
+async function verifyRoute({ browser, origin, route, config, outputDir }) {
   const context = await browser.newContext({
     viewport: config.viewport,
     storageState: config.storageState ?? undefined,
@@ -104,18 +93,12 @@ async function verifyRoute({ browser, origin, route, config }) {
     serviceWorkers: 'block',
   });
   const page = await context.newPage();
-  const hydrationErrors = [];
-  const consoleErrors = [];
-  const pageErrors = [];
-  // Hydration messages arrive through either channel, so both are classified the same way.
-  const collect = (message, target) => {
-    if (isHydrationError(message)) hydrationErrors.push(message);
-    else target.push(message);
-  };
+  const consoleMessages = [];
+  const pageMessages = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') collect(message.text(), consoleErrors);
+    if (message.type() === 'error') consoleMessages.push(message.text());
   });
-  page.on('pageerror', (error) => collect(error.message, pageErrors));
+  page.on('pageerror', (error) => pageMessages.push(error.message));
 
   const tracker = trackNetwork(page);
   try {
@@ -130,29 +113,90 @@ async function verifyRoute({ browser, origin, route, config }) {
     const status = response?.status() ?? null;
     await settlePage(page, config, tracker);
     const empty = await isPageEmpty(page);
+    const statusCode = await page.evaluate(() => {
+      const marker = document.querySelector('meta[name="prerender-status-code"]');
+      if (!marker) return null;
+      const value = Number.parseInt(marker.getAttribute('content') ?? '', 10);
+      return Number.isFinite(value) ? value : null;
+    });
+    const notFoundRoute = config.notFoundRoute ? normaliseRoute(config.notFoundRoute) : null;
+    const isNotFoundRoute = notFoundRoute !== null && normaliseRoute(route) === notFoundRoute;
+    const notFound = statusCode === 404 || isNotFoundRoute;
 
     const boot = await page.evaluate((selector) => {
       const probe = window.__snappyBoot ?? {};
       const container =
         document.querySelector(selector) ?? document.body?.firstElementChild ?? null;
-      const frameworkMounted = container
-        ? Object.keys(container).some(
-            (key) => key.startsWith('__reactContainer') || key === '_reactRootContainer',
-          )
-        : false;
+      const markers = container
+        ? {
+            react: Object.keys(container).some(
+              (key) => key.startsWith('__reactContainer') || key === '_reactRootContainer',
+            ),
+            vue: Boolean(
+              container.__vue_app__ ||
+                container.__vueParentComponent ||
+                container._vnode ||
+                container.__vue__,
+            ),
+            preact: Boolean(
+              container.__k ||
+                container._children ||
+                container.firstElementChild?.__k ||
+                container.firstElementChild?._children,
+            ),
+            svelte: Boolean(
+              container.__svelte_meta || container.querySelector?.('[data-svelte-h]'),
+            ),
+          }
+        : {};
       const child = probe.prerenderedChild ?? null;
-      return { frameworkMounted, markupPreserved: child ? child.isConnected : null };
+      return { markers, markupPreserved: child ? child.isConnected : null };
     }, CONTAINER_SELECTOR);
+    const detected = frameworkFromMarkers(boot.markers, config.framework);
+    // Classify only after the framework is known, so an explicit `framework` choice and
+    // the detected framework select the matching message patterns.
+    const hydrationErrors = [];
+    const consoleErrors = [];
+    const pageErrors = [];
+    for (const message of consoleMessages) {
+      if (isHydrationError(message, detected.name ?? 'auto')) hydrationErrors.push(message);
+      else consoleErrors.push(message);
+    }
+    for (const message of pageMessages) {
+      if (isHydrationError(message, detected.name ?? 'auto')) hydrationErrors.push(message);
+      else pageErrors.push(message);
+    }
+    const mode = classifyBoot({
+      markupPreserved: boot.markupPreserved,
+      frameworkMounted: detected.mounted,
+    });
+    let firstMismatch = null;
+    if (outputDir && (hydrationErrors.length > 0 || mode === 're-rendered')) {
+      const liveHtml = await page.evaluate((selector) => {
+        const container = document.querySelector(selector) ?? document.body;
+        return container?.outerHTML ?? null;
+      }, CONTAINER_SELECTOR);
+      const file = path.join(outputDir, routeToFile(route, config));
+      const expectedHtml = await fs.readFile(file, 'utf8').catch(() => null);
+      if (liveHtml && expectedHtml) firstMismatch = compareContainers(expectedHtml, liveHtml);
+    }
 
     return {
       route,
       status,
+      statusCode,
+      notFound,
+      framework: detected.name,
       empty,
       hydrationErrors,
       consoleErrors,
       pageErrors,
-      ok: hydrationErrors.length === 0 && (status === null || status < 400) && !empty,
-      mode: classifyBoot(boot),
+      ok:
+        hydrationErrors.length === 0 &&
+        (status === null || status < 400 || (isNotFoundRoute && status === 404)) &&
+        !empty,
+      mode,
+      firstMismatch,
       markupPreserved: boot.markupPreserved,
     };
   } finally {

@@ -40,6 +40,7 @@
   },
   "files": [
     "src",
+    "docs",
     "CHANGELOG.md",
     "LICENSE",
     "README.md"

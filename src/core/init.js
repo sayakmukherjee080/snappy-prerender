@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { DEFAULTS } from './config.js';
 import { normaliseRoute } from './routes.js';
 
 export const CONFIG_FILE = 'snappy.config.js';
@@ -15,6 +16,47 @@ const RUNNERS = [
   ['package-lock.json', 'npm'],
 ];
 
+// react-snap options whose name differs here, mapped to this package's option.
+const REACT_SNAP_RENAMED = {
+  source: 'sourceDir',
+  puppeteerArgs: 'browserArgs',
+  puppeteerIgnoreHTTPSErrors: 'ignoreHTTPSErrors',
+  skipThirdPartyRequests: 'blockThirdParty',
+  fixInsertRule: 'captureRuntimeStyles',
+  fixFormFields: 'captureFormState',
+  http2PushManifest: 'preloadManifest',
+};
+
+// react-snap options that keep their name and meaning.
+const REACT_SNAP_PASSTHROUGH = new Set([
+  'include',
+  'exclude',
+  'crawl',
+  'concurrency',
+  'timeout',
+  'waitFor',
+  'inlineCss',
+  'minifyHtml',
+  'minifyCss',
+  'cacheAjaxRequests',
+  'preconnectThirdParty',
+  'preloadImages',
+  'removeBlobs',
+  'removeStyleTags',
+  'removeScriptTags',
+  'asyncScriptTags',
+  'userAgent',
+  'viewport',
+  'saveAs',
+  'destination',
+]);
+
+// react-snap options that cannot be carried over, with the reason shown to the user.
+const REACT_SNAP_IGNORED = {
+  port: 'the prerenderer serves the build itself on an ephemeral port',
+  sourceMaps: 'react-snap declares it but never uses it',
+};
+
 /**
  * Reads what the project already says about itself: the framework that decides the build
  * directory, whether Vite is in use, which package runner it uses, and whether this package
@@ -26,13 +68,61 @@ export async function detectProjectDefaults(dir = process.cwd()) {
   const usesVite = Boolean(dependencies.vite) || (await anyExists(dir, VITE_CONFIGS));
   const usesCreateReactApp = Boolean(dependencies['react-scripts']) && !usesVite;
   const vite = usesVite ? await detectViteConfig(dir) : null;
-  return {
+  const detected = {
     sourceDir: vite?.sourceDir ?? (usesCreateReactApp ? 'build' : 'dist'),
     base: vite?.base ?? homepageBase(manifest?.homepage) ?? '/',
     usesVite,
     runner: await detectRunner(dir),
     installed: PACKAGE_NAME in dependencies,
   };
+  const reactSnap = mapReactSnapOptions(manifest?.reactSnap);
+  if (reactSnap) detected.reactSnap = reactSnap;
+  return detected;
+}
+
+/**
+ * Maps a legacy react-snap block onto this package's options. The result lists what
+ * carried over, what was deliberately dropped and what was not recognised, so the
+ * wizard can explain the migration instead of guessing.
+ */
+export function mapReactSnapOptions(block) {
+  if (typeof block !== 'object' || block === null || Array.isArray(block)) return null;
+  const values = {};
+  const mapping = [];
+  const ignored = [];
+  const unknown = [];
+  for (const [key, value] of Object.entries(block)) {
+    if (Object.hasOwn(REACT_SNAP_IGNORED, key)) {
+      ignored.push({ key, reason: REACT_SNAP_IGNORED[key] });
+      continue;
+    }
+    const target = REACT_SNAP_RENAMED[key] ?? (REACT_SNAP_PASSTHROUGH.has(key) ? key : null);
+    if (target === null) {
+      unknown.push(key);
+      continue;
+    }
+    // JSON cannot carry functions or RegExp, but a hand-written manifest may.
+    if (!isSerialisable(value)) {
+      unknown.push(`${key} (unsupported value)`);
+      continue;
+    }
+    const mappedValue =
+      target === 'include' && typeof value === 'string' ? parseRouteList(value) : value;
+    values[target] = mappedValue;
+    mapping.push({ from: key, to: target, value: mappedValue });
+  }
+  return { values, mapping, ignored, unknown };
+}
+
+// Reports whether a value can be written into a JavaScript config file.
+function isSerialisable(value) {
+  if (value === null) return true;
+  if (['string', 'number', 'boolean'].includes(typeof value)) return true;
+  if (Array.isArray(value)) return value.every(isSerialisable);
+  if (typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.values(value).every(isSerialisable);
+  }
+  return false;
 }
 
 /**
@@ -88,43 +178,71 @@ export function parseRouteList(input) {
 }
 
 /**
+ * Turns the wizard's answers into the options object the generated config will export.
+ * Only values that change a default are included, and only options the resolver knows.
+ */
+export function configValuesFromAnswers(answers = {}) {
+  const values = { sourceDir: answers.sourceDir ?? 'dist' };
+  if (answers.base && answers.base !== '/') values.base = answers.base;
+  // A supplied include list acts as an allowlist, so writing the default would stop discovery.
+  const includeValue = answers.include ?? ['/'];
+  const include = parseRouteList(
+    Array.isArray(includeValue) ? includeValue.join(',') : includeValue,
+  );
+  const includeIsDefault = include.length === 1 && include[0] === '/';
+  if (!includeIsDefault) values.include = include;
+  if (answers.crawl === false) values.crawl = false;
+  if (answers.csp === 'strict' || answers.csp === 'hash') values.csp = answers.csp;
+  if (answers.externalScripts === true) values.externalScripts = true;
+  if (answers.criticalCssPreload !== undefined && answers.criticalCssPreload !== 'media') {
+    values.criticalCssPreload = answers.criticalCssPreload;
+  }
+
+  const metadata = METADATA_KEYS.filter((key) => answers[key]).map((key) => [key, answers[key]]);
+  if (metadata.length > 0) values.metadata = Object.fromEntries(metadata);
+
+  for (const [key, value] of Object.entries(answers.extraOptions ?? {})) {
+    if (!Object.hasOwn(DEFAULTS, key) || key === 'metadata') continue;
+    if (Object.hasOwn(values, key)) continue;
+    if (!isSerialisable(value)) continue;
+    values[key] = value;
+  }
+  return values;
+}
+
+/**
  * Renders the config file for the wizard's answers, writing only the options the answers
  * actually set so every line in the file does something.
  */
 export function renderConfigFile(answers = {}) {
+  const values = configValuesFromAnswers(answers);
   const lines = [
     '// Created by `snappy-prerender init`. Every option is documented in the snappy-prerender README.',
     'export default {',
-    `  sourceDir: ${quote(answers.sourceDir ?? 'dist')},`,
   ];
-  if (answers.base && answers.base !== '/') lines.push(`  base: ${quote(answers.base)},`);
-  // A supplied include list acts as an allowlist, so writing the default would stop discovery.
-  // It is only written when the answer actually narrows the set of routes.
-  const include = parseRouteList((answers.include ?? ['/']).join(','));
-  const includeIsDefault = include.length === 1 && include[0] === '/';
-  if (!includeIsDefault) lines.push(`  include: [${include.map(quote).join(', ')}],`);
-  if (answers.crawl === false) lines.push('  crawl: false,');
-  // The CSP dial and the parts it was tuned with, so a strict-CSP project keeps the choice.
-  if (answers.csp === 'strict') lines.push('  csp: "strict",');
-  if (answers.externalScripts === true) lines.push('  externalScripts: true,');
-  if (answers.criticalCssPreload !== undefined && answers.criticalCssPreload !== 'media') {
-    // A boolean stays a literal; a mode name is quoted.
-    const value =
-      typeof answers.criticalCssPreload === 'boolean'
-        ? String(answers.criticalCssPreload)
-        : quote(answers.criticalCssPreload);
-    lines.push(`  criticalCssPreload: ${value},`);
-  }
-
-  const metadata = METADATA_KEYS.filter((key) => answers[key]).map((key) => [key, answers[key]]);
-  if (metadata.length > 0) {
+  for (const [key, value] of Object.entries(values)) {
+    if (key !== 'metadata') {
+      lines.push(`  ${key}: ${serializeValue(value)},`);
+      continue;
+    }
     lines.push('  metadata: {');
-    for (const [key, value] of metadata) lines.push(`    ${key}: ${quote(value)},`);
+    for (const [metadataKey, metadataValue] of Object.entries(value)) {
+      lines.push(`    ${metadataKey}: ${serializeValue(metadataValue)},`);
+    }
     lines.push('  },');
   }
-
   lines.push('};', '');
   return lines.join('\n');
+}
+
+// Writes a JSON-compatible value as JavaScript source with a stable, readable shape.
+function serializeValue(value) {
+  if (Array.isArray(value)) return `[${value.map(serializeValue).join(', ')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value).map(([key, entry]) => `${key}: ${serializeValue(entry)}`);
+    return `{ ${entries.join(', ')} }`;
+  }
+  return JSON.stringify(value);
 }
 
 /**
@@ -138,11 +256,6 @@ export async function writeConfigFile({ dir, contents, force = false }) {
   }
   await fs.writeFile(target, contents, 'utf8');
   return target;
-}
-
-// Quotes a string for the generated module.
-function quote(value) {
-  return JSON.stringify(String(value));
 }
 
 // Reads a JSON file, treating a missing or malformed file as absent.

@@ -11,7 +11,8 @@ export const MAX_DEFAULT_CONCURRENCY = 8;
 const LOG_LEVELS = ['silent', 'error', 'warn', 'info', 'debug'];
 const BROWSER_CHOICES = ['auto', 'chrome', 'msedge', 'chromium'];
 const INLINE_CSS_STRATEGIES = [false, true, 'inline', 'critical'];
-const CSP_MODES = ['off', 'strict'];
+const CSP_MODES = ['off', 'strict', 'hash'];
+const FRAMEWORK_CHOICES = ['auto', 'react', 'vue', 'svelte', 'preact'];
 const SAVE_AS_CHOICES = ['html', 'png', 'jpeg'];
 const CRITICAL_CSS_PRELOAD = ['body', 'media', 'swap', 'swap-high', 'swap-low', 'js', 'js-lazy'];
 const NULLABLE_KEYS = [
@@ -27,6 +28,10 @@ const NULLABLE_KEYS = [
   'browserDownloadVersion',
   'url',
   'serveCmd',
+  'reportPath',
+  'routesFile',
+  'routesFromSitemap',
+  'transformHtml',
 ];
 const ARRAY_KEYS = [
   'include',
@@ -35,6 +40,9 @@ const ARRAY_KEYS = [
   'browserArgs',
   'ignoreForPreload',
   'removeAttributes',
+  'auditIgnoreLinks',
+  'routePriority',
+  'routeOverrides',
 ];
 
 export const DEFAULTS = Object.freeze({
@@ -87,11 +95,26 @@ export const DEFAULTS = Object.freeze({
   preloadImages: false,
   preloadManifest: false,
   sitemap: false,
+  imageSitemap: false,
   ignoreForPreload: ['service-worker.js'],
   cacheAjaxRequests: false,
   maxCachedBytes: 5 * 1024 * 1024,
   flatOutput: false,
   notFoundRoute: '/404',
+  audit: true,
+  failOnAuditError: false,
+  auditIgnoreLinks: [],
+  reportPath: null,
+  routePriority: [],
+  routeOverrides: [],
+  transformHtml: null,
+  routesFile: null,
+  routesFromSitemap: null,
+  preloadLinks: false,
+  retries: 0,
+  retryDelay: 500,
+  traceOnError: false,
+  framework: 'auto',
   verify: true,
   verifyChangedOnly: false,
   failOnHydrationError: false,
@@ -128,6 +151,9 @@ for (const key of [
   'browserArgs',
   'ignoreForPreload',
   'removeAttributes',
+  'auditIgnoreLinks',
+  'routePriority',
+  'routeOverrides',
 ]) {
   Object.freeze(DEFAULTS[key]);
 }
@@ -156,9 +182,11 @@ export function resolveConfig(userOptions = {}) {
     !(config.include.length === 1 && config.include[0] === '/');
   // The CSP dial decides the defaults for the pieces that can move. Explicit options still
   // win, so a project can take 'strict' and put one part back.
-  if (userOptions.externalScripts === undefined) config.externalScripts = config.csp === 'strict';
+  if (userOptions.externalScripts === undefined) {
+    config.externalScripts = config.csp === 'strict' || config.csp === 'hash';
+  }
   if (userOptions.criticalCssPreload === undefined) {
-    config.criticalCssPreload = config.csp === 'strict' ? false : 'media';
+    config.criticalCssPreload = config.csp === 'strict' || config.csp === 'hash' ? false : 'media';
   }
   config.warnings = [];
   validateConfig(config);
@@ -201,6 +229,32 @@ function addConfigWarnings(config, userOptions) {
         );
       }
     }
+    if (userOptions.framework !== undefined) {
+      warn(
+        `framework has no effect because hydration verification is skipped with ${config.serveCmd ? 'serveCmd' : `saveAs: '${config.saveAs}'`}`,
+      );
+    }
+  }
+  if (!config.verify && userOptions.framework !== undefined) {
+    warn('framework has no effect because verify is false');
+  }
+  if (!config.audit && config.failOnAuditError) {
+    warn('failOnAuditError has no effect because audit is false');
+  }
+  if (!config.audit && config.auditIgnoreLinks.length > 0) {
+    warn('auditIgnoreLinks has no effect because audit is false');
+  }
+  if (config.preloadLinks && config.saveAs !== 'html') {
+    warn(`preloadLinks has no effect when saveAs is '${config.saveAs}'`);
+  }
+  if (config.preloadLinks && config.removeScriptTags) {
+    warn('preloadLinks skips script hints because removeScriptTags strips every script');
+  }
+  if (config.imageSitemap && !config.sitemap) {
+    warn('imageSitemap has no effect because sitemap is false');
+  }
+  if (config.traceOnError && config.dryRun) {
+    warn('traceOnError has no effect in dry-run mode');
   }
   if (
     userOptions.criticalCssPreload !== undefined &&
@@ -221,7 +275,7 @@ function addConfigWarnings(config, userOptions) {
     );
   }
   if (
-    config.csp === 'strict' &&
+    (config.csp === 'strict' || config.csp === 'hash') &&
     userOptions.criticalCssPreload !== undefined &&
     config.criticalCssPreload !== false
   ) {
@@ -305,9 +359,25 @@ export function validateConfig(config) {
   stringList(config.browserArgs, 'browserArgs');
   stringList(config.ignoreForPreload, 'ignoreForPreload');
   patternList(config.removeAttributes, 'removeAttributes');
-  for (const key of ['readyFlag', 'readySelector', 'waitFor', 'notFoundRoute']) nullableString(key);
+  patternList(config.auditIgnoreLinks, 'auditIgnoreLinks');
+  patternList(config.routePriority, 'routePriority');
+  for (const key of [
+    'readyFlag',
+    'readySelector',
+    'waitFor',
+    'notFoundRoute',
+    'reportPath',
+    'routesFile',
+    'routesFromSitemap',
+  ]) {
+    nullableString(key);
+  }
   for (const key of ['userAgent', 'destination', 'browserDownloadVersion']) nullableString(key);
+  if (config.transformHtml !== null && typeof config.transformHtml !== 'function') {
+    throw new TypeError('transformHtml must be a function or null');
+  }
   for (const key of BOOLEAN_KEYS) booleanOption(key);
+  validateRouteOverrides(config.routeOverrides);
 
   if (config.browserDownloadHash !== null && !/^[a-f0-9]{64}$/i.test(config.browserDownloadHash)) {
     throw new TypeError('browserDownloadHash must be a 64 character SHA-256 hex digest');
@@ -333,6 +403,12 @@ export function validateConfig(config) {
   if (config.maxRoutes !== null && (!Number.isInteger(config.maxRoutes) || config.maxRoutes < 1)) {
     throw new TypeError('maxRoutes must be null or a positive integer');
   }
+  if (!Number.isInteger(config.retries) || config.retries < 0) {
+    throw new TypeError('retries must be a non-negative integer');
+  }
+  if (!Number.isFinite(config.retryDelay) || config.retryDelay <= 0) {
+    throw new TypeError('retryDelay must be a positive number of milliseconds');
+  }
   if (!Number.isFinite(config.maxCachedBytes) || config.maxCachedBytes <= 0) {
     throw new TypeError('maxCachedBytes must be a positive number of bytes');
   }
@@ -348,6 +424,9 @@ export function validateConfig(config) {
     throw new TypeError(
       `browser must be one of: ${BROWSER_CHOICES.join(', ')} or a path to an executable`,
     );
+  }
+  if (!FRAMEWORK_CHOICES.includes(config.framework)) {
+    throw new TypeError(`framework must be one of: ${FRAMEWORK_CHOICES.join(', ')}`);
   }
   if (config.storageState !== null) {
     if (typeof config.storageState !== 'string' || !fs.existsSync(config.storageState)) {
@@ -402,6 +481,51 @@ export function validateConfig(config) {
   validateMetadata(config);
   if (config.sitemap && !config.metadata?.siteUrl) {
     throw new TypeError('sitemap needs metadata.siteUrl so the sitemap can list absolute URLs');
+  }
+}
+
+// Per-route overrides may only change the settings that make sense for one route.
+const ROUTE_OVERRIDE_KEYS = new Set([
+  'match',
+  'timeout',
+  'waitFor',
+  'readySelector',
+  'readyFlag',
+  'crawl',
+  'storageState',
+]);
+
+/**
+ * Validates per-route overrides. Matching patterns stay strings or RegExp; every
+ * override key is checked so a typo cannot silently leave the base config in place.
+ */
+function validateRouteOverrides(overrides) {
+  for (const override of overrides) {
+    if (typeof override !== 'object' || override === null || Array.isArray(override)) {
+      throw new TypeError('routeOverrides entries must be objects');
+    }
+    for (const key of Object.keys(override)) {
+      if (!ROUTE_OVERRIDE_KEYS.has(key)) {
+        throw new TypeError(`routeOverrides.${key} is not a recognised option`);
+      }
+    }
+    if (!(typeof override.match === 'string' || override.match instanceof RegExp)) {
+      throw new TypeError('routeOverrides entries need a string or RegExp match');
+    }
+    if (override.timeout !== undefined) {
+      if (!Number.isFinite(override.timeout) || override.timeout <= 0) {
+        throw new TypeError('routeOverrides.timeout must be a positive number of milliseconds');
+      }
+    }
+    for (const key of ['waitFor', 'readySelector', 'readyFlag', 'storageState']) {
+      const value = override[key];
+      if (value !== undefined && typeof value !== 'string') {
+        throw new TypeError(`routeOverrides.${key} must be a string`);
+      }
+    }
+    if (override.crawl !== undefined && typeof override.crawl !== 'boolean') {
+      throw new TypeError('routeOverrides.crawl must be a boolean');
+    }
   }
 }
 

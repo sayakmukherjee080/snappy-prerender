@@ -177,6 +177,49 @@ describe('buildHeadEntries', () => {
       ['/a.woff2', '/b.woff2'],
     );
   });
+
+  it('builds JSON-LD scripts, html attributes and hreflang alternates', () => {
+    const entries = buildHeadEntries(
+      {
+        title: 'Awards',
+        lang: 'en',
+        dir: 'ltr',
+        structuredData: { '@context': 'https://schema.org', name: '</script><x>' },
+        alternates: [
+          { hreflang: 'en', href: '/en/awards' },
+          { hreflang: 'x-default', href: '/awards' },
+        ],
+      },
+      defaults,
+      'head-1',
+    );
+    const byId = new Map(entries.map((entry) => [headKey(entry), entry]));
+    assert.equal(byId.get('html:lang').value, 'en');
+    assert.equal(byId.get('html:dir').value, 'ltr');
+    const script = byId.get('script:ld+json:head-1');
+    assert.equal(script.kind, 'script');
+    assert.equal(script.attrs.type, 'application/ld+json');
+    assert.equal(script.text.includes('\\u003C/script'), true);
+    assert.match(script.text, /"@context":"https:\/\/schema\.org"/);
+    assert.equal(
+      byId.get('link:rel:alternate|en|https://pps.example/en/awards').attrs.hreflang,
+      'en',
+    );
+    assert.equal(
+      byId.get('link:rel:alternate|x-default|https://pps.example/awards').attrs.href,
+      'https://pps.example/awards',
+    );
+  });
+
+  it('keys structured data per Head so layout and page can both contribute', () => {
+    const layout = buildHeadEntries({ structuredData: { name: 'Layout' } }, defaults, 'layout');
+    const page = buildHeadEntries({ structuredData: { name: 'Page' } }, defaults, 'page');
+    const merged = mergeHeadEntries([
+      { sequence: 1, entries: layout },
+      { sequence: 2, entries: page },
+    ]);
+    assert.equal(merged.filter((entry) => entry.kind === 'script').length, 2);
+  });
 });
 
 describe('mergeHeadEntries', () => {

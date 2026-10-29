@@ -117,6 +117,13 @@ function shouldStripMetadata(node, options, stats) {
 function shouldRemove(node, stats, options) {
   if (node.tagName === 'script' && hasAttribute(node, 'data-snappy-meta', null)) return false;
   if (node.tagName === 'style' && hasAttribute(node, 'data-snappy-inline', null)) return false;
+  if (
+    node.tagName === 'meta' &&
+    attributeValue(node, 'name').toLowerCase() === 'prerender-status-code'
+  ) {
+    stats.removedElements += 1;
+    return true;
+  }
   const reason =
     (node.tagName === 'style' && hasAttribute(node, 'id', FREEZE_STYLE_ID)) ||
     hasAttribute(node, REMOVE_ATTRIBUTE, null) ||
