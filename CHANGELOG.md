@@ -10,46 +10,35 @@ the release tags; see the Git history for those changes.
 
 ### Added
 
-- Site audit on by default: broken internal links, duplicate/missing metadata, canonical
-  mismatches, heading counts, build-origin metadata, orphan pages, sitemap disagreement,
-  and CSP hygiene. Findings are report-only; `failOnAuditError` opts into a build gate, and
-  `auditIgnoreLinks` excludes known dynamic links.
-- `reportPath` / `--report` writes a versioned JSON report with per-route records, audit
-  findings, sitemap, preload manifest, truncation, 404 routes, CSP skips and failure traces.
-- `routesFile` and `routesFromSitemap` seed routes from text, JSON, a local sitemap or a
-  remote sitemap (indexes followed one level). Supplying either stops the implicit root
-  seed unless `include` was set.
-- Deterministic breadth-first crawling when `maxRoutes` or `routePriority` is set. The cap
-  records every route that did not fit in `truncated.droppedRoutes`.
-- `routeOverrides` per-route `timeout`, `waitFor`, `readySelector`, `readyFlag`, `crawl`
-  and `storageState`; `transformHtml` for a per-route, optionally async HTML transform.
-- Framework-agnostic verification for React, Vue, Svelte and Preact (`framework`), with
-  framework detection from DOM markers and per-framework hydration patterns.
-- `firstMismatch` hydration locator: bounded diff of the written container against the live
-  one, with `path`, `kind`, `expected` and `actual`.
-- Static preload injection (`preloadLinks`) for runtime chunks, fonts and the LCP image,
-  complementing the Early Hints preload manifest.
-- Sitemap depth: hreflang alternates, image sitemap, and `sitemap.locs` in the report.
-- Head depth: JSON-LD `structuredData`, `lang`/`dir` on `<html>`, and hreflang `alternates`
-  with absolute URLs and the shared trailing-slash policy.
-- App-declared 404s via `<meta name="prerender-status-code" content="404">`.
-- `csp: 'hash'` adds a meta policy with SHA-256 hashes for inline scripts and styles,
-  skipping JSON-LD and data blocks and leaving an existing policy untouched.
-- `retries`, `retryDelay` and `traceOnError`; a final failure records the attempt count and
-  writes a Playwright trace under `snappy-traces/`.
-- `init` reads a legacy `reactSnap` block, maps its options, warns about unknown keys and
-  prints the migration table.
-- CLI flags for every new option, plus `README` and `docs/` coverage.
+- Site audit for route health, links, metadata, sitemap and CSP. Findings are report-only
+  unless `failOnAuditError` is set; `auditIgnoreLinks` excludes dynamic links.
+- `reportPath` / `--report` writes a versioned JSON report with per-route records, audit,
+  verification, sitemap, preload manifest, truncation and traces.
+- `routesFile` and `routesFromSitemap` seed routes from text, JSON or a sitemap. Sitemap
+  indexes are followed one level, and relative paths resolve against the config file.
+- Deterministic BFS crawling when `maxRoutes` or `routePriority` is set.
+  `truncated.droppedRoutes` lists the routes that did not fit.
+- `routeOverrides` for per-route timeout, wait, readiness, crawl and storage state.
+- `transformHtml`, sync or async, runs before preload and CSP injection.
+- Framework detection for React, Vue, Svelte and Preact, with framework-specific hydration
+  messages and `firstMismatch` details.
+- `preloadLinks` for runtime chunks, fonts and the LCP image.
+- Sitemap hreflang alternates, image entries and `sitemap.locs` in the report.
+- Head JSON-LD, `lang`/`dir` and hreflang alternates.
+- App-declared 404 pages via `<meta name="prerender-status-code" content="404">`.
+- `csp: 'hash'` adds a meta policy with SHA-256 hashes for inline scripts and styles.
+- `retries`, `retryDelay` and `traceOnError` for failed renders.
+- `init` migration for a legacy `reactSnap` block.
+- CLI flags and documentation for the new options.
 
 ### Changed
 
-- Verification reports the detected framework and uses the matching hydration patterns.
-- A `<title>` inside SVG is no longer counted as a document title.
-- Page metadata is collected after `transformHtml` and preload injection, so the audit and
-  sitemap see the final document.
-- Relative `routesFile` and `routesFromSitemap` paths resolve against the config file.
-- Root-relative sitemap locations have the public base stripped; remote sitemap entries on
-  another origin are ignored.
+- Verification reports the detected framework and uses its hydration message patterns.
+- SVG `<title>` elements are no longer counted as page titles.
+- Page metadata, audit findings and sitemap entries use the final HTML after transform and
+  preload injection.
+- Route sources resolve relative paths against the config file. Sitemap base and origin
+  handling is stricter.
 - The JSON report includes the verification summary, uses crawl acceptance order for
   `order`, and redacts credentials, query strings and the storage-state path.
 
@@ -57,12 +46,12 @@ the release tags; see the Git history for those changes.
 
 - A configured `notFoundRoute` may return HTTP 404 and is still written as `404.html`;
   verification accepts that status for the same route.
-- An explicit `framework` now selects its hydration message patterns during verification.
+- An explicit `framework` selects its hydration message patterns during verification.
 - A non-string `transformHtml` result fails that route with a clear error.
 - `routeOverrides` ignores undefined values instead of clearing base settings.
 - `audit.linksChecked` counts every link pair considered, and route-health findings are
   included in the audit.
-- `preloadLinks` no longer preloads scripts removed by `removeScriptTags`.
+- `preloadLinks` does not preload scripts removed by `removeScriptTags` or `transformHtml`.
 - CSP hash mode warns when the generated policy blocks a browser request.
 - `init` normalises a single-string `reactSnap.include`.
 - The image sitemap collects `srcset` and `<picture><source>` candidates.
