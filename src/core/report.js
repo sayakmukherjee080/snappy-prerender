@@ -34,6 +34,7 @@ export function buildReport(report, config = null) {
     version: 1,
     generatedAt: new Date().toISOString(),
     durationMs: report.durationMs,
+    timings: report.timings,
     ok: report.ok,
     summary: {
       routes: report.routeDetails.length,
@@ -85,9 +86,10 @@ function sanitiseValue(value, config) {
   let text = value;
   if (config?.storageState) {
     for (const secret of [config.storageState, path.resolve(config.storageState)]) {
-      text = text.split(secret).join('[redacted]');
+      if (text.includes(secret)) text = text.split(secret).join('[redacted]');
     }
   }
+  if (!/https?:\/\//i.test(text)) return text;
   return text.replace(/https?:\/\/[^\s"'<>]+/gi, redactUrl);
 }
 

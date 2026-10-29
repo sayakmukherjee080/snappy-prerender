@@ -1,5 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { mapLimit } from './scheduler.js';
+
+const COPY_CONCURRENCY = 8;
 
 /**
  * Prepares the directory the run writes into. When a destination is configured the
@@ -58,13 +61,26 @@ export async function prepareDestination({
 async function copyTree(source, target) {
   await fs.mkdir(target, { recursive: true });
   const entries = await fs.readdir(source, { withFileTypes: true });
-  let skipped = 0;
-  for (const entry of entries) {
+  const { results, errors } = await mapLimit(entries, COPY_CONCURRENCY, async (entry) => {
     const from = path.join(source, entry.name);
     const to = path.join(target, entry.name);
-    if (entry.isDirectory()) skipped += await copyTree(from, to);
-    else if (entry.isFile()) await fs.copyFile(from, to);
-    else skipped += 1;
-  }
-  return skipped;
+    if (entry.isDirectory()) return copyTree(from, to);
+    if (!entry.isFile()) return 1;
+    const [sourceStats, targetStats] = await Promise.all([
+      fs.stat(from),
+      fs.stat(to).catch(() => null),
+    ]);
+    if (
+      targetStats?.isFile() &&
+      targetStats.size === sourceStats.size &&
+      targetStats.mtimeMs === sourceStats.mtimeMs
+    ) {
+      return 0;
+    }
+    await fs.copyFile(from, to);
+    await fs.utimes(to, sourceStats.atime, sourceStats.mtime);
+    return 0;
+  });
+  if (errors.length > 0) throw errors[0].error;
+  return results.reduce((total, skipped) => total + (skipped ?? 0), 0);
 }

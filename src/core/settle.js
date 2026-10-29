@@ -112,15 +112,13 @@ export async function settlePage(page, config, tracker) {
  * normalisation.
  */
 export async function freezeAnimations(page) {
-  await page.evaluate((css) => {
+  await page.evaluate(async (css) => {
     const style = document.createElement('style');
     style.id = 'snappy-freeze';
     style.textContent = css;
     document.head.appendChild(style);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   }, FREEZE_CSS);
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
-  );
 }
 
 /**

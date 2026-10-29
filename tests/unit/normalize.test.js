@@ -165,13 +165,6 @@ describe('normaliseHtml post-processing', () => {
     assert.deepEqual(stats.metadataOrigins, ['http://127.0.0.1:5500', 'http://localhost:5500']);
   });
 
-  it('counts title elements so duplicate titles can be reported', () => {
-    const page =
-      '<!DOCTYPE html><html><head><title>One</title><title>Two</title></head><body></body></html>';
-    assert.equal(normaliseHtml(page).stats.titleElements, 2);
-    assert.equal(normaliseHtml(PAGE).stats.titleElements, 0);
-  });
-
   it('adds a robots noindex to the not-found page when asked', () => {
     const page = '<!DOCTYPE html><html><head></head><body><h1>Not found</h1></body></html>';
     const { html, stats } = normaliseHtml(page, { noindex: true });

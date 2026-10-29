@@ -24,6 +24,7 @@ export async function renderAllRoutes({
   report,
   outputDir,
   sourceSeeds = [],
+  caches = null,
 }) {
   const visited = new Set();
   const scheduled = new Set();
@@ -73,6 +74,7 @@ export async function renderAllRoutes({
       report,
       outputDir,
       screenshot: config.saveAs !== 'html',
+      caches,
     });
     if (!result) return null;
     result.depth = depth;
@@ -194,6 +196,7 @@ async function renderWithRetries({
   report,
   outputDir,
   screenshot,
+  caches,
 }) {
   const attempts = config.retries + 1;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -209,6 +212,7 @@ async function renderWithRetries({
         config: routeConfig,
         screenshot,
         traceFile,
+        caches,
       });
       if (attempt > 1) log.info(`  ${route}: succeeded on attempt ${attempt}`);
       result.attempts = attempt;

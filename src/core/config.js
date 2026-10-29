@@ -117,6 +117,7 @@ export const DEFAULTS = Object.freeze({
   framework: 'auto',
   verify: true,
   verifyChangedOnly: false,
+  reuseVerificationContext: false,
   failOnHydrationError: false,
   failOnRerender: false,
   failOnPageError: false,
@@ -237,6 +238,14 @@ function addConfigWarnings(config, userOptions) {
   }
   if (!config.verify && userOptions.framework !== undefined) {
     warn('framework has no effect because verify is false');
+  }
+  if (!config.verify && config.reuseVerificationContext) {
+    warn('reuseVerificationContext has no effect because verify is false');
+  }
+  if (config.reuseVerificationContext && config.storageState) {
+    warn(
+      'reuseVerificationContext shares browser storage across routes; authenticated routes may see state from another route',
+    );
   }
   if (!config.audit && config.failOnAuditError) {
     warn('failOnAuditError has no effect because audit is false');

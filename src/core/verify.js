@@ -5,15 +5,10 @@ import { DEFAULTS } from './config.js';
 import { frameworkFromMarkers, isHydrationError } from './frameworks.js';
 import { compareContainers } from './hydration-diff.js';
 import { routeToFile } from './output.js';
-import { isPageEmpty } from './page-content.js';
+import { CONTAINER_SELECTOR, readBootState } from './page-content.js';
 import { resolveRouteConfig } from './route-config.js';
 import { normaliseRoute, toServerUrl } from './routes.js';
-import { mapLimit } from './scheduler.js';
 import { settlePage, trackNetwork } from './settle.js';
-
-// Containers used by the common setups, so the probe can find the prerendered
-// subtree without configuration.
-const CONTAINER_SELECTOR = '#root, #app, #__next';
 
 /**
  * Page-side probe installed before navigation. It remembers the first prerendered
@@ -58,8 +53,38 @@ export function classifyBoot({ markupPreserved, frameworkMounted }) {
  * that only breaks once the app re-attaches, and apps that never attach to it at all.
  */
 export async function verifyRoutes({ browser, origin, routes, config, outputDir = null }) {
-  const { results, errors } = await mapLimit(routes, config.concurrency, (route) =>
-    verifyRoute({ browser, origin, route, config: resolveRouteConfig(config, route), outputDir }),
+  const results = new Array(routes.length).fill(undefined);
+  const errors = [];
+  let cursor = 0;
+  const workerCount = Math.max(1, Math.min(config.concurrency, routes.length || 1));
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      let sharedContext = null;
+      try {
+        if (config.reuseVerificationContext && routes.length > 0) {
+          sharedContext = await createContext(browser, config);
+        }
+        while (cursor < routes.length) {
+          const index = cursor;
+          cursor += 1;
+          const route = routes[index];
+          try {
+            results[index] = await verifyRoute({
+              browser,
+              origin,
+              route,
+              config: resolveRouteConfig(config, route),
+              outputDir,
+              context: sharedContext,
+            });
+          } catch (error) {
+            errors.push({ item: route, error });
+          }
+        }
+      } finally {
+        if (sharedContext) await sharedContext.close();
+      }
+    }),
   );
   const verified = results.filter(Boolean);
   const modes = { hydrated: 0, 're-rendered': 0, undetected: 0, unknown: 0 };
@@ -78,12 +103,9 @@ export async function verifyRoutes({ browser, origin, routes, config, outputDir 
   };
 }
 
-/**
- * Verifies one route against the same request rules as the render pass, so what is
- * verified matches what was rendered.
- */
-async function verifyRoute({ browser, origin, route, config, outputDir }) {
-  const context = await browser.newContext({
+// Creates the browser context a verification worker reuses across routes.
+function createContext(browser, config) {
+  return browser.newContext({
     viewport: config.viewport,
     storageState: config.storageState ?? undefined,
     userAgent:
@@ -92,7 +114,17 @@ async function verifyRoute({ browser, origin, route, config, outputDir }) {
     reducedMotion: config.freezeAnimations ? 'reduce' : 'no-preference',
     serviceWorkers: 'block',
   });
-  const page = await context.newPage();
+}
+
+/**
+ * Verifies one route against the same request rules as the render pass, so what is
+ * verified matches what was rendered. A supplied context is reused by the worker; the
+ * page is always fresh.
+ */
+async function verifyRoute({ browser, origin, route, config, outputDir, context = null }) {
+  const ownsContext = context === null;
+  const activeContext = context ?? (await createContext(browser, config));
+  const page = await activeContext.newPage();
   const consoleMessages = [];
   const pageMessages = [];
   page.on('console', (message) => {
@@ -112,47 +144,12 @@ async function verifyRoute({ browser, origin, route, config, outputDir }) {
     });
     const status = response?.status() ?? null;
     await settlePage(page, config, tracker);
-    const empty = await isPageEmpty(page);
-    const statusCode = await page.evaluate(() => {
-      const marker = document.querySelector('meta[name="prerender-status-code"]');
-      if (!marker) return null;
-      const value = Number.parseInt(marker.getAttribute('content') ?? '', 10);
-      return Number.isFinite(value) ? value : null;
-    });
+    const { empty, statusCode, markers, markupPreserved } = await readBootState(page);
     const notFoundRoute = config.notFoundRoute ? normaliseRoute(config.notFoundRoute) : null;
     const isNotFoundRoute = notFoundRoute !== null && normaliseRoute(route) === notFoundRoute;
     const notFound = statusCode === 404 || isNotFoundRoute;
 
-    const boot = await page.evaluate((selector) => {
-      const probe = window.__snappyBoot ?? {};
-      const container =
-        document.querySelector(selector) ?? document.body?.firstElementChild ?? null;
-      const markers = container
-        ? {
-            react: Object.keys(container).some(
-              (key) => key.startsWith('__reactContainer') || key === '_reactRootContainer',
-            ),
-            vue: Boolean(
-              container.__vue_app__ ||
-                container.__vueParentComponent ||
-                container._vnode ||
-                container.__vue__,
-            ),
-            preact: Boolean(
-              container.__k ||
-                container._children ||
-                container.firstElementChild?.__k ||
-                container.firstElementChild?._children,
-            ),
-            svelte: Boolean(
-              container.__svelte_meta || container.querySelector?.('[data-svelte-h]'),
-            ),
-          }
-        : {};
-      const child = probe.prerenderedChild ?? null;
-      return { markers, markupPreserved: child ? child.isConnected : null };
-    }, CONTAINER_SELECTOR);
-    const detected = frameworkFromMarkers(boot.markers, config.framework);
+    const detected = frameworkFromMarkers(markers, config.framework);
     // Classify only after the framework is known, so an explicit `framework` choice and
     // the detected framework select the matching message patterns.
     const hydrationErrors = [];
@@ -167,7 +164,7 @@ async function verifyRoute({ browser, origin, route, config, outputDir }) {
       else pageErrors.push(message);
     }
     const mode = classifyBoot({
-      markupPreserved: boot.markupPreserved,
+      markupPreserved,
       frameworkMounted: detected.mounted,
     });
     let firstMismatch = null;
@@ -197,10 +194,11 @@ async function verifyRoute({ browser, origin, route, config, outputDir }) {
         !empty,
       mode,
       firstMismatch,
-      markupPreserved: boot.markupPreserved,
+      markupPreserved,
     };
   } finally {
     tracker.stop();
-    await context.close();
+    await page.close();
+    if (ownsContext) await activeContext.close();
   }
 }

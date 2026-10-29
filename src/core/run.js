@@ -31,10 +31,12 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   const startedAt = Date.now();
 
   await assertSourceDir(sourceDir, config);
-  const outputDir = await resolveOutputDir({ sourceDir, config, log });
+  const [outputDir, routeSources] = await Promise.all([
+    resolveOutputDir({ sourceDir, config, log }),
+    loadRouteSeeds(config),
+  ]);
   const previousManifest =
     config.pruneStaleRoutes && !config.dryRun ? await readPruneManifest(outputDir) : null;
-  const routeSources = await loadRouteSeeds(config);
   for (const source of routeSources.sources) {
     const skipped = source.skipped > 0 ? `, ${source.skipped} skipped` : '';
     log.info(`Route source ${source.source}: ${source.routes} route(s)${skipped}`);
@@ -44,14 +46,21 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     log.warn(`saveAs: '${config.saveAs}' writes images, so hydration verification is skipped`);
   }
 
-  const server = config.serveCmd
-    ? await startCommandServer({
-        command: config.serveCmd,
-        url: config.url,
-        timeout: config.serveCmdTimeout,
-        shutdownTimeout: config.shutdownTimeout,
-      })
-    : await startStaticServer({ dir: outputDir, base: config.base });
+  const browserPromise = launchBrowser(config, log);
+  let server;
+  try {
+    server = config.serveCmd
+      ? await startCommandServer({
+          command: config.serveCmd,
+          url: config.url,
+          timeout: config.serveCmdTimeout,
+          shutdownTimeout: config.shutdownTimeout,
+        })
+      : await startStaticServer({ dir: outputDir, base: config.base });
+  } catch (error) {
+    browserPromise.then(({ browser }) => browser.close()).catch(() => {});
+    throw error;
+  }
 
   const report = {
     routes: [],
@@ -77,16 +86,19 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     truncated: null,
     ok: false,
     durationMs: 0,
+    timings: { render: 0, write: 0, artifacts: 0, verify: 0, audit: 0 },
   };
   const manifestEntries = [];
   const state = { warnedBuildOriginMetadata: false, warnedCriticalCssSkipped: false };
   let browser = null;
 
   try {
-    const launched = await launchBrowser(config, log);
+    const launched = await browserPromise;
     browser = launched.browser;
     log.info(`Browser: ${launched.source}`);
+    const renderCaches = { inlineCss: new Map(), criticalCss: new Map() };
 
+    let phaseStartedAt = Date.now();
     const rendered = await renderAllRoutes({
       browser,
       server,
@@ -95,7 +107,9 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       report,
       outputDir,
       sourceSeeds: routeSources.routes,
+      caches: renderCaches,
     });
+    report.timings.render = Date.now() - phaseStartedAt;
     if (report.routes.length === 0) {
       report.errors.push({ route: null, message: 'no routes were rendered' });
       log.error('No routes were rendered; check include, exclude and sourceDir');
@@ -110,6 +124,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       );
     }
 
+    phaseStartedAt = Date.now();
     const verifiable = await writeAllRoutes({
       rendered,
       outputDir,
@@ -118,11 +133,14 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       report,
       state,
       manifestEntries,
+      caches: renderCaches,
     });
+    report.timings.write = Date.now() - phaseStartedAt;
     logFileSummary(report, log);
     logNotFoundNotice(report, config, log);
     logDuplicateTitles(report, log);
 
+    phaseStartedAt = Date.now();
     if (config.sitemap) {
       try {
         await writeSitemap({ outputDir, config, log, report });
@@ -155,6 +173,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
         log.error(`preload manifest write failed: ${error.message}`);
       }
     }
+    report.timings.artifacts = Date.now() - phaseStartedAt;
 
     const canVerify = config.verify && !config.dryRun && config.saveAs === 'html';
     if (canVerify && config.serveCmd) {
@@ -164,13 +183,13 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     }
     // With verifyChangedOnly, a route whose HTML file was left untouched is not reloaded: the HTML
     // and the bundle are the same as the last time it was verified.
+    const fileStatus = new Map(
+      report.files.map((file) => [`${file.route ?? ''}|${file.file ?? ''}`, file.status]),
+    );
     const toVerify = config.verifyChangedOnly
       ? verifiable.filter((route) => {
           const file = routeToFile(route, config);
-          const entry = report.files.find(
-            (candidate) => candidate.route === route && candidate.file === file,
-          );
-          return entry?.status !== 'unchanged';
+          return fileStatus.get(`${route}|${file}`) !== 'unchanged';
         })
       : verifiable;
     const skipped = verifiable.length - toVerify.length;
@@ -178,6 +197,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       log.info(`Verification skipped for ${skipped} unchanged route(s), as verifyChangedOnly asks`);
     }
     if (canVerify && !config.serveCmd && toVerify.length > 0) {
+      phaseStartedAt = Date.now();
       report.verification = await verifyRoutes({
         browser,
         origin: server.origin,
@@ -185,6 +205,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
         config,
         outputDir,
       });
+      report.timings.verify = Date.now() - phaseStartedAt;
       report.verification.skipped = skipped;
       logVerification(report.verification, config, log);
       mergeVerification(report);
@@ -224,6 +245,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
 
   report.durationMs = Date.now() - startedAt;
   if (config.audit) {
+    const auditStartedAt = Date.now();
     try {
       report.audit = await auditRun({ report, config, outputDir });
       logAudit(report.audit, log);
@@ -231,6 +253,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       report.errors.push({ route: null, message: `audit failed: ${error.message}` });
       log.error(`audit failed: ${error.message}`);
     }
+    report.timings.audit = Date.now() - auditStartedAt;
   }
   const reRendered = report.verification?.modes['re-rendered'] ?? 0;
   const undetected = report.verification
@@ -300,8 +323,9 @@ async function resolveOutputDir({ sourceDir, config, log }) {
 
 // Adds the verification result to each route record for the JSON report.
 function mergeVerification(report) {
+  const details = new Map(report.routeDetails.map((record) => [record.route, record]));
   for (const entry of report.verification?.routes ?? []) {
-    const detail = report.routeDetails.find((record) => record.route === entry.route);
+    const detail = details.get(entry.route);
     if (!detail) continue;
     detail.mode = entry.mode;
     detail.framework = entry.framework ?? null;

@@ -51,6 +51,7 @@
   "scripts": {
     "test": "node scripts/run-tests.mjs tests/unit",
     "test:integration": "node scripts/run-tests.mjs tests/integration",
+    "benchmark": "node scripts/benchmark.mjs",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "prepublishOnly": "npm run lint && npm test && npm run test:integration"

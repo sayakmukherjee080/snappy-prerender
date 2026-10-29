@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [Unreleased]
+
+### Changed
+
+- Final HTML processing uses one parsed document for preload injection, CSP hashes,
+  page metadata and preload resources instead of reparsing after each step.
+- Render and verification use fewer Playwright round trips.
+- Route writes, audit link checks, destination copies and sitemap-index fetches run with
+  bounded concurrency; route reports are merged in deterministic order.
+- Inline stylesheet text and critical CSS processor state are cached within a run.
+- Relative route-source loading and browser/server startup overlap where safe.
+- The JSON report includes phase timings, and `npm run benchmark` measures large sites.
+- `reuseVerificationContext` optionally reuses one browser context per verification worker.
+
 ## [2.7.0] - 2026-10-29
 
 ### Added

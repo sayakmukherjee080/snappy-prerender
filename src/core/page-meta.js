@@ -4,12 +4,17 @@ const DATA_URL = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i;
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
 /**
- * Reads the metadata and structural markers from a final HTML document. This runs
- * after post-processing so a transform that changes the head is reflected in the
- * sitemap, the audit and the report.
+ * Reads the metadata and structural markers from a final HTML string.
  */
 export function collectPageMeta(html) {
-  const document = parse(html);
+  return collectPageMetaFromDocument(parse(html));
+}
+
+/**
+ * Reads metadata from an already parsed document. Used by the write pipeline so the
+ * final HTML is parsed once instead of once per post-processing step.
+ */
+export function collectPageMetaFromDocument(document) {
   const meta = {
     title: null,
     titleCount: 0,

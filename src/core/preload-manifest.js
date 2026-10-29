@@ -12,8 +12,12 @@ const PAGE_ORIGIN = 'http://snappy.local';
  * output rather than the render-time resource list keeps the manifest correct after
  * inline CSS, tag surgery, or a failed write.
  */
-export function collectPageResources(html, { base = '/', route = '/' } = {}) {
-  const document = parse(html);
+export function collectPageResources(html, options = {}) {
+  return collectPageResourcesFromDocument(parse(html), options);
+}
+
+// Reads referenced resources from an already parsed document.
+export function collectPageResourcesFromDocument(document, { base = '/', route = '/' } = {}) {
   const scripts = [];
   const styles = [];
   const pageUrl = new URL(toPublicPath(route, base), PAGE_ORIGIN);

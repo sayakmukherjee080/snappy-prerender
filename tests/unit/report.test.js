@@ -33,6 +33,7 @@ function reportOf(overrides = {}) {
     preloadManifest: null,
     audit: { errors: [], warnings: [], linksChecked: 3 },
     durationMs: 42,
+    timings: { render: 1, write: 2, artifacts: 3, verify: 4, audit: 5 },
     ok: true,
     ...overrides,
   };
@@ -44,6 +45,7 @@ describe('buildReport', () => {
     assert.equal(built.version, 1);
     assert.match(built.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(built.durationMs, 42);
+    assert.deepEqual(built.timings, { render: 1, write: 2, artifacts: 3, verify: 4, audit: 5 });
     assert.equal(built.ok, true);
     assert.deepEqual(built.summary, { routes: 1, files: 1, errors: 0, warnings: 0 });
     assert.equal(built.routes[0].route, '/');

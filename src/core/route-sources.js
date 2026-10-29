@@ -1,9 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { isSafeRoute, normaliseRoute, toAppRoute } from './routes.js';
+import { mapLimit } from './scheduler.js';
 
 const MAX_SOURCE_ROUTES = 100000;
 const FETCH_TIMEOUT = 10000;
+const SITEMAP_FETCH_CONCURRENCY = 4;
 const XML_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 
 /**
@@ -80,9 +82,18 @@ async function readSitemapLevel(location, pageUrls, depth) {
     throw new Error(`${location} is not a sitemap: no urlset or sitemapindex element found`);
   }
   if (/<sitemapindex\b/i.test(text)) {
-    for (const child of extractLocs(text)) {
-      await readSitemapLevel(resolveChild(child, base), pageUrls, depth + 1);
-    }
+    const children = extractLocs(text);
+    const { results, errors } = await mapLimit(
+      children,
+      SITEMAP_FETCH_CONCURRENCY,
+      async (child) => {
+        const routes = [];
+        await readSitemapLevel(resolveChild(child, base), routes, depth + 1);
+        return routes;
+      },
+    );
+    if (errors.length > 0) throw errors[0].error;
+    for (const routes of results) pageUrls.push(...routes);
     return;
   }
   pageUrls.push(...extractLocs(text));

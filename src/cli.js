@@ -38,6 +38,7 @@ Options:
       --storage-state <file>  Playwright storage state for authenticated routes
       --no-verify             Skip the hydration verification pass
       --verify-changed-only   Skip verification for routes whose HTML did not change
+      --reuse-verification-context  Reuse one browser context per verification worker
       --fail-on-hydration-error  Fail the build when hydration errors are found
       --fail-on-rerender      Fail when a route re-renders instead of hydrating
       --fail-on-page-error    Fail when a page throws while it is being rendered
@@ -152,6 +153,7 @@ async function main() {
       'storage-state': { type: 'string' },
       'no-verify': { type: 'boolean' },
       'verify-changed-only': { type: 'boolean' },
+      'reuse-verification-context': { type: 'boolean' },
       'fail-on-hydration-error': { type: 'boolean' },
       'fail-on-error': { type: 'boolean' },
       'fail-on-rerender': { type: 'boolean' },
@@ -310,6 +312,7 @@ function cliOptions({ values, positionals }) {
   if (values['storage-state'] !== undefined) options.storageState = values['storage-state'];
   if (values['no-verify']) options.verify = false;
   if (values['verify-changed-only']) options.verifyChangedOnly = true;
+  if (values['reuse-verification-context']) options.reuseVerificationContext = true;
   if (values['fail-on-hydration-error']) options.failOnHydrationError = true;
   if (values['fail-on-rerender']) options.failOnRerender = true;
   if (values['fail-on-page-error']) options.failOnPageError = true;

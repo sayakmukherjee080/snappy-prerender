@@ -333,6 +333,9 @@ describe('resolveConfig 2.7 options', () => {
     assert.equal(config.routesFromSitemap, null);
     assert.equal(config.preloadLinks, false);
     assert.equal(config.imageSitemap, false);
+    assert.equal(config.verify, true);
+    assert.equal(config.verifyChangedOnly, false);
+    assert.equal(config.reuseVerificationContext, false);
     assert.equal(config.framework, 'auto');
     assert.equal(config.retries, 0);
     assert.equal(config.retryDelay, 500);
@@ -395,6 +398,7 @@ describe('resolveConfig 2.7 options', () => {
       auditIgnoreLinks: ['/api/*'],
       verify: false,
       framework: 'vue',
+      reuseVerificationContext: true,
       preloadLinks: true,
       removeScriptTags: true,
       saveAs: 'png',
@@ -407,6 +411,7 @@ describe('resolveConfig 2.7 options', () => {
     assert.match(warnings, /failOnAuditError has no effect/);
     assert.match(warnings, /auditIgnoreLinks has no effect/);
     assert.match(warnings, /framework has no effect/);
+    assert.match(warnings, /reuseVerificationContext has no effect/);
     assert.match(warnings, /preloadLinks has no effect/);
     assert.match(warnings, /preloadLinks skips script hints/);
     assert.match(warnings, /imageSitemap has no effect/);
