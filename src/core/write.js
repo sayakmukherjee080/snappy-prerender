@@ -307,8 +307,10 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
       }),
     );
     preloadAdded = injectPreloadLinksInto(document, {
-      scripts: config.removeScriptTags ? [] : [...result.collector.scripts],
-      fonts: result.collector.fonts,
+      scripts: config.removeScriptTags ? [] : [...result.collector.scripts].sort(),
+      fonts: new Map(
+        [...result.collector.fonts].sort(([left], [right]) => left.localeCompare(right)),
+      ),
       lcpImage: result.lcpImage,
       base: config.base,
       ignoreForPreload: config.ignoreForPreload,

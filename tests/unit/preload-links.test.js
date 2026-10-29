@@ -64,6 +64,18 @@ describe('injectPreloadLinks', () => {
     assert.equal(html.includes('modulepreload'), false);
   });
 
+  it('sorts script and font hints deterministically', () => {
+    const html = injectPreloadLinks(documentOf(), {
+      scripts: ['/assets/z.js', '/assets/a.js'],
+      fonts: new Map([
+        ['/assets/z.woff2', 'font/woff2'],
+        ['/assets/a.woff2', 'font/woff2'],
+      ]),
+    });
+    assert.ok(html.indexOf('href="/assets/a.js"') < html.indexOf('href="/assets/z.js"'));
+    assert.ok(html.indexOf('href="/assets/a.woff2"') < html.indexOf('href="/assets/z.woff2"'));
+  });
+
   it('does not preload scripts the caller says were removed', () => {
     const html = injectPreloadLinks(documentOf(), {
       scripts: ['/assets/app.js'],

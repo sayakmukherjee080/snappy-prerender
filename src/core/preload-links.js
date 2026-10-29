@@ -59,7 +59,7 @@ export function injectPreloadLinksInto(
     added += 1;
   };
 
-  for (const script of scripts) {
+  for (const script of [...scripts].sort()) {
     const href = toPublicPath(script, base);
     if (existingScripts.has(href) || skipScripts.has(href)) continue;
     add(
@@ -70,7 +70,9 @@ export function injectPreloadLinksInto(
       href,
     );
   }
-  for (const [font, contentType] of fonts) {
+  for (const [font, contentType] of [...fonts.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
     const href = toPublicPath(font, base);
     const attrs = [
       { name: 'rel', value: 'preload' },

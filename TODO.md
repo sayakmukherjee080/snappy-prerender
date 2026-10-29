@@ -20,10 +20,11 @@
 - [x] Benchmark verification context reuse and decide whether to expose it.
 - [x] Run lint, unit, integration and testcase acceptance; compare output and timings.
 
-Verified: lint clean; 312 unit tests; 142 integration tests; testcase 8/8 hydrated with
-0 audit errors; generated files match the pre-optimization acceptance run except report
-timing fields. Benchmarks: 200 routes 106.6s -> 90.5s; 50 routes with verification
-51.3s -> 45.9s.
+Verified: lint clean; 313 unit tests; 142 integration tests; static benchmarks improved
+(200 routes 106.6s -> 90.5s; 50 routes with verification 51.3s -> 45.9s).
+The expanded 200-route testcase is covered separately: it exposes testcase-side
+hydration/lazy-route issues, a stale testcase config, lab gate limitations, missing
+canonicals and duplicate metadata. See the validation report.
 
 ## Later
 

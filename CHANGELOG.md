@@ -15,6 +15,7 @@ the release tags; see the Git history for those changes.
 - Render and verification use fewer Playwright round trips.
 - Route writes, audit link checks, destination copies and sitemap-index fetches run with
   bounded concurrency; route reports are merged in deterministic order.
+- Preload hints are sorted, so repeated builds do not reorder modulepreload links.
 - Inline stylesheet text and critical CSS processor state are cached within a run.
 - Relative route-source loading and browser/server startup overlap where safe.
 - The JSON report includes phase timings, and `npm run benchmark` measures large sites.
