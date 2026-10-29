@@ -1,6 +1,6 @@
 # snappy-prerender
 
-**Prerender your single-page app without rewriting it.** Point it at your build output, and every route is rendered in a real browser and written to disk as static HTML — content, titles, meta tags, canonical links and Open Graph tags included. Search engines and social crawlers get the full page; your users get the same app they had before.
+Render a single-page app to static HTML at build time. Point the tool at the build output; it renders each route in Chrome, writes one HTML file per route, and leaves the app unchanged. The output includes page content, titles, meta tags, canonical links and Open Graph tags.
 
 [![npm](https://img.shields.io/npm/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![npm downloads](https://img.shields.io/npm/dm/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
@@ -9,15 +9,15 @@
 
 Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). Install with `npm install --save-dev snappy-prerender`. Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
-- **No SSR entry, no framework migration, no app changes.** If it builds to a `dist` directory, it can be prerendered.
-- **React 16.8, 17, 18 and 19, Vite 6/7/8, or any static build.**
-- **Inspired by [react-snap](https://github.com/stereobooster/react-snap)** and rebuilt from scratch for current toolchains: a browser-based prerenderer with a hydration report attached, not another SSR framework.
+- No SSR entry, framework migration or app changes. If the app builds to a directory, it can be prerendered.
+- React 16.8, 17, 18 and 19, Vite 6/7/8, or any static build.
+- Based on the react-snap approach, reimplemented for current toolchains with Playwright and a hydration check.
 
 ## Who this is for
 
-**Use it when** your app renders in the browser and you want the crawler-visible HTML to match: Create React App, Vite + React, plain SPAs, CMS-driven sites, marketing pages behind a client router.
+Use it for client-rendered apps that need crawler-visible HTML: Create React App, Vite + React, other SPAs, CMS-backed sites and client-routed marketing pages.
 
-**Skip it when** you already render HTML on the server — Next.js, Remix, Astro and friends do not need prerendering, and this tool will not improve on what they ship.
+Do not use it for apps that already render HTML on the server, such as Next.js, Remix or Astro.
 
 ## Quick start
 
@@ -81,41 +81,41 @@ if (!report.ok) {
 }
 ```
 
-## Inspired by react-snap
+## Based on react-snap
 
-react-snap proved the idea that makes this approach attractive: you do not need a server, a second renderer or a rewrite to give crawlers real HTML — you need a browser, a router and a build step. It carried a generation of webpack-era SPAs and has been unmaintained since 2019.
+[react-snap](https://github.com/stereobooster/react-snap) showed that a browser and a build step can produce crawler-readable HTML without a server renderer. It has been unmaintained since 2019.
 
-`snappy-prerender` is a fresh implementation of that idea for current toolchains. It is not a fork: no react-snap code was reused. What changed is the machinery around the same core trick — Playwright instead of an old Puppeteer, Chrome or Edge from the machine you already have, Vite plugin support, a head and metadata layer with client-side updates, hydration verification that tells you how each page booted, and option names that say what they do.
+snappy-prerender reimplements that approach; no react-snap code is reused. It uses Playwright, resolves an installed Chrome or Edge, supports Vite, ships a head layer, and verifies hydration.
 
-If you are moving over, [Migrating from react-snap](docs/react-snap-migration.md) maps every option.
+If you are moving over, [Migrating from react-snap](docs/react-snap-migration.md) maps the options.
 
 ## What you get
 
 | | |
 | --- | --- |
-| **Static HTML per route** | `route/index.html` (or `route.html` with `flatOutput`), plus a `404.html` from your not-found route. Identical files are left untouched, so rebuilds and CI caches stay stable. |
-| **Head and metadata** | A `Head` component writes per-route title, description, robots, canonical, Open Graph and Twitter tags — and keeps updating them on client-side navigation, exactly like a page-per-request site. |
-| **Hydration report** | Every written page is reloaded with the real bundle and reported as `hydrated`, `re-rendered`, `undetected` or `unknown`, with React mismatch messages per route. |
-| **A ready contract** | `window.__prerenderReady`, a selector, or network quiescence — whichever fits your app. |
-| **Output optimisation** | Critical CSS, HTML/CSS minification, preconnect hints, image preload, a preload manifest, script and style surgery. |
-| **CSS-in-JS support** | CSSOM-only styles (emotion, styled-components in speedy mode) and constructable stylesheets are folded back into the HTML. |
-| **Ajax state replay** | Captured JSON and `window.snapSaveState()` are injected before the first script, so hydration sees the same data the prerender did. |
-| **Guided setup** | `snappy-prerender init` asks the handful of questions that matter — build directory, base path, routes, site URL, site name, title template — and writes a `snappy.config.js` with your answers, detected from the project where it can. |
-| **Any static build** | Base paths, `serveCmd` for apps that need a live API, screenshots, dry runs, bounded concurrency. |
+| **Static HTML per route** | `route/index.html` (or `route.html` with `flatOutput`), plus `404.html`. Identical files are left untouched. |
+| **Head and metadata** | Per-route title, description, robots, canonical, Open Graph and Twitter tags, updated on client-side navigation. |
+| **Hydration report** | Each route is reloaded with the real bundle and reported as `hydrated`, `re-rendered`, `undetected` or `unknown`, with mismatch messages. |
+| **Ready contract** | `window.__prerenderReady`, a selector, or network quiescence. |
+| **Output optimisation** | Critical CSS, HTML/CSS minification, preconnect hints, image preload, a preload manifest, script and style removal. |
+| **CSS-in-JS support** | CSSOM-only styles and constructable stylesheets are written back into the HTML. |
+| **Ajax state replay** | Captured JSON and `window.snapSaveState()` are injected before the first script. |
+| **Guided setup** | `snappy-prerender init` writes a `snappy.config.js` from the project settings and a few answers. |
+| **Any static build** | Base paths, `serveCmd`, screenshots, dry runs and bounded concurrency. |
 
 ## How it works
 
-1. Serves the built output on an ephemeral loopback port (or copies it to `destination` first).
-2. Crawls same-origin links from the seed routes, rendering each page in a fresh browser context.
-3. Waits for the app to settle: ready contract, quiet network, fonts, two animation frames.
-4. Freezes CSS animations, optionally blocks third-party requests, records the resources the page used, and reconciles any head tags the app rendered.
-5. Serialises the DOM, then post-processes it: removes the freeze style and `data-prerender-remove` elements, de-duplicates head styles, drops dead blob stylesheets, adds link hints, optionally inlines CSS, removes or marks scripts, optionally minifies, and notes metadata that points at the build server or ships more than one title.
-6. Writes `route/index.html` (or a screenshot), leaving identical files untouched.
-7. Reloads every written file with the real client bundle, reports React hydration errors, and records whether each route hydrated or re-rendered.
+1. Serves the built output on an ephemeral loopback port, or copies it to `destination`.
+2. Crawls same-origin links from the seed routes in a fresh browser context per page.
+3. Waits for the ready contract, quiet network, fonts and two animation frames.
+4. Freezes CSS animations, optionally blocks third-party requests, records resources and reconciles head tags.
+5. Serialises the DOM and post-processes it: removes freeze styles and `data-prerender-remove` elements, de-duplicates head styles, drops dead blob stylesheets, adds link hints, optionally inlines CSS, removes or marks scripts, optionally minifies, and records metadata issues.
+6. Writes `route/index.html` or a screenshot, leaving identical files untouched.
+7. Reloads each written file with the client bundle and reports hydration errors and boot mode.
 
 ## Head and metadata
 
-Per-route titles, descriptions, canonical links and Open Graph/Twitter tags come from a `Head` component the package ships. It writes into the document head while the route is mounted and reconciles on every render, so client-side navigation updates the head exactly like a site that renders a page per request — and the prerenderer captures whatever is there, because the head is part of the page it serialises.
+Per-route titles, descriptions, canonical links and Open Graph/Twitter tags come from the package's `Head` component. It updates the document head on every render, including client-side navigation, and the prerenderer captures the result.
 
 ```jsx
 import { Head } from 'snappy-prerender/head';
@@ -138,7 +138,7 @@ import { Head } from 'snappy-prerender/head';
 />
 ```
 
-Project-wide values come from the `metadata` option. The prerenderer injects them into every page, so the component composes absolute URLs from the public site rather than the build server:
+Project-wide values come from the `metadata` option. The prerenderer injects them into every page, so the component builds absolute URLs from the public site instead of the build server:
 
 ```js
 snappy({
@@ -154,63 +154,68 @@ snappy({
 
 What it emits, per route: `title` (with the template applied unless the title already carries its suffix), `meta[name=description]`, `meta[name=robots]`, `link[rel=canonical]`, `og:title`, `og:description`, `og:type`, `og:url`, `og:image`, `og:site_name`, `og:locale`, and `twitter:card` / `twitter:title` / `twitter:description` / `twitter:image`. Switch a family off with `openGraph: false` or `twitter: false`, and skip the canonical with `canonical: false`.
 
-Rules worth knowing:
-
-- `metadata` values are defaults; a `Head`'s own props win. When several Heads render, the later one in render order wins per tag, so a page overrides its layout.
-- Tags are matched on the attribute a crawler reads, so an existing tag is updated in place rather than duplicated. Two tags with the same identity already in the document — a `name`, `property`, `http-equiv` or `rel` match — are reduced to one.
-- A tag the head layer generated carries `data-snappy-head-created` beside `data-snappy-head`, so a later page load can tell it apart from one the app wrote.
-- When no Head wants a tag any more, a generated one is removed and one the app wrote is restored to the value it had before the head layer touched it. That original is recorded into the page during prerendering, so a route change brings the template's fallback metadata back.
-- The component renders nothing, so it cannot affect hydration of the page content.
-- The title template applies unless the title already ends with the template's fixed part, or is the site name itself, so a title composed by hand is never suffixed twice.
-- `structuredData` emits `<script type="application/ld+json">` for one object or an array of objects, keyed per mounted `Head` so a layout and a page can each contribute a block. Values are escaped so they cannot close the script element; add `@context` yourself when you want one.
-- `lang` and `dir` are written on `<html>`, not in the head. Later Heads win, and the original values return when no Head wants them any more.
-- `alternates` emits `<link rel="alternate" hreflang="...">` with absolute URLs through the same `siteUrl`/`base`/`trailingSlash` policy as canonical links. The same alternates feed `xhtml:link` entries in the sitemap.
-- Absolute URLs are required for `og:url`, `og:image` and canonical. `metadata.siteUrl` must be an origin (no path); put a sub-path deployment in `base`. Without `siteUrl`, URLs that fall back to the build server are removed from the output by default (`stripBuildOriginMetadata: true`) and the run warns. The `trailingSlash` convention applies to page URLs only; asset URLs are left alone. Canonical, social and sitemap URLs share one page-path policy: directory output keeps its slash, flat output stays extensionless, and an explicit `trailingSlash` wins.
-- `metadata.base` overrides the base path used for absolute URLs and defaults to the `base` option.
-- On React 19, React hoists `<title>` and `<meta>` rendered in JSX and leaves an existing template tag alone, so a page can end up with two titles. Use React's native metadata or this component, not both; the run warns when the output carries more than one `<title>`.
+Rules:
+- `metadata` values are defaults; a `Head` prop wins. When several Heads render, the last one wins per tag.
+- Tags are matched by the attribute a crawler reads, so existing tags are updated instead of duplicated. Duplicate identities are reduced to one.
+- Generated tags carry `data-snappy-head-created` beside `data-snappy-head`, so a later page load can tell them from tags the app wrote.
+- When no Head wants a tag, a generated one is removed and an app-written one is restored to its previous value. That original is recorded in the page during prerendering.
+- The component renders nothing, so it does not affect hydration of page content.
+- The title template is skipped when the title already ends with its fixed part, or is the site name, so a hand-built title is not suffixed twice.
+- `structuredData` emits `<script type="application/ld+json">` for one object or an array, keyed per mounted `Head`. Values are escaped; add `@context` when needed.
+- `lang` and `dir` are written on `<html>`. Later Heads win, and the original values return when no Head wants them.
+- `alternates` emits `<link rel="alternate" hreflang="...">` with absolute URLs using the same `siteUrl`/`base`/`trailingSlash` policy as canonical links. The same alternates feed sitemap `xhtml:link` entries.
+- `og:url`, `og:image` and canonical need absolute URLs. `metadata.siteUrl` must be an origin; put a sub-path deployment in `base`. Without `siteUrl`, build-server URLs are removed by default and the run warns. `trailingSlash` applies to page URLs only. Canonical, social and sitemap URLs share the page-path policy: directory output keeps its slash, flat output stays extensionless, and `trailingSlash` wins.
+- `metadata.base` overrides the base path for absolute URLs and defaults to `base`.
+- On React 19, React also hoists `<title>` and `<meta>` from JSX and leaves an existing template title alone, which can produce two titles. Use one metadata system; the run warns when a page has more than one `<title>`.
 - Every metadata value has a CLI flag: `--metadata-site-url`, `--metadata-site-name`, `--metadata-title-template`, `--metadata-default-image`, `--metadata-trailing-slash`.
-- `react` is an optional peer dependency, needed only for this entry point. Non-React code can call `setHead(id, props)` and `clearHead(id)` instead.
+- `react` is an optional peer dependency for this entry point. Non-React code can call `setHead(id, props)` and `clearHead(id)`.
 
 ## Audit, reports and route sources
 
-The run audits the written site by default: route errors and truncation, empty or duplicate output, broken internal links, duplicate or missing metadata, sitemap disagreement and orphan pages. Findings are logged, returned in `report.audit`, and reported without failing the build; set `failOnAuditError: true` to make an audit error fail the run. `auditIgnoreLinks` excludes known dynamic links, and `--no-audit` skips the pass. The full rule list and the JSON schema are in [docs/report.md](docs/report.md).
+The audit runs by default and reports:
 
-`reportPath` (CLI `--report`) writes that report as versioned JSON. It never contains configuration, storage state, captured AJAX data, cookies or tokens; URLs are reduced to their origin and path, and the configured storage-state path is redacted.
+- route errors, truncation, empty or duplicate output, broken internal links;
+- duplicate or missing metadata, canonical mismatches, heading counts, sitemap disagreement and orphan pages;
+- CSP violations reported by the browser.
 
-Routes can come from `include` and crawling, from a text/JSON `routesFile`, or from a local or remote sitemap via `routesFromSitemap`. A relative source path resolves against the config file. Root-relative sitemap locations have the public base stripped, and a remote sitemap's off-origin locations are ignored. When either source is supplied and `include` was not set, the root is not seeded implicitly. With `maxRoutes` or `routePriority` set, crawling runs in deterministic breadth-first waves: each level is sorted by priority then path, capped, and rendered, so the accepted set and `truncated.droppedRoutes` do not depend on concurrency.
+Findings are returned in `report.audit` and logged. They do not fail the run unless `failOnAuditError` is true. `auditIgnoreLinks` excludes dynamic links, and `--no-audit` skips the audit. See [docs/report.md](docs/report.md) for the rule list and JSON schema.
 
-`routeOverrides` applies `timeout`, `waitFor`, `readySelector`, `readyFlag`, `crawl` and `storageState` to matching routes; later entries win per key. `transformHtml` runs once per route after minification and before preload/CSP injection, and may be async; it must return a string or nothing.
+`reportPath` (or `--report`) writes the report as versioned JSON. URLs are reduced to origin and path, and the storage-state path is redacted.
 
-`preloadLinks` injects `<link rel="modulepreload">` for runtime chunks, font preloads with their captured content type, and the LCP image. It complements `preloadManifest`: the manifest is for hosts that can send Early Hints, while the injected links work on any static host. Script hints are skipped when `removeScriptTags` is on.
+Routes can come from `include` and crawling, from a text/JSON `routesFile`, or from a local or remote sitemap via `routesFromSitemap`. Relative source paths resolve against the config file. Root-relative sitemap locations have `base` stripped, and a remote sitemap's off-origin locations are ignored. If either source is supplied and `include` is not set, the root is not seeded implicitly. With `maxRoutes` or `routePriority`, crawling runs in deterministic breadth-first waves sorted by priority then path. `truncated.droppedRoutes` lists routes that did not fit.
 
-`csp: 'hash'` adds a `<meta http-equiv="Content-Security-Policy">` with SHA-256 hashes for inline scripts and styles. It implies `externalScripts: true` and no CSS swap handler, like `strict`. The policy allows `'self'` only, so third-party scripts or styles need your own policy; the audit warns when the browser reports a blocked request. An existing CSP meta is kept and reported instead of merged. Inline `style=""` attributes and event handlers cannot be hashed; the audit warns about the attributes.
+`routeOverrides` applies `timeout`, `waitFor`, `readySelector`, `readyFlag`, `crawl` and `storageState` to matching routes; later entries win per key. `transformHtml` runs once per route after minification and before preload/CSP injection. It may be async and must return a string or nothing.
+
+`preloadLinks` injects `<link rel="modulepreload">` for runtime chunks, font preloads with their response content type, and the LCP image. It complements `preloadManifest`: the manifest is for hosts that send Early Hints, while the injected links work on any static host. Script hints are skipped when `removeScriptTags` is on.
+
+`csp: 'hash'` adds a `<meta http-equiv="Content-Security-Policy">` with SHA-256 hashes for inline scripts and styles. It implies `externalScripts: true` and no CSS swap handler, like `strict`. The policy allows `'self'` only, so third-party scripts or styles need their own policy; the audit warns when the browser reports a blocked request. An existing CSP meta is kept and reported. Inline `style=""` attributes and event handlers cannot be hashed; the audit warns about the attributes.
 
 ## Hydration verification
 
-After writing the output, every route is loaded again with the real client bundle in a fresh browser context. The pass reports two things, and by default neither fails the build: the static HTML that crawlers read is already written and is unaffected by what the client does afterwards. Set `failOnHydrationError: true` (or pass `--fail-on-hydration-error`) when you want hydration treated as a build gate.
+After writing the output, each route is loaded again in a fresh browser context with the client bundle. By default the results are reported but do not fail the build; the static HTML is already written. Set `failOnHydrationError: true` (or pass `--fail-on-hydration-error`) to make hydration a build gate.
 
-**Hydration errors.** Mismatch messages for React, Vue, Svelte and Preact are reported with the route, framework and message. React's text mismatches and minified production codes (`#418`, `#423`, `#425`) are recognised, and Preact reuses the React-compatible messages. They mean the client re-renders that page instead of adopting the markup, which costs the user some work on load but leaves the static output — search engines and social crawlers still read the prerendered HTML. Enforce them with `failOnHydrationError: true` when you want the stricter gate.
+**Hydration errors.** Mismatch messages for React, Vue, Svelte and Preact are reported with the route, framework and message. React text mismatches and minified production codes (`#418`, `#423`, `#425`) are recognised; Preact uses the React-compatible messages. A mismatch means the client re-renders the page instead of adopting the static markup. The crawler-visible HTML is unchanged.
 
-The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`), so nothing is imported or executed. Set `framework` when a custom root defeats detection. When a route has hydration errors or re-rendered, `firstMismatch` locates the first difference between the written HTML and the live container: `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
+The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`); nothing is imported or executed. Set `framework` when a custom root defeats detection. When a route has hydration errors or re-rendered, `firstMismatch` reports the first difference between the written HTML and the live container as `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
 
-A probe installed before the app's scripts run remembers the first prerendered node and checks whether it survived:
+A probe installed before the app's scripts run records the first prerendered node and checks whether it survived:
 
 | Mode | Meaning |
 | --- | --- |
-| `hydrated` | The app adopted the prerendered markup, which is the goal. |
+| `hydrated` | The app kept the prerendered markup. |
 | `re-rendered` | The app discarded it and rendered from scratch. |
-| `undetected` | No framework root was found on the container, so the mode could not be judged. |
-| `unknown` | The prerendered node was never seen, for example a container outside the usual ids. |
+| `undetected` | No framework root was found on the container. |
+| `unknown` | The prerendered node was not seen, for example a container outside the usual ids. |
 
-A route whose verification navigation returns HTTP 4xx/5xx, or whose container renders no content, is reported as failed with its `status` or `empty` flag. `undetected` and `unknown` are reported as mode counts; set `failOnUndetected: true` to make any such route fail the build. A verification pass that cannot run is listed in `verification.errors`; set `failOnVerificationError: true` to fail on those separately from hydration errors.
+A verification navigation that returns HTTP 4xx/5xx, or a container with no content, is reported as failed with its `status` or `empty` flag. `undetected` and `unknown` are reported as counts; `failOnUndetected: true` fails the build for them. A verification pass that cannot run is listed in `verification.errors`; `failOnVerificationError: true` fails separately from hydration errors.
 
-`re-rendered` matters because an app calling `createRoot` instead of `hydrateRoot` throws the prerendered DOM away on boot — and because `createRoot` cannot raise a hydration error, nothing else would ever tell you. It is reported per route as `verification.routes[].mode` and summarised in `verification.modes`, with a warning in the log. Set `failOnRerender: true` to make it fail the build as well.
+`re-rendered` usually means the app calls `createRoot` instead of `hydrateRoot`. Since `createRoot` does not emit a hydration error, the mode report is the only signal. It is reported per route as `verification.routes[].mode` and summarised in `verification.modes`. Set `failOnRerender: true` to fail the build.
 
-**Page errors.** Errors the browser logs while verifying are reported too: uncaught exceptions as warnings, console errors at debug level. Errors thrown during rendering itself are counted in the summary and reported per route, and `failOnPageError: true` turns them into a build failure; by default an app that throws still ships what it managed to render, because the static output is what crawlers read.
+**Page errors.** Uncaught browser errors are reported as warnings, and console errors at debug level. Errors thrown during rendering are counted in the summary and reported per route; `failOnPageError: true` makes them fail the build. By default the static HTML is still written.
 
-**React 16 and 17.** Hydration and boot modes are judged the same way, and their dev mismatch warnings ("Text content did not match", "Did not expect server HTML to contain") are recognised. Their production builds report nothing for a mismatch at all — no warning, no minified code — so on 16 and 17 the boot-mode report (`hydrated` versus `re-rendered`) is the signal that something drifted.
+**React 16 and 17.** Hydration and boot modes are judged the same way, and their dev mismatch warnings are recognised. Their production builds report nothing for a mismatch, so the boot mode (`hydrated` versus `re-rendered`) is the signal.
 
-**Rebuilds.** On a large site most routes are unchanged between builds, and reloading them proves nothing new. `verifyChangedOnly: true` skips the verification pass for routes whose HTML file was left untouched, which roughly halves rebuild time; the report notes how many routes were skipped, and the first run after a change still verifies everything that moved.
+**Rebuilds.** `verifyChangedOnly: true` skips verification for routes whose HTML file did not change. The report shows how many routes were skipped.
 
 ## Ready contract
 
@@ -254,7 +259,7 @@ snappy({ inlineCss: true })       // alias for 'inline'
 npm install --save-dev beasties
 ```
 
-It inlines the critical CSS and converts the remaining stylesheets to non-blocking loads using `media="print"` plus an inline `onload` handler, with a `<noscript>` fallback. Note that the inline handler is inline JavaScript: a strict `script-src` CSP without `unsafe-inline` will leave the deferred stylesheets unapplied. In that case use `'inline'` or a nonce-aware setup.
+It inlines the critical CSS and converts the remaining stylesheets to non-blocking loads using `media="print"` plus an inline `onload` handler, with a `<noscript>` fallback. The inline handler is inline JavaScript, so a strict `script-src` without `unsafe-inline` leaves the deferred stylesheets unapplied. Use `'inline'` or a nonce-aware setup in that case.
 
 ### Minification
 
@@ -262,7 +267,7 @@ It inlines the critical CSS and converts the remaining stylesheets to non-blocki
 snappy({ minifyHtml: true, minifyCss: true });
 ```
 
-`minifyHtml` uses html-minifier-terser with react-snap's defaults (whitespace collapsing, boolean attribute collapsing, attribute sorting). **Whitespace collapsing changes text nodes, which React notices during hydration** — the verifier is your safety net, and `{ collapseWhitespace: false }` is the usual fix. `minifyCss` is passed through to clean-css and also minifies CSS inlined into the HTML.
+`minifyHtml` uses html-minifier-terser with react-snap's defaults (whitespace collapsing, boolean attribute collapsing, attribute sorting). **Whitespace collapsing changes text nodes, which React detects during hydration.** Use `{ collapseWhitespace: false }` if the verifier reports mismatches. `minifyCss` is passed to clean-css and also minifies CSS inlined into the HTML.
 
 ### Link hints
 
@@ -270,11 +275,11 @@ snappy({ minifyHtml: true, minifyCss: true });
 snappy({ preconnectThirdParty: true, preloadImages: true, preloadManifest: true });
 ```
 
-- `preconnectThirdParty` (default `true`) records every third-party origin the page tried to reach — including ones blocked by `blockThirdParty` — and adds `<link rel="preconnect">` for each.
+- `preconnectThirdParty` (default `true`) records every third-party origin the page tried to reach, including blocked ones, and adds `<link rel="preconnect">` for each.
 - `preloadImages` adds `<link rel="preload" as="image">` for same-origin images the page loaded.
-- `preloadManifest` writes `preload-manifest.json` into the output directory: for each route, a `Link` header value listing the scripts and stylesheets the final HTML still references, filtered by `ignoreForPreload` (default `['service-worker.js']`). Inline CSS and tag surgery are already reflected, the not-found route is omitted, and hints and route keys carry the base path, so serve these as Early Hints or `Link` response headers as they are.
+- `preloadManifest` writes `preload-manifest.json`: per route, a `Link` header value for the scripts and stylesheets the final HTML still references. Entries respect `ignoreForPreload` (default `['service-worker.js']`), inline CSS, tag removal and the base path. Serve them as Early Hints or `Link` headers.
 
-react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome in v106), so the manifest is now a header list rather than a push list.
+react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome 106), so the manifest is a header list rather than a push list.
 
 ### Sitemap
 
@@ -282,7 +287,7 @@ react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome
 snappy({ sitemap: true, metadata: { siteUrl: 'https://example.com' } });
 ```
 
-`snappy` already knows every route it rendered, so it can write the sitemap for you. `sitemap.xml` is generated from the routes that were written — using the same page path policy as canonical URLs, with the base path applied, `noindex` pages and the not-found route left out — and split behind a sitemap index when it exceeds 50,000 URLs. Entries carry no `<lastmod>`, because a build date would claim every page changed on every build.
+The sitemap is generated from the written routes using the same page-path policy as canonical URLs. `noindex` pages and the not-found route are omitted. Above 50,000 URLs it is split behind a sitemap index. Entries have no `<lastmod>`; a build date would claim every page changed on every build.
 
 When the output directory already has a `robots.txt`, a `Sitemap:` line is appended to it if it does not point anywhere yet; an existing directive is left alone. Without a `robots.txt`, the run logs the exact line to add instead of creating a file you did not ask for.
 
@@ -297,7 +302,7 @@ snappy({
 });
 ```
 
-The persisted metadata element is exempt from `removeScriptTags`; everything else is removed as asked.
+The persisted metadata element is kept when `removeScriptTags` is on; other scripts are removed.
 
 ### Removing volatile markup
 
@@ -307,9 +312,9 @@ Mark any element with `data-prerender-remove` and it is dropped from the output:
 <div data-prerender-remove>{ads.render()}</div>
 ```
 
-Use it for regions that only make sense after the client takes over — ads, chat widgets, anything injected after mount. The rule of thumb: remove markup that React will *not* render on its first client pass. Removing something React does expect causes the very hydration mismatch it was meant to avoid, which is exactly what the verifier would then report.
+Use it for regions that only exist after the client takes over, such as ads or chat widgets. Remove markup that React does not render on its first client pass. Removing markup React expects causes the hydration mismatch the verifier reports.
 
-Some libraries stamp values that change on every page load — antd's `rc-menu` writes `data-menu-id="rc-menu-uuid-…"` — which makes every rebuild rewrite every file and leaves `verifyChangedOnly` nothing to skip. List those attribute names (or RegExps) and they are dropped from the output:
+Some libraries stamp values that change on every load. Ant Design's `rc-menu`, for example, writes `data-menu-id="rc-menu-uuid-…"`, which makes every rebuild rewrite every file and leaves `verifyChangedOnly` nothing to skip. List those attribute names (or RegExps) and they are removed from the output:
 
 ```js
 snappy({ removeAttributes: ['data-menu-id', 'aria-controls'] });
@@ -340,21 +345,21 @@ Two things the dial cannot remove, because they are what prerendered HTML is:
 
 ## Third-party requests
 
-Third-party requests are **allowed by default**. Most React sites get their content from a CMS, headless API or a separate service origin, and blocking those during prerendering produces pages that render without data — so the default keeps them working, matching react-snap.
+Third-party requests are allowed by default. Most React sites load content from a CMS, headless API or separate service origin; blocking those during prerendering produces pages without data. The default matches react-snap.
 
 ```js
-snappy({ blockThirdParty: false });                    // default: allow everything
-snappy({ blockThirdParty: true });                     // abort every third-party request
+snappy({ blockThirdParty: false });                    // default: allow all
+snappy({ blockThirdParty: true });                     // abort third-party requests
 snappy({ blockThirdParty: true, allowedHosts: ['cms.example.com'] }); // block all but the CMS
 ```
 
-Turning blocking on makes rendering deterministic and keeps analytics, ads and chat widgets from executing during a build. `allowedHosts` is the usual setting for a CMS-backed site: the API stays reachable while everything else is cut.
+Blocking makes rendering deterministic and keeps analytics, ads and chat widgets from executing during a build. `allowedHosts` keeps a CMS API reachable while blocking everything else.
 
-Preconnect hints are generated for **every** third-party origin the page contacts — including hosts you allowlist while blocking — so the deployed page can start those connections early. Set `preconnectThirdParty: false` to turn the hints off. The CLI equivalent for blocking is `--block-third-party`.
+Preconnect hints are generated for every third-party origin the page contacts, including allowlisted hosts while blocking. Set `preconnectThirdParty: false` to disable them. The CLI equivalent for blocking is `--block-third-party`.
 
 ## CSS-in-JS
 
-Emotion, styled-components, vanilla-extract, stitches, JSS and friends work out of the box as long as their styles end up as text inside a `<style>` tag. Three things need more than plain serialisation:
+Emotion, styled-components, vanilla-extract, stitches and JSS work when their styles end up as text inside a `<style>` tag. Three cases need extra handling:
 
 **CSSOM-only styles.** In production, emotion and styled-components v5 switch to `CSSStyleSheet.insertRule` ("speedy" mode), which puts rules in the CSS object model and leaves the style element empty in the DOM. Serialising the page would drop every one of those rules. `captureRuntimeStyles` (default `true`) copies them back into the element text, and also folds document-level constructable stylesheets (`document.adoptedStyleSheets`) into a `<style>` tag. Set it to `false` to leave stylesheets untouched.
 
@@ -389,7 +394,7 @@ if (cached) return cached;
 return fetch('/api/items?page=2').then((response) => response.json());
 ```
 
-`window.snapStore` is keyed by the request path (including its query string), exactly as your app requested it. Responses larger than `maxCachedBytes` (default 5 MiB) are skipped, so one heavy endpoint cannot bloat every page.
+`window.snapStore` is keyed by the request path, including its query string. Responses larger than `maxCachedBytes` (default 5 MiB) are skipped so one large endpoint cannot bloat every page.
 
 **App state.** Define `window.snapSaveState` and whatever it returns is injected as globals before the first script:
 
@@ -569,9 +574,7 @@ The report exposes `routes`, `files` (with per-route `status` and `noindex`), `r
 
 ## Further reading
 
-- [Limitations](docs/limitations.md)
-- [Report schema and audit rules](docs/report.md)
-- [Migrating from react-snap](docs/react-snap-migration.md)
+[Limitations](docs/limitations.md), [report schema and audit rules](docs/report.md), [migrating from react-snap](docs/react-snap-migration.md).
 
 ## Requirements
 
