@@ -1,21 +1,17 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { writePreloadManifest, writeSitemap } from './artifacts.js';
+import { auditRun } from './audit/index.js';
 import { launchBrowser } from './browser.js';
 import { resolveConfig } from './config.js';
+import { renderAllRoutes } from './crawl.js';
 import { prepareDestination } from './destination.js';
 import { createLogger } from './log.js';
 import { routeToFile } from './output.js';
 import { pruneStaleFiles, readPruneManifest, writePruneManifest } from './prune.js';
-import { renderRoute } from './render.js';
-import {
-  crawlRoots,
-  filterRoutes,
-  isIncludedRoute,
-  normaliseRoute,
-  withinDepth,
-} from './routes.js';
-import { createPool } from './scheduler.js';
+import { writeReport } from './report.js';
+import { loadRouteSeeds } from './route-sources.js';
+import { normaliseRoute } from './routes.js';
 import { startCommandServer, startStaticServer } from './server.js';
 import { verifyRoutes } from './verify.js';
 import { writeAllRoutes } from './write.js';
@@ -38,6 +34,11 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   const outputDir = await resolveOutputDir({ sourceDir, config, log });
   const previousManifest =
     config.pruneStaleRoutes && !config.dryRun ? await readPruneManifest(outputDir) : null;
+  const routeSources = await loadRouteSeeds(config);
+  for (const source of routeSources.sources) {
+    const skipped = source.skipped > 0 ? `, ${source.skipped} skipped` : '';
+    log.info(`Route source ${source.source}: ${source.routes} route(s)${skipped}`);
+  }
 
   if (config.saveAs !== 'html' && config.verify) {
     log.warn(`saveAs: '${config.saveAs}' writes images, so hydration verification is skipped`);
@@ -62,7 +63,14 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     emptyPages: [],
     duplicateTitles: [],
     duplicatePages: [],
+    links: [],
+    notFoundRoutes: [],
+    routeSources: routeSources.sources,
+    routeDetails: [],
+    cspSkipped: [],
+    traces: [],
     verification: null,
+    audit: null,
     preloadManifest: null,
     sitemap: null,
     pruned: [],
@@ -85,6 +93,8 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       config,
       log,
       report,
+      outputDir,
+      sourceSeeds: routeSources.routes,
     });
     if (report.routes.length === 0) {
       report.errors.push({ route: null, message: 'no routes were rendered' });
@@ -173,9 +183,11 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
         origin: server.origin,
         routes: toVerify.sort(),
         config,
+        outputDir,
       });
       report.verification.skipped = skipped;
       logVerification(report.verification, config, log);
+      mergeVerification(report);
     }
 
     if (
@@ -211,6 +223,15 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   }
 
   report.durationMs = Date.now() - startedAt;
+  if (config.audit) {
+    try {
+      report.audit = await auditRun({ report, config, outputDir });
+      logAudit(report.audit, log);
+    } catch (error) {
+      report.errors.push({ route: null, message: `audit failed: ${error.message}` });
+      log.error(`audit failed: ${error.message}`);
+    }
+  }
   const reRendered = report.verification?.modes['re-rendered'] ?? 0;
   const undetected = report.verification
     ? (report.verification.modes.undetected ?? 0) + (report.verification.modes.unknown ?? 0)
@@ -222,10 +243,18 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     !(config.failOnConsoleError && report.consoleErrors.length > 0) &&
     !(config.failOnFailedRequest && report.failedRequests.length > 0) &&
     !(config.failOnDuplicateContent && report.duplicatePages.length > 0) &&
+    !(config.failOnAuditError && (report.audit?.errors.length ?? 0) > 0) &&
     !(config.failOnHydrationError && report.verification && !report.verification.ok) &&
     !(config.failOnVerificationError && report.verification?.errors.length > 0) &&
     !(config.failOnUndetected && undetected > 0) &&
     !(config.failOnRerender && reRendered > 0);
+  try {
+    report.reportFile = await writeReport({ report, config, log });
+  } catch (error) {
+    report.errors.push({ route: null, message: `report write failed: ${error.message}` });
+    log.error(`report write failed: ${error.message}`);
+    if (config.failOnError) report.ok = false;
+  }
   return report;
 }
 
@@ -269,114 +298,40 @@ async function resolveOutputDir({ sourceDir, config, log }) {
   });
 }
 
-/**
- * Runs the crawl and render pool. Each rendered page contributes its output, any new
- * same-origin routes, and the resources recorded for the link-hint features.
- */
-async function renderAllRoutes({ browser, server, config, log, report }) {
-  const visited = new Set();
-  const scheduled = new Set();
-  const rendered = new Map();
-  const cap = config.maxRoutes ?? Number.POSITIVE_INFINITY;
-
-  // Queues routes up to maxRoutes, flagging the report the first time the cap bites.
-  // A seed used only to reach wildcard routes is given output: false and is rendered
-  // for its links without being written.
-  const accept = (routes, outputFor = () => true) => {
-    const accepted = [];
-    for (const route of routes) {
-      if (scheduled.has(route)) continue;
-      if (scheduled.size >= cap) {
-        report.truncated = { limit: config.maxRoutes, routes: scheduled.size };
-        break;
-      }
-      scheduled.add(route);
-      accepted.push({ route, output: outputFor(route) });
-    }
-    return accepted;
-  };
-
-  const pool = createPool({
-    concurrency: config.concurrency,
-    handler: async ({ route, depth, output }) => {
-      if (visited.has(route)) return;
-      visited.add(route);
-      log.debug(`rendering ${route}${output ? '' : ' as a crawl seed'}`);
-      try {
-        const result = await renderRoute({
-          browser,
-          origin: server.origin,
-          route,
-          config,
-          screenshot: config.saveAs !== 'html',
-        });
-        if (output && result.empty) {
-          report.emptyPages.push(route);
-          if (config.failOnEmptyPage) {
-            report.errors.push({ route, message: 'rendered an empty page' });
-            log.error(`  empty page ${route}: no app content was found`);
-            return;
-          }
-          log.warn(`  empty page ${route}: no app content was found`);
-        }
-        if (output) {
-          rendered.set(route, result);
-          report.routes.push(route);
-        }
-        for (const message of result.pageErrors) {
-          report.pageErrors.push({ route, message });
-          log.warn(`  page error on ${route}: ${message}`);
-        }
-        for (const message of result.consoleErrors) {
-          report.consoleErrors.push({ route, message });
-        }
-        if (result.consoleErrors.length > 0) {
-          log.debug(`  console error on ${route}: ${result.consoleErrors[0]}`);
-          if (config.failOnConsoleError) {
-            report.errors.push({ route, message: `console error: ${result.consoleErrors[0]}` });
-          }
-        }
-        for (const failure of result.failedRequests) {
-          report.failedRequests.push({ route, ...failure });
-          const detail = failure.status ? `HTTP ${failure.status}` : failure.error;
-          log.warn(`  failed request on ${route}: ${failure.url} (${detail})`);
-        }
-        if (result.failedRequests.length > 0 && config.failOnFailedRequest) {
-          const first = result.failedRequests[0];
-          report.errors.push({
-            route,
-            message: `failed request: ${first.url}${first.status ? ` (HTTP ${first.status})` : ''}`,
-          });
-        }
-        if (config.crawl && withinDepth(depth + 1, config.maxDepth)) {
-          const discovered = filterRoutes(result.links, {
-            include: config.includeProvided ? config.include : [],
-            exclude: config.exclude,
-          }).filter((candidate) => !scheduled.has(candidate));
-          pool.push(accept(discovered).map((item) => ({ ...item, depth: depth + 1 })));
-        }
-      } catch (error) {
-        report.errors.push({ route, message: error.message });
-        log.error(`  failed ${route}: ${error.message}`);
-      }
-    },
-  });
-
-  const roots = accept(
-    crawlRoots(config),
-    (route) => !config.includeProvided || isIncludedRoute(route, config.include),
-  );
-  pool.push(roots.map((item) => ({ ...item, depth: 0 })));
-  const { errors } = await pool.run();
-  for (const { item, error } of errors) {
-    report.errors.push({ route: item.route, message: error.message });
-    log.error(`  pool error on ${item.route}: ${error.message}`);
+// Adds the verification result to each route record for the JSON report.
+function mergeVerification(report) {
+  for (const entry of report.verification?.routes ?? []) {
+    const detail = report.routeDetails.find((record) => record.route === entry.route);
+    if (!detail) continue;
+    detail.mode = entry.mode;
+    detail.framework = entry.framework ?? null;
+    detail.hydrationErrors = entry.hydrationErrors;
+    detail.pageErrors = [...new Set([...(detail.pageErrors ?? []), ...entry.pageErrors])];
+    detail.consoleErrors = [...new Set([...(detail.consoleErrors ?? []), ...entry.consoleErrors])];
+    detail.verificationStatus = entry.status;
+    detail.empty = entry.empty || detail.empty;
+    detail.firstMismatch = entry.firstMismatch ?? null;
   }
-  return rendered;
 }
 
-// Notes routes whose output carries more than one title, which is what React 19 native
-// metadata and the head layer together produce.
+// Prints an audit summary and a bounded sample of findings.
+function logAudit(audit, log) {
+  const errors = audit?.errors?.length ?? 0;
+  const warnings = audit?.warnings?.length ?? 0;
+  if (errors === 0 && warnings === 0) {
+    log.success(`Audit: no issues (${audit?.linksChecked ?? 0} links checked)`);
+    return;
+  }
+  log.info(`Audit: ${errors} error(s), ${warnings} warning(s)`);
+  for (const finding of [...(audit?.errors ?? []), ...(audit?.warnings ?? [])].slice(0, 20)) {
+    const message = `${finding.rule}: ${finding.message}`;
+    if (finding.severity === 'error') log.error(`  ${message}`);
+    else log.warn(`  ${message}`);
+  }
+}
+
+// Notes duplicate title tags, which React 19 native metadata and the head layer can
+// each produce.
 function logDuplicateTitles(report, log) {
   if (report.duplicateTitles.length === 0) return;
   const sample = report.duplicateTitles.slice(0, 5).join(', ');

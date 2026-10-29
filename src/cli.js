@@ -1,17 +1,10 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import path from 'node:path';
 import process from 'node:process';
-import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import {
-  CONFIG_FILE,
-  detectProjectDefaults,
-  PACKAGE_NAME,
-  parseRouteList,
-  renderConfigFile,
-  writeConfigFile,
-} from './core/init.js';
+import { runInit } from './cli-init.js';
 import { createLogger } from './core/log.js';
 import { prerender } from './core/run.js';
 
@@ -66,6 +59,20 @@ Options:
       --scroll                Scroll through each page to trigger lazy content
       --flat                  Write about.html instead of about/index.html
       --not-found <route>     Route emitted as 404.html (default: /404)
+      --routes-file <file>    Read route seeds from a text/JSON file
+      --routes-from-sitemap <path-or-url>  Seed routes from a local or remote sitemap
+      --route-priority <patterns>  Patterns ranked first when crawling, comma separated
+      --report <file>         Write a machine-readable run report (JSON)
+      --audit                 Check the written site for broken links and SEO issues (default: on)
+      --no-audit              Skip the site audit
+      --fail-on-audit-error   Fail when the audit finds an error
+      --audit-ignore-links <patterns>  Link patterns excluded from the audit, comma separated
+      --preload-links         Inject module, font and LCP image preload hints into each page
+      --image-sitemap         List page images in the sitemap
+      --framework <name>      auto | react | vue | svelte | preact (default: auto)
+      --retries <n>           Retry a failed render this many times (default: 0)
+      --retry-delay <ms>      Wait between render attempts (default: 500)
+      --trace-on-error        Write a Playwright trace for the final failed attempt
       --destination <dir>     Write output to another directory (default: in place)
       --clean-destination     Empty the destination before copying the build output
       --save-as <format>      html | png | jpeg (default: html)
@@ -92,7 +99,7 @@ Options:
       --remove-styles         Strip every style tag from the output
       --async-scripts         Mark external scripts async
       --external-scripts      Write injected state scripts as same-origin files, for a strict CSP
-      --csp <mode>            off | strict: strict makes the output work under script-src 'self'
+      --csp <mode>            off | strict | hash: strict for script-src 'self', hash for inline hashes
       --no-remove-blobs       Keep blob stylesheet links instead of dropping them
       --remove-attributes <names>  Drop these attributes from the output, comma separated
       --no-strip-build-origin-metadata  Keep tags that point at the prerender server
@@ -165,6 +172,20 @@ async function main() {
       scroll: { type: 'boolean' },
       flat: { type: 'boolean' },
       'not-found': { type: 'string' },
+      'routes-file': { type: 'string' },
+      'routes-from-sitemap': { type: 'string' },
+      'route-priority': { type: 'string', multiple: true },
+      report: { type: 'string' },
+      audit: { type: 'boolean' },
+      'no-audit': { type: 'boolean' },
+      'fail-on-audit-error': { type: 'boolean' },
+      'audit-ignore-links': { type: 'string', multiple: true },
+      'preload-links': { type: 'boolean' },
+      'image-sitemap': { type: 'boolean' },
+      framework: { type: 'string' },
+      retries: { type: 'string' },
+      'retry-delay': { type: 'string' },
+      'trace-on-error': { type: 'boolean' },
       destination: { type: 'string' },
       'clean-destination': { type: 'boolean' },
       'save-as': { type: 'string' },
@@ -219,7 +240,12 @@ async function main() {
     return;
   }
   if (parsed.positionals[0] === 'init') {
-    await runInit(parsed);
+    await runInit({
+      values: parsed.values,
+      flags: cliOptions({ values: parsed.values, positionals: [] }),
+      log: createLogger(parsed.values['log-level'] ?? 'info'),
+      version: readVersion(),
+    });
     return;
   }
 
@@ -307,6 +333,26 @@ function cliOptions({ values, positionals }) {
   if (values.scroll) options.scrollToBottom = true;
   if (values.flat) options.flatOutput = true;
   if (values['not-found'] !== undefined) options.notFoundRoute = values['not-found'];
+  if (values['routes-file'] !== undefined) options.routesFile = values['routes-file'];
+  if (values['routes-from-sitemap'] !== undefined) {
+    options.routesFromSitemap = values['routes-from-sitemap'];
+  }
+  if (values['route-priority'] !== undefined) {
+    options.routePriority = splitList(values['route-priority']);
+  }
+  if (values.report !== undefined) options.reportPath = values.report;
+  if (values.audit !== undefined) options.audit = values.audit;
+  else if (values['no-audit']) options.audit = false;
+  if (values['fail-on-audit-error']) options.failOnAuditError = true;
+  if (values['audit-ignore-links'] !== undefined) {
+    options.auditIgnoreLinks = splitList(values['audit-ignore-links']);
+  }
+  if (values['preload-links']) options.preloadLinks = true;
+  if (values['image-sitemap']) options.imageSitemap = true;
+  if (values.framework !== undefined) options.framework = values.framework;
+  if (values.retries !== undefined) options.retries = Number(values.retries);
+  if (values['retry-delay'] !== undefined) options.retryDelay = Number(values['retry-delay']);
+  if (values['trace-on-error']) options.traceOnError = true;
   if (values.destination !== undefined) options.destination = values.destination;
   if (values['clean-destination']) options.cleanDestination = true;
   if (values['save-as'] !== undefined) options.saveAs = values['save-as'];
@@ -352,162 +398,6 @@ function cliOptions({ values, positionals }) {
 // Splits comma separated flag values and drops empty entries.
 function splitList(entries) {
   return entries.flatMap((entry) => entry.split(',')).filter((entry) => entry.length > 0);
-}
-
-/**
- * Setup wizard: asks for the handful of values that decide what gets prerendered and what the
- * metadata says, then writes snappy.config.js. Flags cover every question, so
- * `snappy-prerender init --yes --metadata-site-url https://example.com` works without a
- * terminal.
- */
-async function runInit({ values }) {
-  const log = createLogger(values['log-level'] ?? 'info');
-  const cwd = process.cwd();
-  if (!values.force && fs.existsSync(CONFIG_FILE)) {
-    throw new Error(`${CONFIG_FILE} already exists; pass --force to replace it`);
-  }
-  if (!values.yes && !process.stdin.isTTY) {
-    throw new Error('init needs an interactive terminal; pass --yes to accept the defaults');
-  }
-
-  const detected = await detectProjectDefaults(cwd);
-  const flags = cliOptions({ values, positionals: [] });
-  const defaults = defaultsFromFlags(detected, flags);
-  const answers = values.yes ? defaults : await askAnswers(defaults, log);
-  const cleaned = validatedAnswers(answers, log);
-
-  await writeConfigFile({
-    dir: cwd,
-    contents: renderConfigFile(cleaned),
-    force: values.force === true,
-  });
-  log.success(`Wrote ${CONFIG_FILE}`);
-  printNextSteps({ detected, log, tag: readVersion().includes('-') ? '@next' : '' });
-}
-
-// Turns the flags the CLI already understands into the wizard's starting answers.
-function defaultsFromFlags(detected, flags) {
-  return {
-    sourceDir: flags.sourceDir ?? detected.sourceDir,
-    base: flags.base ?? detected.base ?? '/',
-    include: flags.include ?? ['/'],
-    crawl: flags.crawl ?? true,
-    siteUrl: flags.metadata?.siteUrl ?? '',
-    siteName: flags.metadata?.siteName ?? '',
-    titleTemplate: flags.metadata?.titleTemplate ?? '',
-    defaultImage: flags.metadata?.defaultImage ?? '',
-    trailingSlash: flags.metadata?.trailingSlash ?? '',
-    csp: flags.csp ?? 'off',
-    externalScripts: flags.externalScripts,
-    criticalCssPreload: flags.criticalCssPreload,
-  };
-}
-
-// Asks every question in order, closing the terminal interface whatever the outcome.
-async function askAnswers(defaults, log) {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    log.info('A few questions, then a config file with only the options you set.');
-    return {
-      sourceDir: await ask(rl, 'Build output directory', defaults.sourceDir),
-      base: await ask(rl, 'Public base path', defaults.base),
-      include: parseRouteList(
-        await ask(rl, 'Routes to prerender, comma separated', defaults.include.join(',')),
-      ),
-      crawl: await askYesNo(rl, 'Follow same-origin links while rendering?', defaults.crawl),
-      siteUrl: await ask(
-        rl,
-        'Public site URL for canonical and og:url, blank to skip',
-        defaults.siteUrl,
-      ),
-      siteName: await ask(rl, 'Site name, blank to skip', defaults.siteName),
-      titleTemplate: await ask(
-        rl,
-        "Title template such as '%s | Example', blank to skip",
-        defaults.titleTemplate,
-      ),
-      csp: (await askYesNo(
-        rl,
-        "Serve a strict CSP (script-src 'self', no inline scripts)?",
-        defaults.csp === 'strict',
-      ))
-        ? 'strict'
-        : 'off',
-      defaultImage: defaults.defaultImage,
-      trailingSlash: defaults.trailingSlash,
-    };
-  } finally {
-    rl.close();
-  }
-}
-
-// Asks one question, showing the value Enter will accept.
-async function ask(rl, question, fallback) {
-  const answer = (await rl.question(`${question} (${fallback}): `)).trim();
-  return answer.length > 0 ? answer : fallback;
-}
-
-// Asks a yes/no question, treating Enter as the default.
-async function askYesNo(rl, question, fallback) {
-  const answer = (await rl.question(`${question} (${fallback ? 'Y/n' : 'y/N'}): `))
-    .trim()
-    .toLowerCase();
-  if (answer.length === 0) return fallback;
-  return answer === 'y' || answer === 'yes';
-}
-
-// Drops values that would make a broken config, so a typo becomes a warning instead.
-function validatedAnswers(answers, log) {
-  const cleaned = { ...answers };
-  if (cleaned.siteUrl && !/^https?:\/\//.test(cleaned.siteUrl)) {
-    log.warn(`ignoring site URL ${cleaned.siteUrl}: it must start with http:// or https://`);
-    cleaned.siteUrl = '';
-  }
-  if (cleaned.titleTemplate && !cleaned.titleTemplate.includes('%s')) {
-    log.warn('ignoring the title template: it has no %s placeholder');
-    cleaned.titleTemplate = '';
-  }
-  cleaned.include = parseRouteList((cleaned.include ?? ['/']).join(','));
-  return cleaned;
-}
-
-// Prints what to do next: install if needed, run it, and where the head layer goes.
-function printNextSteps({ detected, log, tag = '' }) {
-  const run = runnerCommand(detected.runner, PACKAGE_NAME);
-  const install = installCommand(detected.runner, tag);
-  log.info('');
-  log.info('Next steps:');
-  if (!detected.installed) log.info(`  Install      ${install}`);
-  log.info(`  Dry run      ${run} --dry-run`);
-  log.info(`  Prerender    ${run}`);
-  log.info('');
-  log.info('Per-route titles and meta tags come from the head layer:');
-  log.info("  import { Head } from 'snappy-prerender/head';");
-  log.info('  <Head title="Awards" description="..." image="/share/awards.png" />');
-  if (detected.usesVite) {
-    log.info('');
-    log.info('Or run it inside the build (vite.config.js):');
-    log.info("  import snappy from 'snappy-prerender';");
-    log.info('  plugins: [react(), snappy()],');
-    log.info(
-      `  ${CONFIG_FILE} is read by the snappy-prerender command, so pass the same options to snappy() too.`,
-    );
-  }
-}
-
-// Builds the command that runs a locally installed binary for the project's package runner.
-function runnerCommand(runner, binary) {
-  if (runner === 'pnpm') return `pnpm exec ${binary}`;
-  if (runner === 'yarn') return `yarn ${binary}`;
-  return `npx ${binary}`;
-}
-
-// Builds the command that installs this package as a dev dependency.
-function installCommand(runner, tag = '') {
-  const pkg = `${PACKAGE_NAME}${tag}`;
-  if (runner === 'pnpm') return `pnpm add -D ${pkg}`;
-  if (runner === 'yarn') return `yarn add -D ${pkg}`;
-  return `npm install --save-dev ${pkg}`;
 }
 
 // Collects the metadata flags, or null when none was passed so a config file value survives.
@@ -556,7 +446,22 @@ async function loadConfigFile(explicitPath) {
       `Config file must export a plain options object or a function returning one: ${explicitPath}`,
     );
   }
-  return loaded;
+  return resolveSourcePaths(loaded, path.dirname(path.resolve(explicitPath)));
+}
+
+// Resolves local route-source paths against the config file, not the process cwd, while
+// leaving URLs and absolute paths alone.
+function resolveSourcePaths(options, dir) {
+  const resolve = (value) => {
+    if (typeof value !== 'string' || value.length === 0) return value;
+    if (/^https?:\/\//i.test(value) || path.isAbsolute(value)) return value;
+    return path.resolve(dir, value);
+  };
+  return {
+    ...options,
+    routesFile: resolve(options.routesFile),
+    routesFromSitemap: resolve(options.routesFromSitemap),
+  };
 }
 
 // Reads the package version without importing JSON, keeping Node 20 compatible.

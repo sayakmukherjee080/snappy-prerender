@@ -1,16 +1,21 @@
 import { createHash } from 'node:crypto';
 import { findBuildOriginUrls } from './build-origin.js';
+import { applyCspHashes } from './csp.js';
 import { inlineCriticalCss } from './inline-css.js';
 import { minifyHtml } from './minify.js';
 import { normaliseHtml } from './normalize.js';
 import {
   findOutputCollisions,
+  routeToFile,
   routeToScreenshotFile,
   writeBufferIfChanged,
   writeFileIfChanged,
   writeRouteHtml,
 } from './output.js';
+import { collectPageMeta } from './page-meta.js';
+import { collectScriptSources, injectPreloadLinks } from './preload-links.js';
 import { collectPageResources } from './preload-manifest.js';
+import { resolveRouteConfig } from './route-config.js';
 import { normaliseRoute, toPublicPath } from './routes.js';
 
 /**
@@ -36,16 +41,43 @@ export async function writeAllRoutes({
   for (const route of sorted) {
     if (conflicted.has(route)) continue;
     try {
+      const routeConfig = resolveRouteConfig(config, route);
+      const result = rendered.get(route);
       const { file, resources } = await writeRouteOutput({
         route,
-        result: rendered.get(route),
+        result,
         outputDir,
-        config,
+        config: routeConfig,
         log,
         state,
         report,
       });
       report.files.push(file);
+      report.routeDetails.push({
+        route,
+        order: result.order ?? null,
+        file: file.file,
+        status: file.status,
+        bytes: file.bytes,
+        depth: result.depth ?? null,
+        attempts: result.attempts ?? 1,
+        httpStatus: result.httpStatus ?? null,
+        finalUrl: result.finalUrl ?? null,
+        empty: result.empty === true,
+        notFound: file.notFound === true,
+        noindex: file.noindex === true,
+        meta: file.meta ?? null,
+        images: file.images ?? [],
+        alternates: file.alternates ?? [],
+        mode: null,
+        framework: null,
+        hydrationErrors: [],
+        pageErrors: result.pageErrors ?? [],
+        consoleErrors: result.consoleErrors ?? [],
+        failedRequests: result.failedRequests ?? [],
+        firstMismatch: null,
+        buildOriginUrls: file.buildOriginUrls ?? [],
+      });
       if (resources) manifestEntries.push({ route, ...resources });
       if (file.hash) {
         const group = hashes.get(file.hash) ?? [];
@@ -205,6 +237,53 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
   if (config.minifyHtml) {
     output = await minifyHtml(output, config.minifyHtml, config.minifyCss);
   }
+  const preTransformScripts = config.transformHtml ? collectScriptSources(output) : new Set();
+  if (config.transformHtml) {
+    const transformed = await config.transformHtml(output, {
+      route,
+      file: routeToFile(route, config),
+      stats,
+      config,
+    });
+    if (transformed !== null && transformed !== undefined && typeof transformed !== 'string') {
+      throw new TypeError('transformHtml must return a string, null or undefined');
+    }
+    output = transformed ?? output;
+  }
+  if (config.preloadLinks) {
+    const basePrefix = config.base === '/' ? '' : config.base.slice(0, -1);
+    const skipScripts = new Set(
+      [...preTransformScripts].map((src) => {
+        if (!src.startsWith('/')) return src;
+        const appRelative =
+          basePrefix && (src === basePrefix || src.startsWith(`${basePrefix}/`))
+            ? src.slice(basePrefix.length)
+            : src;
+        return toPublicPath(appRelative, config.base);
+      }),
+    );
+    output = injectPreloadLinks(output, {
+      scripts: config.removeScriptTags ? [] : [...result.collector.scripts],
+      fonts: result.collector.fonts,
+      lcpImage: result.lcpImage,
+      base: config.base,
+      ignoreForPreload: config.ignoreForPreload,
+      skipScripts,
+    });
+  }
+  if (config.csp === 'hash') {
+    const policy = applyCspHashes(output);
+    if (policy.existingPolicy) {
+      log.warn(`  ${route}: kept the existing CSP meta and injected no hashes`);
+      report.cspSkipped.push(route);
+    } else {
+      output = policy.html;
+      log.debug(
+        `  csp ${route}: hashed ${policy.hashedScripts} script(s) and ${policy.hashedStyles} style(s)`,
+      );
+    }
+  }
+  const meta = collectPageMeta(output);
   warnOnBuildOriginMetadata({
     origins: stats.metadataOrigins,
     removed: stats.removedMetadata,
@@ -212,11 +291,11 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
     log,
     state,
   });
-  if (stats.titleElements > 1) report.duplicateTitles.push(route);
+  if (meta.titleCount > 1) report.duplicateTitles.push(route);
+  const buildOrigins = findBuildOriginUrls(output);
   if (config.failOnBuildOriginMetadata) {
-    const origins = findBuildOriginUrls(output);
-    if (origins.length > 0) {
-      const message = `metadata still points at the build server: ${origins.join(', ')}`;
+    if (buildOrigins.length > 0) {
+      const message = `metadata still points at the build server: ${buildOrigins.join(', ')}`;
       report.errors.push({ route, message });
       log.error(`  ${route}: ${message}`);
     }
@@ -233,7 +312,13 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
       hash: createHash('sha256')
         .update(result.html ?? output)
         .digest('hex'),
-      noindex: stats.noindex,
+      noindex: meta.noindex,
+      notFound: result.notFound === true,
+      meta,
+      images: meta.images,
+      alternates: meta.alternates,
+      inlineStyleAttributes: meta.inlineStyleAttributes,
+      buildOriginUrls: buildOrigins,
     },
     resources,
   };

@@ -13,6 +13,18 @@ export default function Seo() {
         description="A route that exercises the head layer and its canonical URL."
         image="/share/aether.png"
         type="article"
+        lang="en"
+        dir="ltr"
+        structuredData={{
+          '@context': 'https://schema.org',
+          '@type': 'WebPage',
+          name: 'SEO fixture',
+          description: 'A route that exercises structured data and hreflang alternates.',
+        }}
+        alternates={[
+          { hreflang: 'en', href: '/seo' },
+          { hreflang: 'x-default', href: '/seo' },
+        ]}
       />
       <p className="eyebrow">Test route</p>
       <h1>Head layer fixture</h1>

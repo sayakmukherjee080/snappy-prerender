@@ -5,6 +5,7 @@ const CREATED_ATTRIBUTE = 'data-snappy-head-created';
 const stack = [];
 const snapshots = new WeakMap();
 const createdElements = new WeakSet();
+const htmlOriginals = new Map();
 const originals = readRecordedOriginals();
 publishOriginals();
 
@@ -56,7 +57,9 @@ function applyMerged() {
   if (typeof document === 'undefined' || !document.head) return;
   const head = document.head;
   const merged = mergeHeadEntries(stack);
-  const desired = new Map(merged.map((entry) => [headKey(entry), entry]));
+  const headEntries = merged.filter((entry) => entry.kind !== 'html');
+  const htmlEntries = merged.filter((entry) => entry.kind === 'html');
+  const desired = new Map(headEntries.map((entry) => [headKey(entry), entry]));
 
   for (const [key, entry] of desired) {
     const matches = findTags(head, key);
@@ -74,7 +77,27 @@ function applyMerged() {
     if (!desired.has(key)) releaseTag(element, key);
   }
 
-  orderTags(head, merged);
+  applyHtmlAttributes(htmlEntries);
+  orderTags(head, headEntries);
+}
+
+// Applies lang/dir to the document element and restores the original value when no Head
+// wants the attribute any more.
+function applyHtmlAttributes(entries) {
+  if (typeof document === 'undefined' || !document.documentElement) return;
+  const root = document.documentElement;
+  const desired = new Map(entries.map((entry) => [entry.key, entry.value]));
+  for (const [key, value] of desired) {
+    if (!htmlOriginals.has(key)) htmlOriginals.set(key, root.getAttribute(key));
+    root.setAttribute(key, value);
+  }
+  for (const key of [...htmlOriginals.keys()]) {
+    if (desired.has(key)) continue;
+    const previous = htmlOriginals.get(key);
+    if (previous === null) root.removeAttribute(key);
+    else root.setAttribute(key, previous);
+    htmlOriginals.delete(key);
+  }
 }
 
 /**
@@ -87,6 +110,9 @@ function findTags(head, key) {
     const title = head.querySelector('title');
     return title ? [title] : [];
   }
+  const owned = head.querySelector(`[${OWNER_ATTRIBUTE}="${cssEscape(key)}"]`);
+  if (owned) return [owned];
+  if (key.startsWith('link:')) return findLinkTags(head, key.slice(5));
   const [kind, attribute, ...rest] = key.split(':');
   const value = rest.join(':');
   if (
@@ -95,18 +121,32 @@ function findTags(head, key) {
   ) {
     return [...head.querySelectorAll(`meta[${attribute}="${cssEscape(value)}"]`)];
   }
-  if (kind === 'link' && attribute === 'rel') return findRelLinks(head, value);
-  const owned = head.querySelector(`[${OWNER_ATTRIBUTE}="${cssEscape(key)}"]`);
-  return owned ? [owned] : [];
+  return [];
 }
 
-// Matches links by rel, and by href when the key carries one, so two links that share a rel
-// but point elsewhere stay distinct.
-function findRelLinks(head, value) {
-  const [rel, href] = value.split('|');
-  const links = [...head.querySelectorAll(`link[rel="${cssEscape(rel)}"]`)];
-  if (href === undefined) return links;
-  return links.filter((link) => link.getAttribute('href') === href);
+// Matches links that a previous run or the app itself wrote. Head-owned links carry the
+// owner attribute and are found above; this handles adoption on the first run.
+function findLinkTags(head, spec) {
+  const links = [...head.querySelectorAll('link')];
+  if (spec.startsWith('rel:')) {
+    const [rel, hreflang, href] = spec.slice(4).split('|');
+    return links.filter(
+      (link) =>
+        link.getAttribute('rel') === rel &&
+        (hreflang === undefined || link.getAttribute('hreflang') === hreflang) &&
+        (href === undefined || link.getAttribute('href') === href),
+    );
+  }
+  if (!spec.includes('=')) return [];
+  const attrs = Object.fromEntries(
+    spec.split('|').map((pair) => {
+      const index = pair.indexOf('=');
+      return [pair.slice(0, index), pair.slice(index + 1)];
+    }),
+  );
+  return links.filter((link) =>
+    Object.entries(attrs).every(([name, value]) => link.getAttribute(name) === value),
+  );
 }
 
 function createTag(head, entry) {
@@ -140,6 +180,7 @@ function writeTag(element, entry, key) {
     if (!Object.hasOwn(entry.attrs, attribute.name)) element.removeAttribute(attribute.name);
   }
   for (const [name, value] of Object.entries(entry.attrs)) element.setAttribute(name, value);
+  if (entry.kind === 'script') element.textContent = entry.text;
 }
 
 // Remembers what a tag looked like before the head layer first touched it, so an app-owned
@@ -155,7 +196,7 @@ function snapshotTag(element, key) {
   }
   const snapshot = {
     attrs: Object.fromEntries(attrs),
-    text: element.tagName === 'TITLE' ? element.textContent : null,
+    text: element.tagName === 'TITLE' || element.tagName === 'SCRIPT' ? element.textContent : null,
   };
   snapshots.set(element, snapshot);
   if (createdElements.has(element) || element.hasAttribute(CREATED_ATTRIBUTE)) return;

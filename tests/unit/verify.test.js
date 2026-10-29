@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { classifyBoot, isHydrationError } from '../../src/core/verify.js';
+import { isHydrationError } from '../../src/core/frameworks.js';
+import { classifyBoot } from '../../src/core/verify.js';
 
 describe('isHydrationError', () => {
   it('detects React 18 and 19 hydration messages', () => {

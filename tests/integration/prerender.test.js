@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { build } from 'vite';
 import { launchBrowser } from '../../src/core/browser.js';
@@ -197,9 +197,10 @@ describe('prerender integration: react 19 app', () => {
     const second = await prerender({ sourceDir, logLevel: 'silent', metadata });
     const stable = second.files.filter((file) => file.route !== '/mismatch');
     assert.equal(stable.length > 0, true);
-    assert.equal(
-      stable.every((file) => file.status === 'unchanged'),
-      true,
+    const changed = stable.filter((file) => file.status !== 'unchanged');
+    assert.deepEqual(
+      changed.map((file) => [file.route, file.status]),
+      [],
     );
   });
 
@@ -1467,7 +1468,7 @@ describe('prerender integration: limits and collisions', () => {
     const report = await prerender({ sourceDir, logLevel: 'silent', verify: false, maxRoutes: 2 });
 
     assert.deepEqual([...report.routes].sort(), ['/', '/a']);
-    assert.deepEqual(report.truncated, { limit: 2, routes: 2 });
+    assert.deepEqual(report.truncated, { limit: 2, routes: 2, droppedRoutes: ['/b'] });
     assert.equal(report.ok, false);
 
     const tolerated = await prerender({
@@ -1731,6 +1732,46 @@ describe('prerender integration: init', () => {
     const run = await runCli([], { cwd: dir });
     assert.equal(run.status, 0, run.stderr);
     assert.equal(await exists(path.join(dir, 'about', 'index.html')), true);
+  });
+
+  it('migrates a legacy reactSnap block and prints the mapping', async () => {
+    const dir = await makeStaticSite({
+      'index.html': page('Home page', ['/about']),
+      'package.json': JSON.stringify({
+        reactSnap: {
+          source: '.',
+          include: ['/', '/about'],
+          skipThirdPartyRequests: true,
+          http2PushManifest: true,
+          timeout: 60000,
+          port: 3000,
+          sourceMaps: true,
+          mystery: 'x',
+        },
+      }),
+    });
+
+    const init = await runCli(['init', '--yes'], { cwd: dir });
+    assert.equal(init.status, 0, init.stderr);
+    assert.match(init.stdout, /react-snap migration/);
+    assert.match(init.stdout, /reactSnap\.source -> sourceDir/);
+    assert.match(init.stderr, /ignored reactSnap\.port/);
+    assert.match(init.stderr, /unknown reactSnap\.mystery/);
+
+    const contents = await fs.readFile(path.join(dir, 'snappy.config.js'), 'utf8');
+    assert.match(contents, /sourceDir: "\."/);
+    assert.match(contents, /blockThirdParty: true/);
+    assert.match(contents, /preloadManifest: true/);
+    assert.match(contents, /timeout: 60000/);
+    assert.equal(contents.includes('port:'), false);
+
+    const loaded = (await import(pathToFileURL(path.join(dir, 'snappy.config.js')).href)).default;
+    const config = resolveConfig(loaded);
+    assert.equal(config.sourceDir, '.');
+    assert.equal(config.blockThirdParty, true);
+    assert.equal(config.preloadManifest, true);
+    assert.equal(config.timeout, 60000);
+    assert.deepEqual(config.include, ['/', '/about']);
   });
 
   it('refuses to replace an existing config without force', async () => {

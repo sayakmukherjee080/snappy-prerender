@@ -2,7 +2,7 @@ import { captureFormState } from './form-state.js';
 import { inlineStylesheets } from './inline-css.js';
 import { isPageEmpty } from './page-content.js';
 import { createResourceCollector } from './resources.js';
-import { toAppRoute, toServerUrl } from './routes.js';
+import { normaliseRoute, toAppRoute, toServerUrl } from './routes.js';
 import { captureRuntimeStyles } from './runtime-styles.js';
 import { freezeAnimations, scrollThroughPage, settlePage, trackNetwork } from './settle.js';
 import { separateTextNodes } from './text-separators.js';
@@ -26,7 +26,14 @@ function escapeForScript(value) {
  * storage from leaking between routes. When a screenshot path is supplied the route
  * is captured as an image instead of HTML.
  */
-export async function renderRoute({ browser, origin, route, config, screenshot = false }) {
+export async function renderRoute({
+  browser,
+  origin,
+  route,
+  config,
+  screenshot = false,
+  traceFile = null,
+}) {
   const context = await browser.newContext({
     viewport: config.viewport,
     storageState: config.storageState ?? undefined,
@@ -35,6 +42,11 @@ export async function renderRoute({ browser, origin, route, config, screenshot =
     reducedMotion: config.freezeAnimations ? 'reduce' : 'no-preference',
     serviceWorkers: 'block',
   });
+  let tracing = false;
+  if (traceFile) {
+    await context.tracing.start({ screenshots: false, snapshots: true, sources: false });
+    tracing = true;
+  }
   const page = await context.newPage();
   const pageErrors = [];
   const consoleErrors = [];
@@ -78,19 +90,51 @@ export async function renderRoute({ browser, origin, route, config, screenshot =
     maxCachedBytes: config.maxCachedBytes,
   });
   await collector.install(page);
+  await page.addInitScript(() => {
+    window.__snappyLcp = [];
+    try {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const element = entry.element;
+          window.__snappyLcp.push({
+            url: entry.url || element?.currentSrc || element?.src || null,
+          });
+        }
+      });
+      observer.observe({ type: 'largest-contentful-paint', buffered: true });
+    } catch {
+      // Older engines simply do not report LCP; preload injection falls back to no hint.
+    }
+  });
   const tracker = trackNetwork(page);
   try {
     const response = await page.goto(toServerUrl(route, config.base, origin), {
       waitUntil: 'domcontentloaded',
       timeout: config.timeout,
     });
+    const notFoundRoute = config.notFoundRoute ? normaliseRoute(config.notFoundRoute) : null;
+    const isNotFoundRoute = notFoundRoute !== null && normaliseRoute(route) === notFoundRoute;
     if (response && response.status() >= 400) {
-      throw new Error(
-        `route responded with HTTP ${response.status()}${response.statusText() ? ` ${response.statusText()}` : ''}`,
-      );
+      // A configured 404 route may legitimately answer with HTTP 404; every other status
+      // is a failure, and the marker cannot be read before the navigation completes.
+      if (!(response.status() === 404 && isNotFoundRoute)) {
+        const error = new Error(
+          `route responded with HTTP ${response.status()}${response.statusText() ? ` ${response.statusText()}` : ''}`,
+        );
+        // A server error can be transient and is retried; a client error is the app's own.
+        error.retryable = response.status() >= 500;
+        throw error;
+      }
     }
     await settlePage(page, config, tracker);
     const empty = await isPageEmpty(page);
+    const statusCode = await page.evaluate(() => {
+      const marker = document.querySelector('meta[name="prerender-status-code"]');
+      if (!marker) return null;
+      const value = Number.parseInt(marker.getAttribute('content') ?? '', 10);
+      return Number.isFinite(value) ? value : null;
+    });
+    const finalUrl = page.url();
 
     if (config.captureRuntimeStyles) await captureRuntimeStyles(page);
     if (config.captureFormState) await captureFormState(page);
@@ -106,6 +150,16 @@ export async function renderRoute({ browser, origin, route, config, screenshot =
     if (metadataDefaults) await injectMetadataDefaults(page, metadataDefaults);
     if (config.freezeAnimations) await freezeAnimations(page);
     if (config.scrollToBottom) await scrollThroughPage(page, config);
+    const lcpUrl = await page.evaluate(() => window.__snappyLcp?.at(-1)?.url ?? null);
+    let lcpImage = null;
+    if (lcpUrl) {
+      try {
+        const parsed = new URL(lcpUrl);
+        if (parsed.origin === origin) lcpImage = `${parsed.pathname}${parsed.search}`;
+      } catch {
+        // Ignore malformed performance entries.
+      }
+    }
     await separateTextNodes(page);
 
     const links = await collectLinks(page, config.base, origin);
@@ -126,6 +180,10 @@ export async function renderRoute({ browser, origin, route, config, screenshot =
         stateScript,
         screenshot: buffer,
         empty,
+        statusCode,
+        httpStatus: response?.status() ?? null,
+        finalUrl,
+        lcpImage,
       };
     }
 
@@ -141,11 +199,35 @@ export async function renderRoute({ browser, origin, route, config, screenshot =
       inlineCssSkipped,
       stateScript,
       empty,
+      statusCode,
+      httpStatus: response?.status() ?? null,
+      finalUrl,
+      lcpImage,
     };
+  } catch (error) {
+    error.retryable ??= isRetryableRenderError(error);
+    if (tracing) {
+      tracing = false;
+      await context.tracing.stop({ path: traceFile }).then(
+        () => {
+          error.tracePath = traceFile;
+        },
+        // A failed trace must never replace the render error that explains the build failure.
+        () => {},
+      );
+    }
+    throw error;
   } finally {
     tracker.stop();
+    if (tracing) await context.tracing.stop().catch(() => {});
     await context.close();
   }
+}
+
+// Navigation and network failures are transient; a bad selector or an HTTP status is not.
+function isRetryableRenderError(error) {
+  if (error?.name === 'TimeoutError') return true;
+  return /net::ERR_|timed? ?out|ECONNRESET|ECONNREFUSED|socket hang up/i.test(error?.message ?? '');
 }
 
 /**

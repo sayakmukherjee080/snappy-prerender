@@ -11,11 +11,18 @@ const SINGLETON_LINK_RELS = new Set(['canonical']);
  * caller did not supply are simply absent, so the component never invents metadata the app
  * did not ask for.
  */
-export function buildHeadEntries(props = {}, defaults = {}) {
+export function buildHeadEntries(props = {}, defaults = {}, id = 'default') {
   const entries = [];
   const template = props.titleTemplate ?? defaults.titleTemplate ?? null;
   const siteName = props.siteName ?? defaults.siteName ?? null;
   const image = props.image ?? defaults.defaultImage ?? null;
+
+  if (typeof props.lang === 'string' && props.lang.length > 0) {
+    entries.push({ kind: 'html', key: 'lang', value: props.lang });
+  }
+  if (props.dir === 'ltr' || props.dir === 'rtl' || props.dir === 'auto') {
+    entries.push({ kind: 'html', key: 'dir', value: props.dir });
+  }
 
   const title = props.title ? applyTitleTemplate(props.title, template, siteName) : null;
   if (title) entries.push({ kind: 'title', text: title });
@@ -50,6 +57,24 @@ export function buildHeadEntries(props = {}, defaults = {}) {
       entries.push({ kind: 'link', key: 'rel:canonical', attrs: { rel: 'canonical', href: url } });
   }
 
+  for (const alternate of props.alternates ?? []) {
+    const href = pageUrl(alternate.href, defaults);
+    const hreflang = alternate.hreflang ?? alternate.lang;
+    if (!href || !hreflang) continue;
+    const attrs = { rel: 'alternate', hreflang, href };
+    if (alternate.type) attrs.type = alternate.type;
+    entries.push({ kind: 'link', key: `rel:alternate|${hreflang}|${href}`, attrs });
+  }
+
+  if (props.structuredData !== undefined && props.structuredData !== null) {
+    entries.push({
+      kind: 'script',
+      key: `script:ld+json:${id}`,
+      attrs: { type: 'application/ld+json' },
+      text: serializeStructuredData(props.structuredData),
+    });
+  }
+
   for (const extra of props.extra ?? []) entries.push(extraEntry(extra));
 
   return entries;
@@ -77,6 +102,8 @@ export function mergeHeadEntries(stack = []) {
  */
 export function headKey(entry) {
   if (entry.kind === 'title') return 'title';
+  if (entry.kind === 'html') return `html:${entry.key}`;
+  if (entry.kind === 'script') return entry.key;
   if (entry.kind === 'link') return `link:${entry.key ?? attrsKey(entry.attrs)}`;
   if (entry.key) return `meta:${entry.key}`;
   const name = attrsValue(entry.attrs, 'name');
@@ -195,10 +222,29 @@ function attrsValue(attrs = {}, name) {
   return attrs[name];
 }
 
-// Keeps output deterministic: title, then name/property metas, then links.
+// Serialises JSON-LD so a value can never close the script element. The escapes remain
+// valid JSON, so crawlers parse the same object the caller supplied.
+function serializeStructuredData(value) {
+  return JSON.stringify(value).replace(
+    /[<>&\u2028\u2029]/g,
+    (char) =>
+      ({
+        '<': '\\u003C',
+        '>': '\\u003E',
+        '&': '\\u0026',
+        '\u2028': '\\u2028',
+        '\u2029': '\\u2029',
+      })[char],
+  );
+}
+
+// Keeps output deterministic: title, metas, links, JSON-LD scripts, then html attributes.
 function sortMetasFirst(entries) {
-  return [...entries].sort((a, b) => {
-    const rank = (entry) => (entry.kind === 'meta' ? 0 : 1);
-    return rank(a) - rank(b);
-  });
+  const rank = (entry) => {
+    if (entry.kind === 'meta') return 0;
+    if (entry.kind === 'link') return 1;
+    if (entry.kind === 'script') return 2;
+    return 3;
+  };
+  return [...entries].sort((a, b) => rank(a) - rank(b));
 }

@@ -69,6 +69,7 @@ export async function writeSitemap({ outputDir, config, log, report }) {
       routes: sitemap.routes,
       robotsUpdated: patched !== null,
       files: names,
+      locs: sitemap.locs,
     };
     log.info(`Dry run: would write ${names.join(', ')} listing ${sitemap.routes} route(s)`);
     return;
@@ -89,6 +90,7 @@ export async function writeSitemap({ outputDir, config, log, report }) {
     routes: sitemap.routes,
     robotsUpdated: patched !== null,
     files: names,
+    locs: sitemap.locs,
   };
   log.info(
     `${statuses.every((status) => status === 'unchanged') ? 'Unchanged' : 'Wrote'} ${names.join(', ')} listing ${sitemap.routes} route(s)`,

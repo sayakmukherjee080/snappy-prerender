@@ -27,7 +27,18 @@ export default function App() {
   if (path === '/head') {
     return (
       <main>
-        <Head title="Nineteen head" description="Nine description" image="/share-19.png" />
+        <Head
+          title="Nineteen head"
+          description="Nine description"
+          image="/share-19.png"
+          lang="en"
+          dir="ltr"
+          alternates={[
+            { hreflang: 'en', href: '/head' },
+            { hreflang: 'x-default', href: '/head' },
+          ]}
+          structuredData={{ '@context': 'https://schema.org', name: 'Head fixture' }}
+        />
         <h1>Nineteen head</h1>
         <a href="/">Home</a>
       </main>
