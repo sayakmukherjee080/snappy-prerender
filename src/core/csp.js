@@ -20,11 +20,23 @@ const CSP_MARKER = 'data-snappy-csp';
  */
 export function applyCspHashes(html) {
   const document = parse(html);
+  const result = applyCspHashesToDocument(document);
+  return {
+    html: result.existingPolicy ? html : serialize(document),
+    ...result,
+  };
+}
+
+/**
+ * Applies the hash policy to an already parsed document. Returns counts and whether a
+ * user-owned policy was left untouched.
+ */
+export function applyCspHashesToDocument(document) {
   const head = findHead(document);
-  if (!head) return { html, hashedScripts: 0, hashedStyles: 0, existingPolicy: false };
+  if (!head) return { hashedScripts: 0, hashedStyles: 0, existingPolicy: false };
   removeGeneratedPolicy(head);
   const existing = findPolicyMeta(head);
-  if (existing) return { html, hashedScripts: 0, hashedStyles: 0, existingPolicy: true };
+  if (existing) return { hashedScripts: 0, hashedStyles: 0, existingPolicy: true };
 
   const scriptHashes = [];
   const styleHashes = [];
@@ -43,7 +55,6 @@ export function applyCspHashes(html) {
   ];
   head.childNodes.unshift(metaNode(directives.join('; ')));
   return {
-    html: serialize(document),
     hashedScripts: scriptHashes.length,
     hashedStyles: styleHashes.length,
     existingPolicy: false,

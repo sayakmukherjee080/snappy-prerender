@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { hasImportRule, rewriteCssUrls } from './css-url.js';
 import { minifyCss } from './minify.js';
 
@@ -8,8 +9,9 @@ import { minifyCss } from './minify.js';
  * place. Relative url() values are rebased against each sheet before joining so fonts
  * and images keep working on nested routes.
  */
-export async function inlineStylesheets({ page, minifyCssOptions }) {
-  const collected = await page.evaluate(async () => {
+export async function inlineStylesheets({ page, minifyCssOptions, cache = null }) {
+  const cachedCss = cache ? Object.fromEntries(cache) : {};
+  const collected = await page.evaluate(async (knownCss) => {
     // Only media that applies on screen can be inlined without changing how the sheet
     // applies, so a print stylesheet is left as a link instead of becoming active.
     const INLINEABLE_MEDIA = new Set(['', 'all', 'screen']);
@@ -22,24 +24,30 @@ export async function inlineStylesheets({ page, minifyCssOptions }) {
         skipped.push(link.href);
         continue;
       }
+      if (Object.hasOwn(knownCss, link.href)) {
+        sheets.push({ css: knownCss[link.href], href: link.href, fetched: false });
+        continue;
+      }
       try {
         const response = await fetch(link.href);
         if (!response.ok) throw new Error(String(response.status));
-        sheets.push({ css: await response.text(), href: link.href });
+        sheets.push({ css: await response.text(), href: link.href, fetched: true });
       } catch {
         skipped.push(link.href);
       }
     }
     return { sheets, skipped };
-  });
+  }, cachedCss);
 
   const inlineable = [];
   const skipped = [...collected.skipped];
+  const fetched = [];
   for (const sheet of collected.sheets) {
+    if (sheet.fetched) fetched.push({ href: sheet.href, css: sheet.css });
     if (hasImportRule(sheet.css)) skipped.push(sheet.href);
     else inlineable.push(sheet);
   }
-  if (inlineable.length === 0) return { skipped };
+  if (inlineable.length === 0) return { skipped, fetched };
 
   const pageOrigin = new URL(page.url()).origin;
   const joined = inlineable
@@ -59,7 +67,7 @@ export async function inlineStylesheets({ page, minifyCssOptions }) {
     },
     { text: css, hrefs: inlineable.map((sheet) => sheet.href) },
   );
-  return { skipped };
+  return { skipped, fetched };
 }
 
 /**
@@ -68,7 +76,43 @@ export async function inlineStylesheets({ page, minifyCssOptions }) {
  * beasties is an optional peer dependency because most projects never need it.
  * `preload` is passed through so a strict script-src can turn the swap handlers off.
  */
-export async function inlineCriticalCss({ html, outputDir, base, preload = 'media' }) {
+export async function inlineCriticalCss({
+  html,
+  outputDir,
+  base,
+  preload = 'media',
+  cache = null,
+}) {
+  const key = `${path.resolve(outputDir)}|${base}|${preload}`;
+  let state = cache?.get(key);
+  if (!state) {
+    state = {
+      processor: createCriticalCssProcessor({ outputDir, base, preload }),
+      tail: Promise.resolve(),
+    };
+    cache?.set(key, state);
+  }
+  // Beasties keeps per-instance selector state and is not safe for concurrent process
+  // calls, so this queue serialises routes while sharing the instance.
+  const run = state.tail.then(async () => {
+    const beasties = await state.processor;
+    return beasties.process(html);
+  });
+  state.tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  try {
+    return await run;
+  } catch (error) {
+    if (cache?.get(key) === state) cache.delete(key);
+    throw error;
+  }
+}
+
+// Creates the Beasties processor once per output configuration. The selector cache is
+// reused across routes; stylesheet text is still read per page by the library.
+async function createCriticalCssProcessor({ outputDir, base, preload }) {
   let Beasties;
   try {
     ({ default: Beasties } = await import('beasties'));
@@ -77,12 +121,11 @@ export async function inlineCriticalCss({ html, outputDir, base, preload = 'medi
       "inlineCss: 'critical' needs the optional beasties dependency. Install it with: npm install beasties",
     );
   }
-  const beasties = new Beasties({
+  return new Beasties({
     path: outputDir,
     publicPath: base,
     logLevel: 'silent',
     preload,
     noscriptFallback: true,
   });
-  return beasties.process(html);
 }

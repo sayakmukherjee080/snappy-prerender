@@ -535,6 +535,7 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `retryDelay` | `500` | Wait between render attempts, in ms |
 | `traceOnError` | `false` | Write a Playwright trace for the final failed attempt under `snappy-traces/` |
 | `verifyChangedOnly` | `false` | Skip verification for routes whose HTML file did not change since the last run |
+| `reuseVerificationContext` | `false` | Reuse one browser context per verification worker; routes share storage, so use only for stateless apps |
 | `failOnHydrationError` | `false` | Fail the run on hydration errors; off by default, where they are reported instead |
 | `failOnRerender` | `false` | Fail the run when a route re-renders instead of hydrating |
 | `failOnPageError` | `false` | Fail the run when a page throws while rendering; off by default, where page errors are reported |
@@ -577,7 +578,6 @@ The report exposes `routes`, `files` (with per-route `status` and `noindex`), `r
 [Limitations](docs/limitations.md), [report schema and audit rules](docs/report.md), [migrating from react-snap](docs/react-snap-migration.md).
 
 ## Requirements
-
 - Node.js >= 22.12
 - Chrome or Edge installed (detected automatically), or allow the one-time Chrome for Testing download fallback
 - `beasties` only if you use `inlineCss: 'critical'` (optional peer dependency)

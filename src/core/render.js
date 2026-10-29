@@ -1,24 +1,11 @@
 import { captureFormState } from './form-state.js';
 import { inlineStylesheets } from './inline-css.js';
-import { isPageEmpty } from './page-content.js';
+import { readPageState } from './page-content.js';
 import { createResourceCollector } from './resources.js';
 import { normaliseRoute, toAppRoute, toServerUrl } from './routes.js';
 import { captureRuntimeStyles } from './runtime-styles.js';
 import { freezeAnimations, scrollThroughPage, settlePage, trackNetwork } from './settle.js';
-import { separateTextNodes } from './text-separators.js';
-
-const SCRIPT_ESCAPES = {
-  '<': '\\u003C',
-  '>': '\\u003E',
-  '/': '\\u002F',
-  '\u2028': '\\u2028',
-  '\u2029': '\\u2029',
-};
-
-// Serialises a value for embedding in a script element without allowing tag breakout.
-function escapeForScript(value) {
-  return JSON.stringify(value).replace(/[<>/\u2028\u2029]/g, (char) => SCRIPT_ESCAPES[char]);
-}
+import { readRenderSnapshot } from './text-separators.js';
 
 /**
  * Renders one route in a fresh browser context and returns the serialised DOM plus
@@ -33,6 +20,7 @@ export async function renderRoute({
   config,
   screenshot = false,
   traceFile = null,
+  caches = null,
 }) {
   const context = await browser.newContext({
     viewport: config.viewport,
@@ -127,20 +115,21 @@ export async function renderRoute({
       }
     }
     await settlePage(page, config, tracker);
-    const empty = await isPageEmpty(page);
-    const statusCode = await page.evaluate(() => {
-      const marker = document.querySelector('meta[name="prerender-status-code"]');
-      if (!marker) return null;
-      const value = Number.parseInt(marker.getAttribute('content') ?? '', 10);
-      return Number.isFinite(value) ? value : null;
-    });
+    const { empty, statusCode } = await readPageState(page);
     const finalUrl = page.url();
 
     if (config.captureRuntimeStyles) await captureRuntimeStyles(page);
     if (config.captureFormState) await captureFormState(page);
     if (config.inlineCss === true || config.inlineCss === 'inline') {
-      const inlined = await inlineStylesheets({ page, minifyCssOptions: config.minifyCss });
+      const inlined = await inlineStylesheets({
+        page,
+        minifyCssOptions: config.minifyCss,
+        cache: caches?.inlineCss ?? null,
+      });
       inlineCssSkipped = inlined.skipped;
+      if (caches?.inlineCss) {
+        for (const sheet of inlined.fetched ?? []) caches.inlineCss.set(sheet.href, sheet.css);
+      }
     }
     await collector.settled();
     const stateScript = await injectCapturedState(page, collector.json, {
@@ -150,7 +139,7 @@ export async function renderRoute({
     if (metadataDefaults) await injectMetadataDefaults(page, metadataDefaults);
     if (config.freezeAnimations) await freezeAnimations(page);
     if (config.scrollToBottom) await scrollThroughPage(page, config);
-    const lcpUrl = await page.evaluate(() => window.__snappyLcp?.at(-1)?.url ?? null);
+    const { lcpUrl, hrefs } = await readRenderSnapshot(page);
     let lcpImage = null;
     if (lcpUrl) {
       try {
@@ -160,9 +149,7 @@ export async function renderRoute({
         // Ignore malformed performance entries.
       }
     }
-    await separateTextNodes(page);
-
-    const links = await collectLinks(page, config.base, origin);
+    const links = collectLinks(hrefs, config.base, origin);
 
     if (screenshot) {
       const buffer = await page.screenshot({
@@ -311,16 +298,21 @@ async function injectCapturedState(page, cache, { externalScripts = false, base 
  * executable script, so a strict script-src applies to nothing here.
  */
 async function injectMetadataDefaults(page, defaults) {
-  const payload = await page.evaluate((fallback) => {
+  await page.evaluate((fallback) => {
     document.querySelectorAll('script[data-snappy-meta]').forEach((script) => script.remove());
     const current = typeof window === 'undefined' ? null : window.__SNAPPY_META__;
     const recorded = typeof window === 'undefined' ? null : window.__snappyHeadOriginals;
     const merged = { ...(current ?? fallback) };
     if (recorded) merged.originals = recorded;
-    return Object.keys(merged).length > 0 ? merged : fallback;
-  }, defaults);
-  const element = escapeForScript(payload);
-  await page.evaluate((text) => {
+    const payload = Object.keys(merged).length > 0 ? merged : fallback;
+    const escapes = {
+      '<': '\\u003C',
+      '>': '\\u003E',
+      '/': '\\u002F',
+      '\u2028': '\\u2028',
+      '\u2029': '\\u2029',
+    };
+    const text = JSON.stringify(payload).replace(/[<>/\u2028\u2029]/g, (char) => escapes[char]);
     const script = document.createElement('script');
     script.setAttribute('type', 'application/json');
     script.setAttribute('data-snappy-meta', '');
@@ -328,7 +320,7 @@ async function injectMetadataDefaults(page, defaults) {
     const first = document.scripts[0];
     if (first?.parentNode) first.parentNode.insertBefore(script, first);
     else document.head.appendChild(script);
-  }, element);
+  }, defaults);
 }
 
 /**
@@ -336,8 +328,7 @@ async function injectMetadataDefaults(page, defaults) {
  * app-relative routes for the crawler. Off-origin links are ignored so external
  * URLs can never be mistaken for routes and written into the output directory.
  */
-async function collectLinks(page, base, origin) {
-  const hrefs = await page.$$eval('a[href]', (anchors) => anchors.map((anchor) => anchor.href));
+function collectLinks(hrefs, base, origin) {
   const routes = [];
   for (const href of hrefs) {
     let parsed;
@@ -350,7 +341,7 @@ async function collectLinks(page, base, origin) {
     const route = toAppRoute(href, base);
     if (route) routes.push(route);
   }
-  return routes;
+  return [...new Set(routes)];
 }
 
 // Parses an HTTP URL, returning null for data, blob and other non-network URLs.

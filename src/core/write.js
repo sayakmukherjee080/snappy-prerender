@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
+import { parse, serialize } from 'parse5';
 import { findBuildOriginUrls } from './build-origin.js';
-import { applyCspHashes } from './csp.js';
+import { applyCspHashesToDocument } from './csp.js';
 import { inlineCriticalCss } from './inline-css.js';
 import { minifyHtml } from './minify.js';
 import { normaliseHtml } from './normalize.js';
@@ -12,11 +13,14 @@ import {
   writeFileIfChanged,
   writeRouteHtml,
 } from './output.js';
-import { collectPageMeta } from './page-meta.js';
-import { collectScriptSources, injectPreloadLinks } from './preload-links.js';
-import { collectPageResources } from './preload-manifest.js';
+import { collectPageMetaFromDocument } from './page-meta.js';
+import { collectScriptSourcesFromDocument, injectPreloadLinksInto } from './preload-links.js';
+import { collectPageResourcesFromDocument } from './preload-manifest.js';
 import { resolveRouteConfig } from './route-config.js';
 import { normaliseRoute, toPublicPath } from './routes.js';
+import { mapLimit } from './scheduler.js';
+
+const WRITE_CONCURRENCY = 4;
 
 /**
  * Writes every rendered route and returns the routes that can be verified. A write
@@ -30,6 +34,7 @@ export async function writeAllRoutes({
   report,
   state,
   manifestEntries,
+  caches = null,
 }) {
   const sorted = [...report.routes].sort();
   const conflicted = reportOutputCollisions({ routes: sorted, config, log, report });
@@ -38,57 +43,81 @@ export async function writeAllRoutes({
 
   const verifiable = [];
   const hashes = new Map();
-  for (const route of sorted) {
-    if (conflicted.has(route)) continue;
-    try {
-      const routeConfig = resolveRouteConfig(config, route);
-      const result = rendered.get(route);
-      const { file, resources } = await writeRouteOutput({
-        route,
-        result,
-        outputDir,
-        config: routeConfig,
-        log,
-        state,
-        report,
-      });
-      report.files.push(file);
-      report.routeDetails.push({
-        route,
-        order: result.order ?? null,
-        file: file.file,
-        status: file.status,
-        bytes: file.bytes,
-        depth: result.depth ?? null,
-        attempts: result.attempts ?? 1,
-        httpStatus: result.httpStatus ?? null,
-        finalUrl: result.finalUrl ?? null,
-        empty: result.empty === true,
-        notFound: file.notFound === true,
-        noindex: file.noindex === true,
-        meta: file.meta ?? null,
-        images: file.images ?? [],
-        alternates: file.alternates ?? [],
-        mode: null,
-        framework: null,
-        hydrationErrors: [],
-        pageErrors: result.pageErrors ?? [],
-        consoleErrors: result.consoleErrors ?? [],
-        failedRequests: result.failedRequests ?? [],
-        firstMismatch: null,
-        buildOriginUrls: file.buildOriginUrls ?? [],
-      });
-      if (resources) manifestEntries.push({ route, ...resources });
-      if (file.hash) {
-        const group = hashes.get(file.hash) ?? [];
-        group.push(route);
-        hashes.set(file.hash, group);
+  const { results } = await mapLimit(
+    sorted,
+    Math.min(WRITE_CONCURRENCY, config.concurrency),
+    async (route) => {
+      if (conflicted.has(route)) return null;
+      const routeReport = { errors: [], duplicateTitles: [], cspSkipped: [] };
+      try {
+        const routeConfig = resolveRouteConfig(config, route);
+        const result = rendered.get(route);
+        const { file, resources } = await writeRouteOutput({
+          route,
+          result,
+          outputDir,
+          config: routeConfig,
+          log,
+          state,
+          report: routeReport,
+          caches,
+        });
+        return {
+          route,
+          result,
+          file,
+          resources,
+          hash: file.hash,
+          report: routeReport,
+        };
+      } catch (error) {
+        routeReport.errors.push({ route, message: `write failed: ${error.message}` });
+        log.error(`  write failed for ${route}: ${error.message}`);
+        return { route, report: routeReport };
       }
-      verifiable.push(route);
-    } catch (error) {
-      report.errors.push({ route, message: `write failed: ${error.message}` });
-      log.error(`  write failed for ${route}: ${error.message}`);
+    },
+  );
+
+  for (const entry of results) {
+    if (!entry) continue;
+    for (const error of entry.report.errors) report.errors.push(error);
+    for (const route of entry.report.duplicateTitles) report.duplicateTitles.push(route);
+    for (const route of entry.report.cspSkipped) report.cspSkipped.push(route);
+    if (!entry.file) continue;
+    const { route, result, file, resources } = entry;
+    report.files.push(file);
+    report.routeDetails.push({
+      route,
+      order: result.order ?? null,
+      file: file.file,
+      status: file.status,
+      bytes: file.bytes,
+      depth: result.depth ?? null,
+      attempts: result.attempts ?? 1,
+      httpStatus: result.httpStatus ?? null,
+      finalUrl: result.finalUrl ?? null,
+      empty: result.empty === true,
+      notFound: file.notFound === true,
+      noindex: file.noindex === true,
+      meta: file.meta ?? null,
+      images: file.images ?? [],
+      alternates: file.alternates ?? [],
+      mode: null,
+      framework: null,
+      hydrationErrors: [],
+      pageErrors: result.pageErrors ?? [],
+      consoleErrors: result.consoleErrors ?? [],
+      failedRequests: result.failedRequests ?? [],
+      firstMismatch: null,
+      buildOriginUrls: file.buildOriginUrls ?? [],
+    });
+    if (resources) manifestEntries.push({ route, ...resources });
+    if (entry.hash) {
+      const group = hashes.get(entry.hash) ?? [];
+      group.push(route);
+      hashes.set(entry.hash, group);
     }
+    verifiable.push(route);
   }
   reportDuplicatePages({ groups: [...hashes.values()], config, log, report });
   return verifiable;
@@ -176,7 +205,7 @@ function reportOutputCollisions({ routes, config, log, report }) {
  * Applies the configured post-processing to one rendered route and writes it: DOM
  * cleanups and link hints, critical CSS extraction, then optional minification.
  */
-async function writeRouteOutput({ route, result, outputDir, config, log, state, report }) {
+async function writeRouteOutput({ route, result, outputDir, config, log, state, report, caches }) {
   if (result.screenshot) {
     const file = routeToScreenshotFile(route, config);
     if (config.dryRun) {
@@ -198,23 +227,57 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
     return { file: { route, ...written }, resources: null };
   }
 
-  const { html, stats } = normaliseHtml(result.html, {
-    removeStyleTags: config.removeStyleTags,
-    removeScriptTags: config.removeScriptTags,
-    asyncScriptTags: config.asyncScriptTags,
-    removeBlobs: config.removeBlobs,
-    removeAttributes: config.removeAttributes,
-    stripBuildOriginMetadata: config.stripBuildOriginMetadata,
-    noindex:
-      config.notFoundRoute !== null &&
-      normaliseRoute(route) === normaliseRoute(config.notFoundRoute),
-    preconnectOrigins: config.preconnectThirdParty
-      ? [...result.collector.thirdPartyOrigins].sort()
-      : [],
-    preloadImages: config.preloadImages
-      ? [...result.collector.images].sort().map((image) => toPublicPath(image, config.base))
-      : [],
-  });
+  const needsString =
+    config.inlineCss === 'critical' || Boolean(config.minifyHtml) || Boolean(config.transformHtml);
+  const normalised = normaliseHtml(
+    result.html,
+    {
+      removeStyleTags: config.removeStyleTags,
+      removeScriptTags: config.removeScriptTags,
+      asyncScriptTags: config.asyncScriptTags,
+      removeBlobs: config.removeBlobs,
+      removeAttributes: config.removeAttributes,
+      stripBuildOriginMetadata: config.stripBuildOriginMetadata,
+      noindex:
+        config.notFoundRoute !== null &&
+        normaliseRoute(route) === normaliseRoute(config.notFoundRoute),
+      preconnectOrigins: config.preconnectThirdParty
+        ? [...result.collector.thirdPartyOrigins].sort()
+        : [],
+      preloadImages: config.preloadImages
+        ? [...result.collector.images].sort().map((image) => toPublicPath(image, config.base))
+        : [],
+    },
+    { serialize: needsString },
+  );
+  const { stats } = normalised;
+  let document = normalised.document;
+  let preTransformScripts = new Set();
+  let transformedHtml = null;
+  if (needsString) {
+    let output = normalised.html;
+    if (config.inlineCss === 'critical') {
+      output = await applyCriticalCss({ output, outputDir, config, log, state, caches });
+    }
+    if (config.minifyHtml) {
+      output = await minifyHtml(output, config.minifyHtml, config.minifyCss);
+    }
+    if (config.transformHtml) {
+      preTransformScripts = collectScriptSourcesFromDocument(document);
+      const transformed = await config.transformHtml(output, {
+        route,
+        file: routeToFile(route, config),
+        stats,
+        config,
+      });
+      if (transformed !== null && transformed !== undefined && typeof transformed !== 'string') {
+        throw new TypeError('transformHtml must return a string, null or undefined');
+      }
+      output = transformed ?? output;
+    }
+    transformedHtml = output;
+    document = parse(output);
+  }
   if (
     stats.removedElements > 0 ||
     stats.removedAttributes > 0 ||
@@ -230,26 +293,7 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
     log.debug(`  inline css: left ${result.inlineCssSkipped.length} stylesheet(s) as links`);
   }
 
-  let output = html;
-  if (config.inlineCss === 'critical') {
-    output = await applyCriticalCss({ output, outputDir, config, log, state });
-  }
-  if (config.minifyHtml) {
-    output = await minifyHtml(output, config.minifyHtml, config.minifyCss);
-  }
-  const preTransformScripts = config.transformHtml ? collectScriptSources(output) : new Set();
-  if (config.transformHtml) {
-    const transformed = await config.transformHtml(output, {
-      route,
-      file: routeToFile(route, config),
-      stats,
-      config,
-    });
-    if (transformed !== null && transformed !== undefined && typeof transformed !== 'string') {
-      throw new TypeError('transformHtml must return a string, null or undefined');
-    }
-    output = transformed ?? output;
-  }
+  let preloadAdded = 0;
   if (config.preloadLinks) {
     const basePrefix = config.base === '/' ? '' : config.base.slice(0, -1);
     const skipScripts = new Set(
@@ -262,7 +306,7 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
         return toPublicPath(appRelative, config.base);
       }),
     );
-    output = injectPreloadLinks(output, {
+    preloadAdded = injectPreloadLinksInto(document, {
       scripts: config.removeScriptTags ? [] : [...result.collector.scripts],
       fonts: result.collector.fonts,
       lcpImage: result.lcpImage,
@@ -271,19 +315,24 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
       skipScripts,
     });
   }
+  let cspChanged = false;
   if (config.csp === 'hash') {
-    const policy = applyCspHashes(output);
+    const policy = applyCspHashesToDocument(document);
+    cspChanged = !policy.existingPolicy;
     if (policy.existingPolicy) {
       log.warn(`  ${route}: kept the existing CSP meta and injected no hashes`);
       report.cspSkipped.push(route);
     } else {
-      output = policy.html;
       log.debug(
         `  csp ${route}: hashed ${policy.hashedScripts} script(s) and ${policy.hashedStyles} style(s)`,
       );
     }
   }
-  const meta = collectPageMeta(output);
+  const meta = collectPageMetaFromDocument(document);
+  const output =
+    transformedHtml !== null && preloadAdded === 0 && !cspChanged
+      ? transformedHtml
+      : serialize(document);
   warnOnBuildOriginMetadata({
     origins: stats.metadataOrigins,
     removed: stats.removedMetadata,
@@ -302,7 +351,7 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
   }
   const file = await writeRouteHtml({ dir: outputDir, route, html: output, config });
   const resources = config.preloadManifest
-    ? collectPageResources(output, { base: config.base, route })
+    ? collectPageResourcesFromDocument(document, { base: config.base, route })
     : null;
   return {
     file: {
@@ -328,13 +377,14 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
  * Inlines critical CSS, or explains once why it cannot: the strategy reads stylesheets from
  * the output directory, which a command server does not have to serve.
  */
-async function applyCriticalCss({ output, outputDir, config, log, state }) {
+async function applyCriticalCss({ output, outputDir, config, log, state, caches }) {
   if (!config.serveCmd) {
     return inlineCriticalCss({
       html: output,
       outputDir,
       base: config.base,
       preload: config.criticalCssPreload,
+      cache: caches?.criticalCss ?? null,
     });
   }
   if (!state.warnedCriticalCssSkipped) {

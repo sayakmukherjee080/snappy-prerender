@@ -9,6 +9,7 @@ is skipped in `--dry-run`.
   "version": 1,
   "generatedAt": "2026-10-28T00:00:00.000Z",
   "durationMs": 0,
+  "timings": { "render": 0, "write": 0, "artifacts": 0, "verify": 0, "audit": 0 },
   "ok": true,
   "summary": { "routes": 0, "files": 0, "errors": 0, "warnings": 0 },
   "verification": {

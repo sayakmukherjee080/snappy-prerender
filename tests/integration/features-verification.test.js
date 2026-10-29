@@ -114,6 +114,27 @@ describe('prerender integration: framework detection and mismatch locator', () =
     assert.equal(entry.consoleErrors.length, 1);
   });
 
+  it('reuses verification contexts when requested', async () => {
+    const staticDir = await makeStaticSite({
+      'index.html':
+        '<!doctype html><html><head><title>Home</title></head><body><h1>Home</h1><a href="/about">About</a></body></html>',
+      'about/index.html':
+        '<!doctype html><html><head><title>About</title></head><body><h1>About</h1></body></html>',
+    });
+    const report = await prerender({
+      sourceDir: staticDir,
+      include: ['/', '/about'],
+      verify: true,
+      reuseVerificationContext: true,
+      audit: false,
+      logLevel: 'silent',
+      captureFormState: false,
+      captureRuntimeStyles: false,
+    });
+    assert.equal(report.verification.routes.length, 2);
+    assert.equal(report.verification.errors.length, 0);
+  });
+
   it('accepts HTTP 404 for the configured not-found route during verification', async () => {
     const outputDir = await makeStaticSite({
       '404.html':

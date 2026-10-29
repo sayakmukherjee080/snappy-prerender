@@ -7,8 +7,22 @@ import { toPublicPath } from './routes.js';
  * preload-manifest headers, so this is the page-level equivalent for runtime chunks,
  * fonts and the LCP image.
  */
-export function injectPreloadLinks(
-  html,
+export function injectPreloadLinks(html, options = {}) {
+  if (options.scripts?.length === 0 && options.fonts?.size === 0 && !options.lcpImage) {
+    return html;
+  }
+  const document = parse(html);
+  const added = injectPreloadLinksInto(document, options);
+  return added > 0 ? serialize(document) : html;
+}
+
+/**
+ * Injects preload hints into a parsed document and reports how many were added.
+ * Keeping this separate lets the write pipeline parse the page once for all final
+ * post-processing steps.
+ */
+export function injectPreloadLinksInto(
+  document,
   {
     scripts = [],
     fonts = new Map(),
@@ -18,9 +32,8 @@ export function injectPreloadLinks(
     skipScripts = new Set(),
   } = {},
 ) {
-  const document = parse(html);
   const head = findHead(document);
-  if (!head) return html;
+  if (!head) return 0;
   const existingScripts = new Set();
   const hints = new Set();
 
@@ -80,13 +93,11 @@ export function injectPreloadLinks(
       href,
     );
   }
-  return added > 0 ? serialize(document) : html;
+  return added;
 }
 
-// Collects script src values from a document, used to tell a script a transform
-// removed from a chunk the app loads at runtime.
-export function collectScriptSources(html) {
-  const document = parse(html);
+// Collects script src values from an already parsed document.
+export function collectScriptSourcesFromDocument(document) {
   const sources = new Set();
   const walk = (node) => {
     if (node.tagName === 'script') {

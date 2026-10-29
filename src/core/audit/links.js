@@ -2,6 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { routeToFile } from '../output.js';
 import { matchesPattern, normaliseRoute } from '../routes.js';
+import { mapLimit } from '../scheduler.js';
+
+const LINK_CHECK_CONCURRENCY = 16;
 
 /**
  * Audits every internal link the rendered pages emitted and warns about indexable pages
@@ -13,6 +16,7 @@ export async function auditLinks({ report, config, outputDir, add }) {
   const cache = new Map();
   const seenPairs = new Set();
   let checkedLinks = 0;
+  const pending = [];
 
   const exists = async (target) => {
     if (cache.has(target)) return cache.get(target);
@@ -35,7 +39,14 @@ export async function auditLinks({ report, config, outputDir, add }) {
     const file = routeToFile(route, config);
     if (files.has(file)) continue;
     const asset = route.startsWith('/') ? route.slice(1) : route;
-    if (asset && (await exists(asset))) continue;
+    pending.push({ link, asset });
+  }
+
+  const targets = [...new Set(pending.map((entry) => entry.asset).filter(Boolean))];
+  const { results } = await mapLimit(targets, LINK_CHECK_CONCURRENCY, exists);
+  const existsSet = new Set(targets.filter((_target, index) => results[index] === true));
+  for (const { link, asset } of pending) {
+    if (asset && existsSet.has(asset)) continue;
     add('error', 'broken-internal-link', `${link.from} links to missing ${link.to}`, {
       from: link.from,
       to: link.to,

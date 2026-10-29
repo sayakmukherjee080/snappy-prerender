@@ -12,7 +12,7 @@ const MAX_METADATA_ORIGINS = 3;
  * Optionally: removes style or script tags, marks scripts async, drops dead blob
  * stylesheets, and adds preconnect and image preload hints.
  */
-export function normaliseHtml(html, options = {}) {
+export function normaliseHtml(html, options = {}, { serialize: serializeOutput = true } = {}) {
   const document = parse(html);
   const stats = {
     removedElements: 0,
@@ -21,7 +21,6 @@ export function normaliseHtml(html, options = {}) {
     dedupedStyles: 0,
     hints: 0,
     textSeparators: 0,
-    titleElements: 0,
     noindex: false,
     metadataOrigins: [],
   };
@@ -34,7 +33,11 @@ export function normaliseHtml(html, options = {}) {
   if (preconnectOrigins.length > 0 || preloadImages.length > 0) {
     stats.hints = appendHints(document, { preconnectOrigins, preloadImages });
   }
-  return { html: serialize(document), stats };
+  return {
+    html: serializeOutput ? serialize(document) : undefined,
+    stats,
+    document,
+  };
 }
 
 // Rebuilds a node's child list, dropping removed nodes, separating adjacent text nodes
@@ -50,7 +53,6 @@ function cleanChildren(parent, stats, seenStyles, inHead, options) {
       stripAttributes(child, options.removeAttributes, stats);
     }
     if (childInHead && child.tagName === 'style' && dedupeStyle(child, stats, seenStyles)) continue;
-    if (childInHead && child.tagName === 'title') stats.titleElements += 1;
     if (childInHead) collectMetadataOrigins(child, stats);
     if (childInHead) collectRobots(child, stats);
     if (options.asyncScriptTags && child.tagName === 'script') markScriptAsync(child);

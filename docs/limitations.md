@@ -54,5 +54,7 @@
 - **CSP `hash` mode cannot cover inline event handlers or `style=""` attributes.** Move
   those styles into a `<style>` element or a stylesheet; the audit warns when attributes are
   present.
+- **`reuseVerificationContext` shares browser storage between routes.** Use it only for
+  stateless apps; authenticated routes can see cookies or storage from another route.
 - **Failure traces can contain request data.** `traceOnError` is opt-in and writes a
   Playwright archive under `snappy-traces/` in the output directory.
