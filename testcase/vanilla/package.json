@@ -1,0 +1,19 @@
+{
+  "name": "aether-vanilla",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Aether Compute site reimplemented in vanilla JavaScript.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "vite": "7.3.7"
+  }
+}

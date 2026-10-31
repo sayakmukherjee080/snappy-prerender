@@ -1,0 +1,10 @@
+{
+  "name": "aether-shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-agnostic content, rendering, styles, and runtime shared by the Aether Compute testcase implementations.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
