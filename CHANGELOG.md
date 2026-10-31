@@ -6,6 +6,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [2.9.0] - 2026-10-31
+
+### Added
+
+- Svelte 5 framework detection from the `window.__svelte` runtime global and the
+  `<!--[-->` hydration anchor, in addition to the existing Svelte 3/4 markers.
+
+### Changed
+
+- Hydration verification now records the first-element chain beneath the app container,
+  not just the container's first child. An app that keeps its outer wrapper but replaces
+  the prerendered page inside it is reported as `re-rendered` instead of `hydrated`.
+- The metadata audit no longer warns about a missing canonical on the configured
+  not-found page, because a 404 document is intentionally not canonicalised.
+
+### Fixed
+
+- Pre-rendered host wrappers no longer report a false `hydrated` result when they discard
+  the page content while preserving the container element.
+
 ## [2.8.1] - 2026-10-31
 
 ### Changed
