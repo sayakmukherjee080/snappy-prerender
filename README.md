@@ -13,6 +13,8 @@ Version 2.8 adds deterministic clock and randomness controls, locale and hreflan
 [![node](https://img.shields.io/node/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![license](https://img.shields.io/npm/l/snappy-prerender.svg)](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/LICENSE)
 
+<a href="https://www.producthunt.com/products/snappy-prerender?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-snappy-prerender" target="_blank" rel="noopener noreferrer"><img alt="snappy-prerender - Turn your existing SPA into static HTML | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1297695&amp;theme=neutral&amp;t=1793431121819"></a>
+
 Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). Install with `npm install --save-dev snappy-prerender`. Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 - No SSR entry, framework migration or app changes. If the app builds to a directory, it can be prerendered.
