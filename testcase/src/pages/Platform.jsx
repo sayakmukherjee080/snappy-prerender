@@ -7,7 +7,6 @@ import {
   SectionHead,
 } from '../components/index.js';
 import { SECTION_IDS } from '../content/site.js';
-import { usePageMeta } from '../hooks/usePageMeta.js';
 
 const NODE_SPECS = [
   {
@@ -132,12 +131,6 @@ const PLATFORM_FAQS = [
  * Renders the hardware, inference path, API, reliability, security, and deployment details.
  */
 export default function Platform() {
-  usePageMeta({
-    title: 'Platform',
-    description:
-      'Inside an Aether orbital node: radiation-hardened accelerators, 42 kW of solar, an OpenAI-compatible inference API, and seamless orbital handoffs.',
-  });
-
   return (
     <>
       <PageHero

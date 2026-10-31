@@ -1,6 +1,12 @@
+<p align="center">
+  <img src="assets/snappy-logo.png" width="150" alt="snappy-prerender logo">
+</p>
+
 # snappy-prerender
 
 Render a single-page app to static HTML at build time. Point the tool at the build output; it renders each route in Chrome, writes one HTML file per route, and leaves the app unchanged. The output includes page content, titles, meta tags, canonical links and Open Graph tags.
+
+Version 2.8 adds deterministic clock and randomness controls, locale and hreflang generation, cookie/localStorage SEO locale seeding, and a client-side head layer that replaces React Helmet or React Helmet Async for prerendered apps.
 
 [![npm](https://img.shields.io/npm/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![npm downloads](https://img.shields.io/npm/dm/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
@@ -146,27 +152,77 @@ snappy({
     siteUrl: 'https://example.com',
     siteName: 'Example',
     titleTemplate: '%s | Example',
+    defaultTitle: 'Example',
     defaultImage: '/share.png',
     trailingSlash: 'never', // 'preserve' | 'always' | 'never'
   },
 });
 ```
 
+### Replacing React Helmet or React Helmet Async
+
+For a client-rendered app, `Head` covers the tag and attribute surface React Helmet and React Helmet Async expose on the client. An app does not need either package:
+
+```jsx
+<Head
+  title="Awards"
+  titleAttributes={{ itemProp: 'name' }}
+  htmlAttributes={{ className: 'theme-dark', 'data-theme': 'dark' }}
+  bodyAttributes={{ className: 'root', 'data-scroll': 'locked' }}
+  images={['/share/awards.png', '/share/awards-square.png']}
+  alternateLocales={['en_GB', 'fr_FR']}
+  tags={[
+    { tag: 'base', attrs: { href: '/' } },
+    { tag: 'script', attrs: { src: '/analytics.js', async: true } },
+    { tag: 'script', attrs: { type: 'application/json' }, text: '{"feature":true}' },
+    { tag: 'style', attrs: { media: 'screen' }, text: 'body { color: #111 }' },
+    { tag: 'noscript', html: '<img src="/pixel.png" alt="">' },
+  ]}
+  onChangeClientState={(state, added, removed) => {}}
+/>
+```
+
+`Head` does not accept JSX children; use `tags`, `extra` or the props below for every value.
+
+`tags` accepts `script`, `style`, `noscript` and `base`:
+
+- `attrs` takes arbitrary attributes. `true` emits an empty attribute; `false`, `null` and `undefined` omit it. `className`, `htmlFor`, `httpEquiv` and the other React spellings map to their DOM names.
+- `text` sets `textContent` for `script`, `style` and `noscript`. A closing-tag sequence inside script or style text is escaped, so the value cannot terminate its own element.
+- `html` sets trusted `innerHTML` on `noscript` only. Never pass untrusted input.
+- `key` gives a tag an explicit identity. Without one, external scripts key by `src` and inline tags key per mounted `Head`, so several scripts or styles survive together.
+- `base` is a singleton; the last mounted `Head` that sets one wins.
+
+`htmlAttributes`, `bodyAttributes` and `titleAttributes` write arbitrary attributes on the document element, body and generated title. Values the document already had are restored when no Head wants them, including after client-side navigation and after a prerendered page hydrates. `lang` and `dir` remain shortcuts; an entry in `htmlAttributes` wins when both are supplied.
+
+`defaultTitle` fills the document title only when no mounted Head supplied a real `title`. It is not run through `titleTemplate`. `images` emits one `og:image` per URL and uses the first for `twitter:image`. `alternateLocales` emits one `og:locale:alternate` per value. Both keep every value through the merge.
+
+`extra` stays the escape hatch for additional `meta` and `link` tags. Set `duplicates: true` on repeated same-name metas (for example `article:tag`) so each value keeps its own tag; an explicit `key` still works.
+
+`onChangeClientState(state, added, removed)` runs after a real DOM change, not on every render. `state` groups the merged entries into `title`, `meta`, `link`, `script`, `style`, `noscript`, `base`, `htmlAttributes`, `bodyAttributes` and `titleAttributes`. `added` and `removed` are entry descriptors with `kind`, `key` and their value.
+
+React 19 hoists native `<title>`, `<meta>` and `<link>` elements. `Head` adopts an existing tag with the same identity and updates it instead of adding a second one. Use one owner per tag: either React 19 native metadata or `Head`, not both for the same tag. The run still warns when a page ships more than one `<title>`.
+
+The `snappy-prerender/head` entry is plain JavaScript with JSDoc types for `HeadProps`, `HeadTag`, `HeadAttributes`, `HeadChange` and the imperative API. It ships no TypeScript files.
+
+This is a client-side head manager. It deliberately has no `HelmetProvider`, `helmetContext`, `HelmetData`, `renderStatic()`, streaming or server rendering API; the prerenderer renders the real app in a browser and captures the live head.
+
 What it emits, per route: `title` (with the template applied unless the title already carries its suffix), `meta[name=description]`, `meta[name=robots]`, `link[rel=canonical]`, `og:title`, `og:description`, `og:type`, `og:url`, `og:image`, `og:site_name`, `og:locale`, and `twitter:card` / `twitter:title` / `twitter:description` / `twitter:image`. Switch a family off with `openGraph: false` or `twitter: false`, and skip the canonical with `canonical: false`.
 
 Rules:
 - `metadata` values are defaults; a `Head` prop wins. When several Heads render, the last one wins per tag.
-- Tags are matched by the attribute a crawler reads, so existing tags are updated instead of duplicated. Duplicate identities are reduced to one.
+- Tags are matched by the attribute a crawler reads, so existing tags are updated instead of duplicated. Tags that may legitimately repeat keep a value-specific identity, so multiple images, alternate locales, scripts and styles survive.
+- `defaultTitle` is used only when no mounted Head supplied a title, and it is never run through `titleTemplate`.
 - Generated tags carry `data-snappy-head-created` beside `data-snappy-head`, so a later page load can tell them from tags the app wrote.
-- When no Head wants a tag, a generated one is removed and an app-written one is restored to its previous value. That original is recorded in the page during prerendering.
+- When no Head wants a tag, a generated one is removed and an app-written one is restored to its previous value. That original is recorded in the page during prerendering, together with the original html, body and title attributes.
 - The component renders nothing, so it does not affect hydration of page content.
 - The title template is skipped when the title already ends with its fixed part, or is the site name, so a hand-built title is not suffixed twice.
 - `structuredData` emits `<script type="application/ld+json">` for one object or an array, keyed per mounted `Head`. Values are escaped; add `@context` when needed.
-- `lang` and `dir` are written on `<html>`. Later Heads win, and the original values return when no Head wants them.
+- `lang` and `dir` are written on `<html>`. Later Heads win, and the original values return when no Head wants them. `htmlAttributes` covers every other document attribute, and `bodyAttributes` / `titleAttributes` do the same for body and title.
+- `alternateLocales` emits `og:locale:alternate` for each listed locale.
 - `alternates` emits `<link rel="alternate" hreflang="...">` with absolute URLs using the same `siteUrl`/`base`/`trailingSlash` policy as canonical links. The same alternates feed sitemap `xhtml:link` entries.
 - `og:url`, `og:image` and canonical need absolute URLs. `metadata.siteUrl` must be an origin; put a sub-path deployment in `base`. Without `siteUrl`, build-server URLs are removed by default and the run warns. `trailingSlash` applies to page URLs only. Canonical, social and sitemap URLs share the page-path policy: directory output keeps its slash, flat output stays extensionless, and `trailingSlash` wins.
 - `metadata.base` overrides the base path for absolute URLs and defaults to `base`.
-- On React 19, React also hoists `<title>` and `<meta>` from JSX and leaves an existing template title alone, which can produce two titles. Use one metadata system; the run warns when a page has more than one `<title>`.
+- On React 19, React also hoists `<title>`, `<meta>` and `<link>` from JSX. `Head` adopts a matching hoisted `<meta>` or `<link>` and updates it in place. A hoisted `<title>` that already has the Head text is left untouched so React can remove it on navigation; older template titles are removed so the written page has one document title. `titleAttributes` apply only when `Head` owns the title. Use one metadata system; the run warns when a page still ships more than one `<title>`.
 - Every metadata value has a CLI flag: `--metadata-site-url`, `--metadata-site-name`, `--metadata-title-template`, `--metadata-default-image`, `--metadata-trailing-slash`.
 - `react` is an optional peer dependency for this entry point. Non-React code can call `setHead(id, props)` and `clearHead(id)`.
 
@@ -184,7 +240,7 @@ Findings are returned in `report.audit` and logged. They do not fail the run unl
 
 Routes can come from `include` and crawling, from a text/JSON `routesFile`, or from a local or remote sitemap via `routesFromSitemap`. Relative source paths resolve against the config file. Root-relative sitemap locations have `base` stripped, and a remote sitemap's off-origin locations are ignored. If either source is supplied and `include` is not set, the root is not seeded implicitly. With `maxRoutes` or `routePriority`, crawling runs in deterministic breadth-first waves sorted by priority then path. `truncated.droppedRoutes` lists routes that did not fit.
 
-`routeOverrides` applies `timeout`, `waitFor`, `readySelector`, `readyFlag`, `crawl` and `storageState` to matching routes; later entries win per key. `transformHtml` runs once per route after minification and before preload/CSP injection. It may be async and must return a string or nothing.
+`routeOverrides` applies `timeout`, `waitFor`, `readySelector`, `readyFlag`, `crawl`, `storageState` and `hydration` to matching routes; later entries win per key. `transformHtml` runs once per route after minification and before preload/CSP injection. It may be async and must return a string or nothing.
 
 `preloadLinks` injects `<link rel="modulepreload">` for runtime chunks, font preloads with their response content type, and the LCP image. It complements `preloadManifest`: the manifest is for hosts that send Early Hints, while the injected links work on any static host. Script hints are skipped when `removeScriptTags` is on.
 
@@ -216,6 +272,103 @@ A verification navigation that returns HTTP 4xx/5xx, or a container with no cont
 **React 16 and 17.** Hydration and boot modes are judged the same way, and their dev mismatch warnings are recognised. Their production builds report nothing for a mismatch, so the boot mode (`hydrated` versus `re-rendered`) is the signal.
 
 **Rebuilds.** `verifyChangedOnly: true` skips verification for routes whose HTML file did not change. The report shows how many routes were skipped.
+
+## Deterministic time
+
+Copyright lines and dated content often differ between prerendering and the verification reload. Fix the clock for both passes:
+
+```js
+snappy({
+  freezeTime: true,       // SOURCE_DATE_EPOCH, or the run start
+  timezone: 'UTC',
+  randomSeed: 42,         // optional; deterministic Math.random for demo content
+});
+```
+
+`freezeTime` also accepts an ISO string or epoch milliseconds, which is the reproducible-build option:
+
+```js
+freezeTime: '2026-05-04T12:00:00Z'
+```
+
+Playwright's fixed clock is installed before navigation and keeps real timers running, so settling and scheduled work are unaffected. The page can read `window.__SNAPPY_NOW__` (epoch ms) or `window.__SNAPPY_NOW_ISO__`. `SOURCE_DATE_EPOCH` is honoured when `freezeTime` is `true`. A fixed clock is a build and verification control only: production still uses real time. For a live clock, render it client-only or use a hydration allow-list. `performance.now()` is not frozen because schedulers rely on it.
+
+## Hydration policies
+
+If a route is intentionally live or random, allow its re-render explicitly instead of suppressing verification globally:
+
+```js
+snappy({
+  hydration: {
+    allowRerender: ['/status', '/live/*'],
+    skip: ['/admin/*'],
+  },
+  routeOverrides: [
+    { match: '/live/private', hydration: 'strict' },
+  ],
+});
+```
+
+`allow-rerender` keeps the mode in the report but moves its hydration errors to `ignoredHydrationErrors` and does not fail the run. `skip` omits the route from verification and records it in `verification.skippedRoutes`. A matching `routeOverrides[].hydration` wins over the global lists; `skip` wins if both global lists match. The CLI flags are `--allow-rerender` and `--skip-hydration`.
+
+## Locales and hreflang
+
+`locales` adds config-driven language metadata. Existing manual `Head` props still win; generated tags only fill missing values.
+
+```js
+snappy({
+  locales: {
+    mode: 'path',
+    default: 'en',
+    xDefault: 'en',
+    hreflang: true,
+    list: [
+      { code: 'en', prefix: '', htmlLang: 'en', ogLocale: 'en_US' },
+      {
+        code: 'fr',
+        prefix: '/fr',
+        htmlLang: 'fr',
+        ogLocale: 'fr_FR',
+        routes: { '/about': '/a-propos' },
+      },
+    ],
+  },
+});
+```
+
+In `path` mode, the default locale is crawled once and every locale variant is rendered from the same base routes. `routes` maps translated slugs; a value is the path without the locale prefix. In `single` mode, `active` selects the locale rendered in this build and `list[].url` supplies the other deployments for hreflang. A locale entry can carry `locale` (Playwright/navigator), `timezone`, `storageState`, `cookies` and `localStorage`.
+
+The package sets `<html lang>`/`dir` when missing, adds canonical URLs, `og:locale`, `og:locale:alternate`, self/alternate/`x-default` hreflang links, and feeds the same alternates into the sitemap. `Head` also accepts `alternateLocales={['en_US', 'de_DE']}` for app-managed Open Graph tags. The audit checks invalid and duplicate hreflang codes, missing self links, missing `x-default`, reciprocal links inside the same build, and an `<html lang>` that disagrees with the active locale.
+
+Path mode requires one public origin and an app that routes the prefix or uses the translated `routes` map. Hreflang needs distinct crawlable URLs; a cookie-only locale does not create them. Use single mode for separate locale domains.
+
+## Cookie/localStorage SEO locale
+
+For an app whose locale lives in a cookie or `localStorage`, `seoLocale` selects the SEO language before the app boots:
+
+```js
+snappy({
+  seoLocale: {
+    code: 'fr',
+    source: 'both',          // 'localStorage' | 'cookie' | 'both'
+    localStorageKey: 'locale',
+    cookie: { name: 'locale', path: '/', sameSite: 'Lax', secure: false },
+    seedRender: true,
+    seedVerification: true,
+    inject: true,
+    overwrite: true,
+    forceHtmlLang: true,
+    navigator: false,
+    routes: ['/*'],
+  },
+});
+```
+
+`seedRender` and `seedVerification` put the value into the prerender and verification browsers. `inject` writes a small bootstrap before the app bundle so real visitors get the same locale the static HTML was rendered in. `overwrite: false` only sets the value when missing, preserving a visitor's existing choice. `forceHtmlLang` overrides an app-owned `<html lang>`; `navigator` also emulates `navigator.language`/`Accept-Language`. In path mode the value comes from each locale's code; in single mode it comes from `locales.active` or `seoLocale.code`.
+
+Under `csp: 'hash'` the bootstrap is hashed with the other inline scripts. Under `csp: 'strict'` or `externalScripts` it is written as a same-origin script. Combining `inject: true` with `removeScriptTags: true` is rejected because the bootstrap would be stripped.
+
+This control does not create new crawlable URLs by itself. In single mode it produces one locale per output; for multiple crawlable locales use path-prefixed locales or separate builds/deployments. With `inject: false` the HTML is localized but a visitor with different storage may see another locale after hydration.
 
 ## Ready contract
 
@@ -473,7 +626,13 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `routePriority` | `[]` | Patterns ranked first when crawling, strings or RegExp; setting it selects deterministic BFS |
 | `routesFile` | `null` | Text or JSON route seeds, one route per line or `{ "routes": [] }`; a relative path resolves against the config file |
 | `routesFromSitemap` | `null` | Local path or http(s) URL whose `<loc>` entries seed routes; sitemap indexes are followed one level, the public base is stripped from root-relative locs, and off-origin locs are ignored. Absolute locs in a local sitemap need `metadata.siteUrl` or a remote sitemap origin |
-| `routeOverrides` | `[]` | Per-route `{ match, timeout, waitFor, readySelector, readyFlag, crawl, storageState }`; later entries win |
+| `routeOverrides` | `[]` | Per-route `{ match, timeout, waitFor, readySelector, readyFlag, crawl, storageState, hydration }`; later entries win |
+| `freezeTime` | `false` | `true`, an ISO string or epoch ms; fixes `Date`/`Date.now()` in render and verification. `true` uses `SOURCE_DATE_EPOCH` or the run start |
+| `timezone` | `null` | IANA timezone applied to render and verification contexts |
+| `randomSeed` | `null` | Deterministic `Math.random()` during render and verification; never for security |
+| `hydration` | `{ allowRerender: [], skip: [] }` | Route patterns whose re-render is allowed or whose verification is skipped |
+| `locales` | `null` | Locale matrix for path or single mode, automatic hreflang, canonical, `og:locale` and sitemap alternates |
+| `seoLocale` | `null` | Optional cookie/localStorage locale seed and output bootstrap for SEO builds |
 | `transformHtml` | `null` | Function `(html, { route, file, stats, config })` run before preload/CSP injection; may be async |
 | `concurrency` | derived | Parallel pages, derived from CPU count, capped at 8 |
 | `timeout` | `30000` | Navigation, ready and network-settle timeout in ms; each wait gets this budget |

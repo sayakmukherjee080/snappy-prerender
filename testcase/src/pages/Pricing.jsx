@@ -1,28 +1,10 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { Accordion, CTASection, PageHero, SectionHead } from '../components/index.js';
-import {
-  COMPARISON_ROWS,
-  MAX_VOLUME,
-  MIN_VOLUME,
-  PLANS,
-  PRICING_FAQS,
-  RESERVED_DISCOUNT,
-} from '../content/pricing.js';
+import { COMPARISON_ROWS, PLANS, PRICING_FAQS, RESERVED_DISCOUNT } from '../content/pricing.js';
 import { SECTION_IDS } from '../content/site.js';
-import { usePageMeta } from '../hooks/usePageMeta.js';
-import { estimateMonthlyCost } from '../lib/estimate.js';
+import { PricingCalculator } from '../features/pricing/PricingCalculator.jsx';
+import { formatDollars } from '../lib/format.js';
 import { Link } from '../router.jsx';
-
-const dollarFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-
-/**
- * Formats a whole-dollar amount with a leading dollar sign.
- * @param {number} value
- * @returns {string}
- */
-function formatDollars(value) {
-  return `$${dollarFormat.format(Math.round(value))}`;
-}
 
 /**
  * Renders one pricing tier with rates adjusted for the selected billing period.
@@ -85,21 +67,6 @@ function PlanCard({ plan, reserved }) {
  */
 export default function Pricing() {
   const [reserved, setReserved] = useState(false);
-  const [volume, setVolume] = useState(50);
-  const generatedId = useId();
-  const sliderId = `token-volume-${generatedId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
-
-  usePageMeta({
-    title: 'Pricing',
-    description:
-      'Aether Compute pricing: usage-based orbital inference from $0.85 per million input tokens, reserved capacity, and dedicated nodes.',
-  });
-
-  const {
-    developer: developerEstimate,
-    scale: scaleEstimate,
-    recommendation,
-  } = estimateMonthlyCost(volume, reserved);
 
   return (
     <>
@@ -175,56 +142,11 @@ export default function Pricing() {
             lede="Set a monthly token volume to see where each plan lands. The mix is fixed at 70% input and 30% output."
           />
 
-          <div className="calculator">
-            <div className="calculator__controls">
-              <label className="mono-label" htmlFor={sliderId}>
-                Monthly tokens
-              </label>
-              <div className="calculator__value">
-                {volume}
-                <span>M</span>
-              </div>
-              <input
-                id={sliderId}
-                type="range"
-                min={MIN_VOLUME}
-                max={MAX_VOLUME}
-                step="1"
-                value={volume}
-                onChange={(event) => setVolume(Number(event.target.value))}
-              />
-              <div className="calculator__scale">
-                <span>1M</span>
-                <span>500M</span>
-              </div>
-              <p className="calculator__assumption">
-                {reserved ? 'Reserved rates applied.' : 'On-demand rates applied.'} Input and output
-                are metered separately; the estimator uses a 70/30 mix.
-              </p>
-            </div>
-
-            <div className="calculator__output">
-              <p className="mono-label">Estimated monthly</p>
-              <div className="calculator__row">
-                <span>Developer</span>
-                <strong>{formatDollars(developerEstimate)}</strong>
-              </div>
-              <div className="calculator__row">
-                <span>Scale</span>
-                <strong>{formatDollars(scaleEstimate)}</strong>
-              </div>
-              <div className="calculator__row">
-                <span>Dedicated</span>
-                <strong>Custom</strong>
-              </div>
-              <p className="calculator__recommendation">
-                Best fit <strong>{recommendation}</strong>
-              </p>
-              <p className="calculator__note">
-                Estimates exclude taxes. A dedicated node starts at $180,000 per month.
-              </p>
-            </div>
-          </div>
+          <PricingCalculator
+            reserved={reserved}
+            onReservedChange={setReserved}
+            showToggle={false}
+          />
         </div>
       </section>
 

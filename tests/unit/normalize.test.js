@@ -172,6 +172,15 @@ describe('normaliseHtml post-processing', () => {
     assert.equal(stats.noindex, true);
   });
 
+  it('replaces an existing robots directive instead of adding a second meta', () => {
+    const page =
+      '<!DOCTYPE html><html><head><meta name="robots" content="index,follow"><meta name="robots" content="index"></head><body></body></html>';
+    const { html, stats } = normaliseHtml(page, { noindex: true });
+    assert.equal((html.match(/name="robots"/g) ?? []).length, 1);
+    assert.match(html, /<meta name="robots" content="noindex">/);
+    assert.equal(stats.noindex, true);
+  });
+
   it('drops the volatile attributes the caller lists', () => {
     const page = [
       '<!DOCTYPE html><html><head></head><body>',

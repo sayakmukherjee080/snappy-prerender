@@ -36,6 +36,21 @@ describe('buildSitemap', () => {
     assert.equal(contents.includes('404.html'), false);
   });
 
+  it('uses a locale-specific URL when one is provided', () => {
+    const sitemap = buildSitemap({
+      files: [
+        {
+          route: '/fr',
+          file: 'fr/index.html',
+          status: 'written',
+          localeUrl: 'https://fr.example.com/fr/',
+        },
+      ],
+      config: config(),
+    });
+    assert.match(sitemap.files[0].contents, /<loc>https:\/\/fr\.example\.com\/fr\/<\/loc>/);
+  });
+
   it('applies the base path and skips files that are not pages', () => {
     const sitemap = buildSitemap({
       files: files(['/', 'index.html'], ['/', 'snappy/state-abc.js'], ['/a', 'a.png']),

@@ -9,7 +9,7 @@ export function auditSitemap({ pages, config, report, add }) {
   const indexable = new Map();
   const noindex = new Map();
   for (const page of pages) {
-    const loc = expectedPageUrl(page.route, config);
+    const loc = expectedPageUrl(page.route, config, page.locale);
     if (!loc) continue;
     if (page.noindex || page.notFound) {
       noindex.set(loc, page.route);

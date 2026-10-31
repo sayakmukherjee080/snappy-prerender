@@ -19,16 +19,36 @@ function setMetaTag(attribute, key, content) {
 }
 
 /**
- * Applies the page title and description for the active route. Prerendering captures the result
- * after React commits, so every generated HTML file carries its own metadata.
- * @param {{ title: string, description: string }} metadata
+ * Reads the metadata defaults from the inert JSON script the prerenderer writes, falling
+ * back to the init-script global used during prerendering.
+ * @returns {object}
  */
-export function usePageMeta({ title, description }) {
+function readMetadataDefaults() {
+  const element = document.querySelector('script[data-snappy-meta]');
+  if (element) {
+    try {
+      return JSON.parse(element.textContent) ?? {};
+    } catch {
+      return {};
+    }
+  }
+  return window.__SNAPPY_META__ ?? {};
+}
+
+/**
+ * Applies the page title, description, canonical URL and robots policy for the active route.
+ * A head-only route disables this hook so the package Head component owns metadata.
+ * @param {{ title: string, description: string, noindex?: boolean, enabled?: boolean }} metadata
+ */
+export function usePageMeta({ title, description, noindex = false, enabled = true }) {
   useEffect(() => {
+    if (!enabled) return;
+    const defaults = readMetadataDefaults();
     const fullTitle = `${title} — ${SITE_NAME}`;
     document.title = fullTitle;
 
     setMetaTag('name', 'description', description);
+    setMetaTag('name', 'robots', noindex ? 'noindex,nofollow' : 'index,follow');
     setMetaTag('property', 'og:title', fullTitle);
     setMetaTag('property', 'og:description', description);
     setMetaTag('property', 'og:site_name', SITE_NAME);
@@ -36,5 +56,31 @@ export function usePageMeta({ title, description }) {
     setMetaTag('name', 'twitter:card', 'summary');
     setMetaTag('name', 'twitter:title', fullTitle);
     setMetaTag('name', 'twitter:description', description);
-  }, [title, description]);
+    const canonical = canonicalUrl(defaults);
+    setCanonical(canonical);
+    setMetaTag('property', 'og:url', canonical);
+  }, [description, enabled, noindex, title]);
+}
+
+// Resolves the current route against the public site URL and trailing-slash policy.
+function canonicalUrl(defaults) {
+  const siteUrl = defaults.siteUrl ?? window.location.origin;
+  let pathname = window.location.pathname;
+  if (defaults.trailingSlash === 'never') {
+    pathname = pathname.replace(/\/+$/, '') || '/';
+  } else if (pathname !== '/') {
+    pathname = pathname.endsWith('/') ? pathname : `${pathname}/`;
+  }
+  return new URL(pathname, siteUrl).href;
+}
+
+// Creates or updates the canonical link so crawlers see one public URL per route.
+function setCanonical(href) {
+  let link = document.head.querySelector('link[rel="canonical"]');
+  if (!link) {
+    link = document.createElement('link');
+    link.setAttribute('rel', 'canonical');
+    document.head.appendChild(link);
+  }
+  link.setAttribute('href', href);
 }

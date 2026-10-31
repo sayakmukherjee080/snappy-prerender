@@ -1,0 +1,357 @@
+.planner {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.planner__nodes {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+}
+
+.planner__node {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  cursor: grab;
+}
+
+.planner__node span {
+  color: var(--muted);
+  font-size: 0.55rem;
+}
+
+.planner__slots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.planner__slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 8rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+}
+
+.planner__slot--filled {
+  border-style: solid;
+  border-color: var(--orange);
+  background: var(--paper);
+}
+
+.planner__slot strong {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.planner__empty {
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.planner__clear {
+  margin-top: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--orange-strong);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.fault-panel {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.fault-panel--error {
+  border-color: var(--error);
+  background: var(--orange-soft);
+}
+
+.fault-panel h3 {
+  font-size: 1.1rem;
+}
+
+.fault-panel p {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.fault-panel .button {
+  justify-self: start;
+  margin-top: 0.5rem;
+}
+
+.activity-panel {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.activity-counter {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.activity-counter strong {
+  font-size: 2.5rem;
+  letter-spacing: -0.05em;
+}
+
+.queue ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.queue li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.suspense-skeleton {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.suspense-skeleton span {
+  height: 1rem;
+  background: linear-gradient(
+    90deg,
+    var(--paper-deep) 25%,
+    var(--paper-raised) 50%,
+    var(--paper-deep) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton 1.4s ease-in-out infinite;
+}
+
+.suspense-skeleton span:nth-child(2) {
+  width: 70%;
+}
+
+.suspense-skeleton span:nth-child(3) {
+  width: 45%;
+}
+
+.insertion-demo {
+  padding: 1.5rem;
+  border: 2px solid hsl(var(--lab-hue) 70% 45%);
+  background: hsl(var(--lab-hue) 70% 96%);
+  color: hsl(var(--lab-hue) 45% 20%);
+}
+
+.insertion-demo h2 {
+  margin: 0.5rem 0;
+  font-size: 2rem;
+}
+
+.insertion-demo p {
+  color: hsl(var(--lab-hue) 25% 35%);
+  font-size: 0.85rem;
+}
+
+.effect-counter {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.effect-counter strong {
+  font-size: 2.5rem;
+  letter-spacing: -0.05em;
+}
+
+.event-log {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event-log li {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+
+.transition-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.transition-card {
+  display: grid;
+  gap: 0.3rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+}
+
+.transition-card:hover {
+  border-color: var(--orange);
+}
+
+.transition-card strong {
+  font-size: 0.95rem;
+}
+
+.transition-card span:last-child {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+}
+
+.controllable-counter {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.controllable-counter > strong {
+  font-size: 2.5rem;
+  letter-spacing: -0.05em;
+}
+
+.tooltip-trigger {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tooltip-trigger:hover,
+.tooltip-trigger:focus-visible {
+  border-color: var(--orange);
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 130;
+  max-width: 16rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--dark-line);
+  background: var(--dark);
+  color: var(--dark-text);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.tooltip-demo {
+  gap: 3rem;
+}
+
+.tooltip-demo__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tooltip-demo__row--bottom {
+  align-items: end;
+  min-height: 8rem;
+}
+
+.deferred-results {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line);
+  transition: opacity 0.2s ease;
+}
+
+.deferred-results--stale {
+  opacity: 0.45;
+}
+
+.deferred-results article {
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.deferred-results h3 {
+  margin-top: 0.25rem;
+  font-size: 0.95rem;
+}
+
+.deferred-results p {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.deferred-results mark {
+  background: var(--orange-soft);
+  color: var(--ink);
+}
+
+@media (max-width: 720px) {
+  .planner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .planner__slots {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .transition-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tooltip-demo__row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tooltip-demo__row--bottom {
+    min-height: 0;
+  }
+}

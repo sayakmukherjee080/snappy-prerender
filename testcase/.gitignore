@@ -1,4 +1,7 @@
 node_modules
 dist
+dist-dev
+dist-public
+dist-labs
 .install.lock
 temp

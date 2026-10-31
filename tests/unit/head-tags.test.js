@@ -66,6 +66,21 @@ describe('buildHeadEntries', () => {
     assert.equal(withoutImage.get('meta:name:twitter:card').attrs.content, 'summary');
   });
 
+  it('emits alternate Open Graph locales', () => {
+    const entries = buildHeadEntries(
+      { title: 'Awards', locale: 'fr_FR', alternateLocales: ['en_US', 'de_DE'] },
+      defaults,
+    );
+    const byKeyMap = byKey(entries);
+    assert.equal(byKeyMap.get('meta:property:og:locale').attrs.content, 'fr_FR');
+    const alternates = entries.filter((entry) => entry.attrs?.property === 'og:locale:alternate');
+    assert.deepEqual(
+      alternates.map((entry) => entry.attrs.content),
+      ['en_US', 'de_DE'],
+    );
+    assert.equal(new Set(alternates.map((entry) => headKey(entry))).size, 2);
+  });
+
   it('respects switching open graph or twitter off', () => {
     const entries = byKey(
       buildHeadEntries({ title: 'Awards', openGraph: false, twitter: false }, defaults),
@@ -219,6 +234,175 @@ describe('buildHeadEntries', () => {
       { sequence: 2, entries: page },
     ]);
     assert.equal(merged.filter((entry) => entry.kind === 'script').length, 2);
+  });
+
+  it('uses defaultTitle only when no title exists and never templates it', () => {
+    assert.equal(
+      byKey(buildHeadEntries({ defaultTitle: 'Example' }, defaults)).get('default-title').text,
+      'Example',
+    );
+    assert.equal(
+      byKey(buildHeadEntries({}, { ...defaults, defaultTitle: 'Metadata fallback' })).get(
+        'default-title',
+      ).text,
+      'Metadata fallback',
+    );
+    assert.equal(
+      byKey(buildHeadEntries({ title: 'Awards', defaultTitle: 'Example' }, defaults)).get('title')
+        .text,
+      'Awards | PPS',
+    );
+    assert.equal(
+      byKey(buildHeadEntries({ defaultTitle: 'Example' }, defaults)).has('title'),
+      false,
+    );
+    const merged = mergeHeadEntries([
+      { sequence: 1, entries: buildHeadEntries({ defaultTitle: 'Example' }, defaults) },
+      { sequence: 2, entries: buildHeadEntries({ title: 'Awards' }, defaults) },
+    ]);
+    assert.equal(merged.find((entry) => entry.kind === 'title').text, 'Awards | PPS');
+  });
+
+  it('merges html, body and title attributes with boolean values', () => {
+    const entries = byKey(
+      buildHeadEntries(
+        {
+          title: 'Awards',
+          lang: 'en',
+          htmlAttributes: {
+            lang: 'fr',
+            'data-theme': 'dark',
+            hidden: true,
+            'data-off': false,
+            'data-count': 3,
+          },
+          bodyAttributes: { className: 'root', 'data-scroll': 'locked' },
+          titleAttributes: { itemProp: 'name' },
+        },
+        defaults,
+      ),
+    );
+    assert.equal(entries.get('html:lang').value, 'fr');
+    assert.equal(entries.get('html:data-theme').value, 'dark');
+    assert.equal(entries.get('html:hidden').value, '');
+    assert.equal(entries.has('html:data-off'), false);
+    assert.equal(entries.get('html:data-count').value, '3');
+    assert.equal(entries.get('body:class').value, 'root');
+    assert.equal(entries.get('body:data-scroll').value, 'locked');
+    assert.equal(entries.get('title-attr:itemprop').value, 'name');
+  });
+
+  it('builds arbitrary script, style, noscript and base tags', () => {
+    const entries = buildHeadEntries(
+      {
+        tags: [
+          { tag: 'base', attrs: { href: '/', target: '_self' } },
+          {
+            tag: 'script',
+            key: 'analytics',
+            attrs: { src: '/analytics.js', async: true, defer: false },
+          },
+          { tag: 'script', attrs: { type: 'application/json' }, text: '{"ok":true}' },
+          { tag: 'style', attrs: { media: 'screen' }, text: 'body{color:red}' },
+          { tag: 'noscript', html: '<img src="/pixel.png" alt="">' },
+        ],
+      },
+      defaults,
+      'head-1',
+    );
+    const byKind = new Map(entries.map((entry) => [headKey(entry), entry]));
+    assert.equal(byKind.get('base').attrs.href, '/');
+    assert.equal(byKind.get('script:key:analytics').attrs.async, '');
+    assert.equal(Object.hasOwn(byKind.get('script:key:analytics').attrs, 'defer'), false);
+    assert.equal(byKind.get('script:inline:head-1:2').text, '{"ok":true}');
+    assert.equal(byKind.get('style:inline:head-1:3').attrs.media, 'screen');
+    assert.equal(byKind.get('noscript:inline:head-1:4').html, '<img src="/pixel.png" alt="">');
+  });
+
+  it('escapes closing tag sequences in script and style text', () => {
+    const entries = new Map(
+      buildHeadEntries(
+        {
+          tags: [
+            { tag: 'script', text: 'window.value = "</script>";' },
+            { tag: 'style', text: '/* </style> */ body { color: red }' },
+          ],
+        },
+        defaults,
+        'head-1',
+      ).map((entry) => [headKey(entry), entry]),
+    );
+    assert.equal(entries.get('script:inline:head-1:0').text, 'window.value = "<\\/script>";');
+    assert.equal(entries.get('style:inline:head-1:1').text, '/* <\\/style> */ body { color: red }');
+    assert.equal(entries.get('script:inline:head-1:0').text.includes('</script>'), false);
+  });
+
+  it('keeps several inline scripts apart and rejects unsupported tags', () => {
+    const entries = buildHeadEntries(
+      {
+        tags: [
+          { tag: 'script', text: 'a' },
+          { tag: 'script', text: 'b' },
+        ],
+      },
+      defaults,
+      'head-1',
+    );
+    const scripts = entries.filter((entry) => entry.kind === 'script');
+    assert.equal(new Set(scripts.map((entry) => headKey(entry))).size, 2);
+    assert.throws(
+      () => buildHeadEntries({ tags: [{ tag: 'iframe', attrs: { src: '/x' } }] }, defaults),
+      /tags\[0\]\.tag/,
+    );
+    assert.throws(
+      () => buildHeadEntries({ tags: [{ tag: 'base', html: '<x>' }] }, defaults),
+      /only supported on noscript/,
+    );
+    assert.throws(
+      () =>
+        buildHeadEntries(
+          { tags: [{ tag: 'style', attrs: { 'data-snappy-head': 'x' } }] },
+          defaults,
+        ),
+      /reserved/,
+    );
+    assert.throws(
+      () => buildHeadEntries({ children: 'title' }, defaults),
+      /does not accept children/,
+    );
+  });
+
+  it('emits one Open Graph image per value and uses the first for Twitter', () => {
+    const entries = buildHeadEntries({ images: ['/a.png', '/b.png'] }, defaults);
+    const images = entries.filter((entry) => entry.attrs?.property === 'og:image');
+    assert.deepEqual(
+      images.map((entry) => entry.attrs.content),
+      ['https://pps.example/a.png', 'https://pps.example/b.png'],
+    );
+    assert.equal(new Set(images.map((entry) => headKey(entry))).size, 2);
+    assert.equal(
+      entries.find((entry) => entry.attrs?.name === 'twitter:image').attrs.content,
+      'https://pps.example/a.png',
+    );
+  });
+
+  it('keeps duplicate extra meta tags when duplicates is set', () => {
+    const entries = buildHeadEntries({
+      extra: [
+        { name: 'article:tag', content: 'alpha', duplicates: true },
+        { name: 'article:tag', content: 'beta', duplicates: true },
+      ],
+    });
+    const tags = entries.filter((entry) => entry.attrs?.name === 'article:tag');
+    assert.deepEqual(
+      tags.map((entry) => entry.attrs.content),
+      ['alpha', 'beta'],
+    );
+    assert.equal(new Set(tags.map((entry) => headKey(entry))).size, 2);
+    assert.equal(
+      tags.every((entry) => !Object.hasOwn(entry.attrs, 'duplicates')),
+      true,
+    );
   });
 });
 

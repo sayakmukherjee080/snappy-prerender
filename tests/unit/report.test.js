@@ -99,6 +99,47 @@ describe('buildReport', () => {
     assert.equal(built.verification.skipped, 2);
   });
 
+  it('includes clock, locale and hydration policy fields', () => {
+    const built = buildReport(
+      reportOf({
+        clock: { fixedTime: 1777896000000, timezone: 'UTC' },
+        locales: { mode: 'path', default: 'en', active: null, rendered: { en: 1 } },
+        seoLocale: { code: 'fr', source: 'both', inject: true },
+        routeDetails: [
+          {
+            route: '/',
+            locale: 'en',
+            file: 'index.html',
+            status: 'written',
+            meta: { title: 'Home' },
+            hydrationPolicy: 'allow-rerender',
+            hydrationAllowed: true,
+            ignoredHydrationErrors: ['mismatch'],
+          },
+        ],
+        verification: {
+          ok: true,
+          modes: { hydrated: 0, 're-rendered': 1, undetected: 0, unknown: 0 },
+          frameworks: { react: 1 },
+          skipped: 0,
+          policySkipped: 0,
+          allowed: 1,
+          allowedRerender: 1,
+          errors: [],
+        },
+      }),
+    );
+    assert.equal(built.clock.fixedTime, 1777896000000);
+    assert.equal(built.locales.mode, 'path');
+    assert.equal(built.seoLocale.code, 'fr');
+    assert.equal(built.routes[0].locale, 'en');
+    assert.equal(built.routes[0].hydrationPolicy, 'allow-rerender');
+    assert.equal(built.routes[0].hydrationAllowed, true);
+    assert.deepEqual(built.routes[0].ignoredHydrationErrors, ['mismatch']);
+    assert.equal(built.verification.allowed, 1);
+    assert.equal(built.verification.allowedRerender, 1);
+  });
+
   it('redacts credentials, query strings and the storage-state path', () => {
     const built = buildReport(
       reportOf({

@@ -184,11 +184,24 @@ function isBlobStylesheet(node) {
   return attributeValue(node, 'href').startsWith('blob:');
 }
 
-// Adds a robots noindex meta to the not-found page, which may be served with a 200 by
-// a host that does not apply 404 status codes. Returns true when the tag was added.
+// Ensures the not-found page carries a robots noindex. An existing robots meta is updated in
+// place so the page never ships both index and noindex directives. Returns true when the tag
+// was added or changed.
 function appendNoindex(document) {
   const head = findHead(document);
   if (!head) return false;
+  const robots = (head.childNodes ?? []).filter(
+    (node) => node.tagName === 'meta' && attributeValue(node, 'name').toLowerCase() === 'robots',
+  );
+  if (robots.length > 0) {
+    const [first, ...extras] = robots;
+    const content = attributeValue(first, 'content');
+    if (!/\bnoindex\b/i.test(content)) setAttributeValue(first, 'content', 'noindex');
+    if (extras.length > 0) {
+      head.childNodes = head.childNodes.filter((node) => !extras.includes(node));
+    }
+    return true;
+  }
   head.childNodes.push(
     createElement('meta', [
       { name: 'name', value: 'robots' },
@@ -196,6 +209,15 @@ function appendNoindex(document) {
     ]),
   );
   return true;
+}
+
+// Sets or replaces one attribute on a parse5 node.
+function setAttributeValue(node, name, value) {
+  const attrs = node.attrs ?? [];
+  const existing = attrs.find((attribute) => attribute.name === name);
+  if (existing) existing.value = value;
+  else attrs.push({ name, value });
+  node.attrs = attrs;
 }
 
 // Appends preconnect and image preload links to the head, skipping duplicates.

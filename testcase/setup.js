@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 const lockPath = join(projectRoot, '.install.lock');
-const requiredMajor = 20;
+const requiredMajor = 22;
+const requiredMinor = 12;
 
 if (existsSync(lockPath)) {
   console.log('This project is already installed (.install.lock exists).');
@@ -16,9 +17,15 @@ if (existsSync(lockPath)) {
   process.exit(1);
 }
 
-const nodeMajor = Number(process.versions.node.split('.')[0]);
-if (!Number.isInteger(nodeMajor) || nodeMajor < requiredMajor) {
-  console.error(`Node ${requiredMajor}+ is required. Current version: ${process.versions.node}.`);
+const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
+if (
+  !Number.isInteger(nodeMajor) ||
+  nodeMajor < requiredMajor ||
+  (nodeMajor === requiredMajor && nodeMinor < requiredMinor)
+) {
+  console.error(
+    `Node ${requiredMajor}.${requiredMinor}+ is required. Current version: ${process.versions.node}.`,
+  );
   process.exit(1);
 }
 

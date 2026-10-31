@@ -22,6 +22,9 @@ export function collectPageMetaFromDocument(document) {
     canonical: null,
     robots: null,
     noindex: false,
+    lang: null,
+    dir: null,
+    ogLocale: null,
     h1Count: 0,
     alternates: [],
     images: [],
@@ -30,6 +33,10 @@ export function collectPageMetaFromDocument(document) {
   const visitedLinks = new Set();
 
   const walk = (node) => {
+    if (node.tagName === 'html') {
+      meta.lang = attribute(node, 'lang') || null;
+      meta.dir = attribute(node, 'dir') || null;
+    }
     // An SVG <title> names a drawing, not the document, so it must not count as a page title.
     if (node.tagName === 'title' && node.namespaceURI !== SVG_NAMESPACE) {
       meta.titleCount += 1;
@@ -37,8 +44,10 @@ export function collectPageMetaFromDocument(document) {
     }
     if (node.tagName === 'meta') {
       const name = attribute(node, 'name').toLowerCase();
+      const property = attribute(node, 'property').toLowerCase();
       const content = attribute(node, 'content');
       if (name === 'description' && meta.description === null) meta.description = content;
+      if (property === 'og:locale' && meta.ogLocale === null) meta.ogLocale = content;
       if (name === 'robots') {
         meta.robots ??= content;
         if (/\b(noindex|none)\b/i.test(content)) meta.noindex = true;

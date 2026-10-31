@@ -39,6 +39,11 @@
   color: var(--paper);
 }
 
+.calculator__toggle {
+  align-self: flex-start;
+  margin: 0 0 1.25rem;
+}
+
 .pricing-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

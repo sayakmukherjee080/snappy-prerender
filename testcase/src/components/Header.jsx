@@ -1,6 +1,7 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { NAV_LINKS, SECTION_IDS } from '../content/site.js';
-import { Link, useRouter } from '../router.jsx';
+import { usePalette } from '../features/palette/PaletteProvider.jsx';
+import { Link, navigationStore, useRouter } from '../router.jsx';
 import { Logo } from './Logo.jsx';
 
 /**
@@ -24,11 +25,28 @@ function StatusBar() {
 }
 
 /**
+ * Returns whether a nav target is the active route or an ancestor of it.
+ * @param {string} path
+ * @param {string} to
+ * @returns {boolean}
+ */
+function isNavActive(path, to) {
+  if (to === '/') return path === '/';
+  return path === to || path.startsWith(`${to}/`);
+}
+
+/**
  * Provides the site-wide navigation, the mobile menu, and the status strip.
  */
 export function Header() {
   const { path, hash } = useRouter();
+  const { openPalette } = usePalette();
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigating = useSyncExternalStore(
+    navigationStore.subscribe,
+    navigationStore.getSnapshot,
+    navigationStore.getSnapshot,
+  );
   const generatedId = useId();
   const mobileNavId = `mobile-nav-${generatedId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
@@ -69,7 +87,7 @@ export function Header() {
                 key={link.to}
                 to={link.to}
                 className="nav__link"
-                aria-current={path === link.to ? 'page' : undefined}
+                aria-current={isNavActive(path, link.to) ? 'page' : undefined}
               >
                 {link.label}
               </Link>
@@ -77,6 +95,19 @@ export function Header() {
           </nav>
 
           <div className="site-header__actions">
+            <button
+              type="button"
+              className="palette-trigger"
+              onClick={() => {
+                setMenuOpen(false);
+                openPalette();
+              }}
+              aria-label="Open command palette"
+              aria-keyshortcuts="Control+K Meta+K"
+            >
+              <span className="palette-trigger__label">Search</span>
+              <kbd>⌘K</kbd>
+            </button>
             <Link to={`/company#${SECTION_IDS.contact}`} className="button button--sm header-cta">
               Request capacity <span aria-hidden="true">↗</span>
             </Link>
@@ -94,6 +125,8 @@ export function Header() {
           </div>
         </div>
 
+        <span className="route-progress" data-active={navigating || undefined} aria-hidden="true" />
+
         {menuOpen && (
           <nav id={mobileNavId} className="mobile-menu" aria-label="Mobile">
             <div className="mobile-menu__list">
@@ -102,7 +135,7 @@ export function Header() {
                   key={link.to}
                   to={link.to}
                   className="mobile-menu__link"
-                  aria-current={path === link.to ? 'page' : undefined}
+                  aria-current={isNavActive(path, link.to) ? 'page' : undefined}
                   onClick={() => setMenuOpen(false)}
                 >
                   <span className="mobile-menu__index">{String(index + 1).padStart(2, '0')}</span>

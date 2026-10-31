@@ -45,7 +45,7 @@ export function Footer() {
 
         <div className="footer__bottom">
           <span>© 2026 Aether Compute, Inc.</span>
-          <span>Denver · Svalbard · Awarua</span>
+          <span>254 routes · Denver · Svalbard · Awarua</span>
           <span>Fictional company · illustrative telemetry</span>
         </div>
       </div>

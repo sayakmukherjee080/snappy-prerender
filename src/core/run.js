@@ -3,9 +3,11 @@ import path from 'node:path';
 import { writePreloadManifest, writeSitemap } from './artifacts.js';
 import { auditRun } from './audit/index.js';
 import { launchBrowser } from './browser.js';
+import { resolveFixedTime } from './clock.js';
 import { resolveConfig } from './config.js';
 import { renderAllRoutes } from './crawl.js';
 import { prepareDestination } from './destination.js';
+import { buildLocalePlan } from './locales.js';
 import { createLogger } from './log.js';
 import { routeToFile } from './output.js';
 import { pruneStaleFiles, readPruneManifest, writePruneManifest } from './prune.js';
@@ -29,6 +31,9 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   for (const warning of config.warnings ?? []) log.warn(warning);
   const sourceDir = path.resolve(config.sourceDir);
   const startedAt = Date.now();
+  const fixedTime = resolveFixedTime(config, startedAt);
+  config.fixedTime = fixedTime;
+  const localePlan = buildLocalePlan(config);
 
   await assertSourceDir(sourceDir, config);
   const [outputDir, routeSources] = await Promise.all([
@@ -76,6 +81,17 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     notFoundRoutes: [],
     routeSources: routeSources.sources,
     routeDetails: [],
+    clock: fixedTime === null ? null : { fixedTime, timezone: config.timezone ?? null },
+    locales: localePlan
+      ? { mode: localePlan.mode, default: localePlan.default, active: localePlan.active ?? null }
+      : null,
+    seoLocale: config.seoLocale
+      ? {
+          code: config.seoLocale.code ?? config.locales?.active ?? null,
+          source: config.seoLocale.source,
+          inject: config.seoLocale.inject,
+        }
+      : null,
     cspSkipped: [],
     traces: [],
     verification: null,
@@ -108,8 +124,18 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       outputDir,
       sourceSeeds: routeSources.routes,
       caches: renderCaches,
+      localePlan,
     });
     report.timings.render = Date.now() - phaseStartedAt;
+    const { rendered: renderedRoutes, routeLocales } = rendered;
+    if (localePlan) {
+      const renderedByLocale = {};
+      for (const route of report.routes) {
+        const code = routeLocales.get(route)?.locale?.code ?? localePlan.default;
+        renderedByLocale[code] = (renderedByLocale[code] ?? 0) + 1;
+      }
+      report.locales.rendered = renderedByLocale;
+    }
     if (report.routes.length === 0) {
       report.errors.push({ route: null, message: 'no routes were rendered' });
       log.error('No routes were rendered; check include, exclude and sourceDir');
@@ -126,7 +152,9 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
 
     phaseStartedAt = Date.now();
     const verifiable = await writeAllRoutes({
-      rendered,
+      rendered: renderedRoutes,
+      routeLocales,
+      localePlan,
       outputDir,
       config,
       log,
@@ -136,6 +164,13 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       caches: renderCaches,
     });
     report.timings.write = Date.now() - phaseStartedAt;
+    const localeScripts = report.files
+      .filter((file) => file.file?.startsWith('snappy-seo-locale-'))
+      .map((file) => file.file);
+    if (report.seoLocale) {
+      report.seoLocale.script = localeScripts[0] ?? null;
+      report.seoLocale.scripts = [...new Set(localeScripts)];
+    }
     logFileSummary(report, log);
     logNotFoundNotice(report, config, log);
     logDuplicateTitles(report, log);
@@ -204,9 +239,11 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
         routes: toVerify.sort(),
         config,
         outputDir,
+        routeLocales,
       });
       report.timings.verify = Date.now() - phaseStartedAt;
       report.verification.skipped = skipped;
+      report.verification.policySkipped = report.verification.skippedRoutes.length;
       logVerification(report.verification, config, log);
       mergeVerification(report);
     }
@@ -256,6 +293,8 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     report.timings.audit = Date.now() - auditStartedAt;
   }
   const reRendered = report.verification?.modes['re-rendered'] ?? 0;
+  const allowedRerender = report.verification?.allowedRerender ?? 0;
+  const notAllowedRerender = Math.max(0, reRendered - allowedRerender);
   const undetected = report.verification
     ? (report.verification.modes.undetected ?? 0) + (report.verification.modes.unknown ?? 0)
     : 0;
@@ -270,7 +309,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     !(config.failOnHydrationError && report.verification && !report.verification.ok) &&
     !(config.failOnVerificationError && report.verification?.errors.length > 0) &&
     !(config.failOnUndetected && undetected > 0) &&
-    !(config.failOnRerender && reRendered > 0);
+    !(config.failOnRerender && notAllowedRerender > 0);
   try {
     report.reportFile = await writeReport({ report, config, log });
   } catch (error) {
@@ -330,6 +369,9 @@ function mergeVerification(report) {
     detail.mode = entry.mode;
     detail.framework = entry.framework ?? null;
     detail.hydrationErrors = entry.hydrationErrors;
+    detail.ignoredHydrationErrors = entry.ignoredHydrationErrors ?? [];
+    detail.hydrationPolicy = entry.hydrationPolicy ?? null;
+    detail.hydrationAllowed = entry.allowed === true;
     detail.pageErrors = [...new Set([...(detail.pageErrors ?? []), ...entry.pageErrors])];
     detail.consoleErrors = [...new Set([...(detail.consoleErrors ?? []), ...entry.consoleErrors])];
     detail.verificationStatus = entry.status;
@@ -396,8 +438,10 @@ function logFileSummary(report, log) {
 // were reported but not enforced.
 function logVerification(verification, config, log) {
   const modes = verification.modes ?? {};
+  const allowed = verification.allowed ?? 0;
+  const policySkipped = verification.policySkipped ?? 0;
   log.info(
-    `Hydration modes: ${modes.hydrated ?? 0} hydrated, ${modes['re-rendered'] ?? 0} re-rendered, ${modes.undetected ?? 0} undetected, ${modes.unknown ?? 0} unknown`,
+    `Hydration modes: ${modes.hydrated ?? 0} hydrated, ${modes['re-rendered'] ?? 0} re-rendered, ${modes.undetected ?? 0} undetected, ${modes.unknown ?? 0} unknown${allowed > 0 ? `, ${allowed} allowed` : ''}${policySkipped > 0 ? `, ${policySkipped} skipped by policy` : ''}`,
   );
   const notDetected = (modes.undetected ?? 0) + (modes.unknown ?? 0);
   if (notDetected > 0) {
@@ -439,7 +483,9 @@ function logVerification(verification, config, log) {
     }
   }
 
-  const reRendered = verification.routes.filter((entry) => entry.mode === 're-rendered');
+  const reRendered = verification.routes.filter(
+    (entry) => entry.mode === 're-rendered' && !entry.allowed,
+  );
   if (reRendered.length > 0) {
     const sample = reRendered
       .slice(0, 5)

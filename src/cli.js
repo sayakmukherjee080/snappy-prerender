@@ -5,6 +5,7 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { runInit } from './cli-init.js';
+import { cliOptions } from './cli-options.js';
 import { createLogger } from './core/log.js';
 import { prerender } from './core/run.js';
 
@@ -36,6 +37,29 @@ Options:
       --browser-download-hash <sha256>  Pin the fallback download to a SHA-256 digest
       --browser-download-version <build>  Pin the Chrome for Testing build id
       --storage-state <file>  Playwright storage state for authenticated routes
+      --freeze-time <iso|build>  Fix Date/Date.now during render and verification
+      --timezone <iana>       Browser timezone for render and verification
+      --random-seed <n>       Deterministic Math.random for demo content
+      --allow-rerender <patterns>  Hydration re-renders allowed for matching routes
+      --skip-hydration <patterns>  Skip hydration verification for matching routes
+      --locale-mode <mode>    path | single (requires --locales)
+      --locales <codes>       Comma-separated locale codes, for example en,fr
+      --default-locale <code> Default locale code
+      --active-locale <code>  Active locale for single mode
+      --locale-prefix <code=prefix>  Locale path prefix, repeatable
+      --locale-url <code=url> Locale deployment origin, repeatable
+      --locale-storage-state <code=file>  Locale storage state, repeatable
+      --no-hreflang           Do not emit hreflang alternates
+      --seo-locale <code>     Seed a cookie/localStorage SEO locale
+      --seo-locale-source <source>  localStorage | cookie | both
+      --seo-locale-key <key>  localStorage key for the SEO locale
+      --seo-locale-cookie <name>  Cookie name for the SEO locale
+      --no-seo-locale-inject  Do not write the locale bootstrap into output
+      --no-seo-locale-verify  Do not seed the verification browser
+      --no-seo-locale-render  Do not seed the render browser
+      --no-seo-locale-overwrite  Only set the locale when it is missing
+      --seo-locale-navigator  Also emulate navigator.language
+      --seo-locale-force-html-lang  Override an existing html lang
       --no-verify             Skip the hydration verification pass
       --verify-changed-only   Skip verification for routes whose HTML did not change
       --reuse-verification-context  Reuse one browser context per verification worker
@@ -81,6 +105,7 @@ Options:
       --metadata-site-url <url>       Public site URL for canonical and og:url
       --metadata-site-name <name>     Site name used for og:site_name
       --metadata-title-template <t>   Title template, for example '%s | Example'
+      --metadata-default-title <t>    Title used when a page sets no title
       --metadata-default-image <url>  Share image for routes without one
       --metadata-trailing-slash <mode>  preserve | always | never
       --metadata-base <path>  Base path used for absolute metadata URLs
@@ -151,6 +176,29 @@ async function main() {
       'browser-download-hash': { type: 'string' },
       'browser-download-version': { type: 'string' },
       'storage-state': { type: 'string' },
+      'freeze-time': { type: 'string' },
+      timezone: { type: 'string' },
+      'random-seed': { type: 'string' },
+      'allow-rerender': { type: 'string', multiple: true },
+      'skip-hydration': { type: 'string', multiple: true },
+      'locale-mode': { type: 'string' },
+      locales: { type: 'string' },
+      'default-locale': { type: 'string' },
+      'active-locale': { type: 'string' },
+      'locale-prefix': { type: 'string', multiple: true },
+      'locale-url': { type: 'string', multiple: true },
+      'locale-storage-state': { type: 'string', multiple: true },
+      'no-hreflang': { type: 'boolean' },
+      'seo-locale': { type: 'string' },
+      'seo-locale-source': { type: 'string' },
+      'seo-locale-key': { type: 'string' },
+      'seo-locale-cookie': { type: 'string' },
+      'no-seo-locale-inject': { type: 'boolean' },
+      'no-seo-locale-verify': { type: 'boolean' },
+      'no-seo-locale-render': { type: 'boolean' },
+      'no-seo-locale-overwrite': { type: 'boolean' },
+      'seo-locale-navigator': { type: 'boolean' },
+      'seo-locale-force-html-lang': { type: 'boolean' },
       'no-verify': { type: 'boolean' },
       'verify-changed-only': { type: 'boolean' },
       'reuse-verification-context': { type: 'boolean' },
@@ -195,6 +243,7 @@ async function main() {
       'metadata-site-url': { type: 'string' },
       'metadata-site-name': { type: 'string' },
       'metadata-title-template': { type: 'string' },
+      'metadata-default-title': { type: 'string' },
       'metadata-default-image': { type: 'string' },
       'metadata-trailing-slash': { type: 'string' },
       'metadata-base': { type: 'string' },
@@ -256,6 +305,19 @@ async function main() {
   const options = { ...fileConfig, ...cli };
   // Metadata flags are partial: they refine a config file value instead of replacing it.
   if (cli.metadata) options.metadata = { ...(fileConfig.metadata ?? {}), ...cli.metadata };
+  if (cli.hydration) {
+    options.hydration = { ...(fileConfig.hydration ?? {}), ...cli.hydration };
+  }
+  if (cli.seoLocale) {
+    options.seoLocale = {
+      ...(fileConfig.seoLocale ?? {}),
+      ...cli.seoLocale,
+      cookie: {
+        ...(fileConfig.seoLocale?.cookie ?? {}),
+        ...(cli.seoLocale.cookie ?? {}),
+      },
+    };
+  }
   if (!options.sourceDir) options.sourceDir = 'dist';
 
   const log = createLogger(options.logLevel ?? 'info');
@@ -266,168 +328,6 @@ async function main() {
 /**
  * Translates parsed flags into prerender options, only including flags the user
  * actually passed so config-file values are never clobbered by defaults.
- */
-function cliOptions({ values, positionals }) {
-  const options = {};
-  if (positionals[0] !== undefined) options.sourceDir = positionals[0];
-  if (values.source !== undefined) options.sourceDir = values.source;
-  if (values.base !== undefined) options.base = values.base;
-  if (values.include !== undefined) options.include = splitList(values.include);
-  if (values.exclude !== undefined) options.exclude = splitList(values.exclude);
-  if (values['no-crawl']) options.crawl = false;
-  if (values['max-depth'] !== undefined) options.maxDepth = Number(values['max-depth']);
-  if (values['max-routes'] !== undefined) options.maxRoutes = Number(values['max-routes']);
-  if (values.concurrency !== undefined) options.concurrency = Number(values.concurrency);
-  if (values.timeout !== undefined) options.timeout = Number(values.timeout);
-  if (values['quiet-period'] !== undefined) options.quietPeriod = Number(values['quiet-period']);
-  if (values['scroll-step-delay'] !== undefined) {
-    options.scrollStepDelay = Number(values['scroll-step-delay']);
-  }
-  if (values['max-cached-bytes'] !== undefined) {
-    options.maxCachedBytes = Number(values['max-cached-bytes']);
-  }
-  if (values['serve-cmd-timeout'] !== undefined) {
-    options.serveCmdTimeout = Number(values['serve-cmd-timeout']);
-  }
-  if (values['shutdown-timeout'] !== undefined) {
-    options.shutdownTimeout = Number(values['shutdown-timeout']);
-  }
-  if (values.viewport !== undefined) {
-    const match = /^(\d+)x(\d+)$/i.exec(values.viewport);
-    if (!match) throw new Error('viewport must look like 1280x720');
-    options.viewport = { width: Number(match[1]), height: Number(match[2]) };
-  }
-  if (values['ready-selector'] !== undefined) options.readySelector = values['ready-selector'];
-  if (values['ready-flag'] !== undefined) options.readyFlag = values['ready-flag'];
-  if (values.headless !== undefined) options.headless = values.headless;
-  if (values['wait-for'] !== undefined) options.waitFor = values['wait-for'];
-  if (values.browser !== undefined) options.browser = values.browser;
-  if (values['no-browser-download']) options.browserDownload = false;
-  if (values['browser-download-hash'] !== undefined) {
-    options.browserDownloadHash = values['browser-download-hash'];
-  }
-  if (values['browser-download-version'] !== undefined) {
-    options.browserDownloadVersion = values['browser-download-version'];
-  }
-  if (values['storage-state'] !== undefined) options.storageState = values['storage-state'];
-  if (values['no-verify']) options.verify = false;
-  if (values['verify-changed-only']) options.verifyChangedOnly = true;
-  if (values['reuse-verification-context']) options.reuseVerificationContext = true;
-  if (values['fail-on-hydration-error']) options.failOnHydrationError = true;
-  if (values['fail-on-rerender']) options.failOnRerender = true;
-  if (values['fail-on-page-error']) options.failOnPageError = true;
-  if (values['fail-on-error'] !== undefined) options.failOnError = values['fail-on-error'];
-  if (values['fail-on-empty-page'] !== undefined) {
-    options.failOnEmptyPage = values['fail-on-empty-page'];
-  }
-  if (values['fail-on-console-error']) options.failOnConsoleError = true;
-  if (values['fail-on-failed-request']) options.failOnFailedRequest = true;
-  if (values['fail-on-duplicate-content']) options.failOnDuplicateContent = true;
-  if (values['fail-on-build-origin-metadata']) options.failOnBuildOriginMetadata = true;
-  if (values['fail-on-undetected']) options.failOnUndetected = true;
-  if (values['fail-on-verification-error']) options.failOnVerificationError = true;
-  if (values['no-block-third-party']) options.blockThirdParty = false;
-  if (values['block-third-party']) options.blockThirdParty = true;
-  if (values['allowed-hosts'] !== undefined)
-    options.allowedHosts = splitList(values['allowed-hosts']);
-  if (values['no-freeze-animations']) options.freezeAnimations = false;
-  if (values['no-capture-runtime-styles']) options.captureRuntimeStyles = false;
-  if (values['no-capture-form-state']) options.captureFormState = false;
-  if (values.scroll) options.scrollToBottom = true;
-  if (values.flat) options.flatOutput = true;
-  if (values['not-found'] !== undefined) options.notFoundRoute = values['not-found'];
-  if (values['routes-file'] !== undefined) options.routesFile = values['routes-file'];
-  if (values['routes-from-sitemap'] !== undefined) {
-    options.routesFromSitemap = values['routes-from-sitemap'];
-  }
-  if (values['route-priority'] !== undefined) {
-    options.routePriority = splitList(values['route-priority']);
-  }
-  if (values.report !== undefined) options.reportPath = values.report;
-  if (values.audit !== undefined) options.audit = values.audit;
-  else if (values['no-audit']) options.audit = false;
-  if (values['fail-on-audit-error']) options.failOnAuditError = true;
-  if (values['audit-ignore-links'] !== undefined) {
-    options.auditIgnoreLinks = splitList(values['audit-ignore-links']);
-  }
-  if (values['preload-links']) options.preloadLinks = true;
-  if (values['image-sitemap']) options.imageSitemap = true;
-  if (values.framework !== undefined) options.framework = values.framework;
-  if (values.retries !== undefined) options.retries = Number(values.retries);
-  if (values['retry-delay'] !== undefined) options.retryDelay = Number(values['retry-delay']);
-  if (values['trace-on-error']) options.traceOnError = true;
-  if (values.destination !== undefined) options.destination = values.destination;
-  if (values['clean-destination']) options.cleanDestination = true;
-  if (values['save-as'] !== undefined) options.saveAs = values['save-as'];
-  if (values['user-agent'] !== undefined) options.userAgent = values['user-agent'];
-  const metadata = metadataOptions(values);
-  if (metadata) options.metadata = metadata;
-  if (values['inline-css'] !== undefined) options.inlineCss = values['inline-css'];
-  if (values.csp !== undefined) options.csp = values.csp;
-  if (values['critical-css-preload'] !== undefined) {
-    options.criticalCssPreload =
-      values['critical-css-preload'] === 'none' ? false : values['critical-css-preload'];
-  }
-  if (values['minify-html']) options.minifyHtml = true;
-  if (values['minify-css']) options.minifyCss = true;
-  if (values['no-preconnect-third-party']) options.preconnectThirdParty = false;
-  if (values['preconnect-third-party']) options.preconnectThirdParty = true;
-  if (values['preload-images']) options.preloadImages = true;
-  if (values['preload-manifest']) options.preloadManifest = true;
-  if (values.sitemap) options.sitemap = true;
-  if (values['ignore-for-preload'] !== undefined) {
-    options.ignoreForPreload = splitList(values['ignore-for-preload']);
-  }
-  if (values['cache-ajax-requests']) options.cacheAjaxRequests = true;
-  if (values['remove-scripts']) options.removeScriptTags = true;
-  if (values['remove-styles']) options.removeStyleTags = true;
-  if (values['async-scripts']) options.asyncScriptTags = true;
-  if (values['external-scripts']) options.externalScripts = true;
-  if (values['no-remove-blobs']) options.removeBlobs = false;
-  if (values['remove-attributes'] !== undefined) {
-    options.removeAttributes = splitList(values['remove-attributes']);
-  }
-  if (values['no-strip-build-origin-metadata']) options.stripBuildOriginMetadata = false;
-  if (values['prune-stale-routes']) options.pruneStaleRoutes = true;
-  if (values['ignore-https-errors']) options.ignoreHTTPSErrors = true;
-  if (values['browser-args'] !== undefined) options.browserArgs = splitList(values['browser-args']);
-  if (values.url !== undefined) options.url = values.url;
-  if (values['serve-cmd'] !== undefined) options.serveCmd = values['serve-cmd'];
-  if (values['dry-run']) options.dryRun = true;
-  if (values['log-level'] !== undefined) options.logLevel = values['log-level'];
-  return options;
-}
-
-// Splits comma separated flag values and drops empty entries.
-function splitList(entries) {
-  return entries.flatMap((entry) => entry.split(',')).filter((entry) => entry.length > 0);
-}
-
-// Collects the metadata flags, or null when none was passed so a config file value survives.
-function metadataOptions(values) {
-  const metadata = {};
-  if (values['metadata-site-url'] !== undefined) metadata.siteUrl = values['metadata-site-url'];
-  if (values['metadata-site-name'] !== undefined) {
-    metadata.siteName = values['metadata-site-name'];
-  }
-  if (values['metadata-title-template'] !== undefined) {
-    metadata.titleTemplate = values['metadata-title-template'];
-  }
-  if (values['metadata-default-image'] !== undefined) {
-    metadata.defaultImage = values['metadata-default-image'];
-  }
-  if (values['metadata-trailing-slash'] !== undefined) {
-    metadata.trailingSlash = values['metadata-trailing-slash'];
-  }
-  if (values['metadata-base'] !== undefined) metadata.base = values['metadata-base'];
-  return Object.keys(metadata).length > 0 ? metadata : null;
-}
-
-/**
- * Loads a JS config file. An explicitly requested file must exist; the implicit
- * snappy.config.js is optional. The default export is either a plain options object or an
- * async function that returns one, which is how routes are computed from a CMS, a sitemap or
- * a file listing without a separate prebuild script.
  */
 async function loadConfigFile(explicitPath) {
   if (explicitPath === undefined) {
@@ -464,6 +364,17 @@ function resolveSourcePaths(options, dir) {
     ...options,
     routesFile: resolve(options.routesFile),
     routesFromSitemap: resolve(options.routesFromSitemap),
+    ...(options.locales?.list
+      ? {
+          locales: {
+            ...options.locales,
+            list: options.locales.list.map((locale) => ({
+              ...locale,
+              storageState: resolve(locale.storageState),
+            })),
+          },
+        }
+      : {}),
   };
 }
 

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { auditRun } from '../../src/core/audit/index.js';
+import { auditMetadata } from '../../src/core/audit/metadata.js';
 
 const tempDirs = [];
 
@@ -286,5 +287,163 @@ describe('auditRun CSP hygiene', () => {
       audit.warnings.some((finding) => finding.rule === 'csp-console-violation'),
       true,
     );
+  });
+});
+
+describe('auditMetadata hreflang', () => {
+  const localeConfig = {
+    base: '/',
+    flatOutput: false,
+    auditIgnoreLinks: [],
+    sitemap: false,
+    metadata: { siteUrl: 'https://example.com', trailingSlash: 'always' },
+    locales: {
+      mode: 'path',
+      default: 'en',
+      xDefault: 'en',
+      hreflang: true,
+      list: [
+        { code: 'en', url: 'https://example.com', htmlLang: 'en', ogLocale: 'en_US' },
+        { code: 'fr', url: 'https://example.com', htmlLang: 'fr', ogLocale: 'fr_FR' },
+      ],
+    },
+  };
+
+  function hreflangFindings(pages) {
+    const errors = [];
+    const warnings = [];
+    const add = (severity, rule, message, details = {}) => {
+      (severity === 'error' ? errors : warnings).push({ rule, message, ...details });
+    };
+    auditMetadata({ pages, config: localeConfig, add });
+    return { errors, warnings };
+  }
+
+  it('accepts a complete reciprocal hreflang set', () => {
+    const enAlternates = [
+      { hreflang: 'en', href: 'https://example.com/' },
+      { hreflang: 'fr', href: 'https://example.com/fr/' },
+      { hreflang: 'x-default', href: 'https://example.com/' },
+    ];
+    const frAlternates = [
+      { hreflang: 'en', href: 'https://example.com/' },
+      { hreflang: 'fr', href: 'https://example.com/fr/' },
+      { hreflang: 'x-default', href: 'https://example.com/' },
+    ];
+    const findings = hreflangFindings([
+      {
+        route: '/',
+        locale: 'en',
+        file: 'index.html',
+        meta: pageMeta({
+          title: 'Home',
+          canonical: 'https://example.com/',
+          lang: 'en',
+          ogLocale: 'en_US',
+          alternates: enAlternates,
+        }),
+      },
+      {
+        route: '/fr',
+        locale: 'fr',
+        file: 'fr/index.html',
+        meta: pageMeta({
+          title: 'Accueil',
+          canonical: 'https://example.com/fr/',
+          lang: 'fr',
+          ogLocale: 'fr_FR',
+          alternates: frAlternates,
+        }),
+      },
+    ]);
+    assert.deepEqual(findings.errors, []);
+    const hreflangWarnings = findings.warnings.filter(
+      (finding) => finding.rule.startsWith('hreflang') || finding.rule.startsWith('html-lang'),
+    );
+    assert.deepEqual(hreflangWarnings, []);
+  });
+
+  it('reports invalid, duplicate, missing self and missing x-default links', () => {
+    const findings = hreflangFindings([
+      {
+        route: '/fr',
+        locale: 'fr',
+        file: 'fr/index.html',
+        meta: pageMeta({
+          canonical: 'https://example.com/fr/',
+          lang: 'fr',
+          ogLocale: 'fr_FR',
+          alternates: [
+            { hreflang: 'not a locale', href: 'https://example.com/' },
+            { hreflang: 'en', href: 'https://example.com/' },
+            { hreflang: 'en', href: 'https://example.com/' },
+          ],
+        }),
+      },
+    ]);
+    const rules = findings.errors.map((finding) => finding.rule);
+    assert.ok(rules.includes('hreflang-invalid'));
+    assert.ok(rules.includes('hreflang-duplicate'));
+    assert.ok(findings.warnings.some((finding) => finding.rule === 'hreflang-missing-self'));
+    assert.ok(findings.warnings.some((finding) => finding.rule === 'hreflang-missing-x-default'));
+  });
+
+  it('reports a one-way hreflang link', () => {
+    const sourceAlternates = [
+      { hreflang: 'en', href: 'https://example.com/' },
+      { hreflang: 'fr', href: 'https://example.com/fr/' },
+      { hreflang: 'x-default', href: 'https://example.com/' },
+    ];
+    const findings = hreflangFindings([
+      {
+        route: '/',
+        locale: 'en',
+        file: 'index.html',
+        meta: pageMeta({
+          title: 'Home',
+          canonical: 'https://example.com/',
+          lang: 'en',
+          ogLocale: 'en_US',
+          alternates: sourceAlternates,
+        }),
+      },
+      {
+        route: '/fr',
+        locale: 'fr',
+        file: 'fr/index.html',
+        meta: pageMeta({
+          title: 'Accueil',
+          canonical: 'https://example.com/fr/',
+          lang: 'fr',
+          ogLocale: 'fr_FR',
+          alternates: [
+            { hreflang: 'fr', href: 'https://example.com/fr/' },
+            { hreflang: 'x-default', href: 'https://example.com/' },
+          ],
+        }),
+      },
+    ]);
+    assert.ok(findings.errors.some((finding) => finding.rule === 'hreflang-missing-return'));
+  });
+
+  it('reports html lang against the active locale', () => {
+    const findings = hreflangFindings([
+      {
+        route: '/fr',
+        locale: 'fr',
+        file: 'fr/index.html',
+        meta: pageMeta({
+          canonical: 'https://example.com/fr/',
+          lang: 'en',
+          ogLocale: 'fr_FR',
+          alternates: [
+            { hreflang: 'fr', href: 'https://example.com/fr/' },
+            { hreflang: 'x-default', href: 'https://example.com/' },
+          ],
+        }),
+      },
+    ]);
+    assert.ok(findings.warnings.some((finding) => finding.rule === 'html-lang-mismatch'));
+    assert.ok(findings.warnings.some((finding) => finding.rule === 'og-locale-missing') === false);
   });
 });

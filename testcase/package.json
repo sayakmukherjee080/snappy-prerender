@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Five-page marketing site for Aether Compute, a fictional orbital inference company.",
+  "description": "Aether Compute demo site with 254 routes, live API pages, and a hidden React lab.",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -11,7 +11,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test",
+    "test": "node --test test/*.test.js",
     "lint": "biome check ."
   },
   "dependencies": {

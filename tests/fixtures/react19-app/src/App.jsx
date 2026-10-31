@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Head } from '../../../../src/head/index.js';
 
 const LazyContent = lazy(() => Promise.resolve({ default: () => <p>Lazy content</p> }));
@@ -20,8 +20,27 @@ function currentPath() {
   return path === '' ? '/' : path;
 }
 
+// Simulates the client-side navigation a router performs, so the head layer can be tested
+// across a route change that unmounts React 19 native metadata.
+function useClientPath() {
+  const [path, setPath] = useState(currentPath);
+
+  useEffect(() => {
+    const sync = () => setPath(currentPath());
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, []);
+
+  const navigate = (to) => {
+    window.history.pushState({}, '', to);
+    setPath(currentPath());
+  };
+
+  return [path, navigate];
+}
+
 export default function App() {
-  const path = currentPath();
+  const [path, navigate] = useClientPath();
   useDeliberatePageError(path === '/page-error');
 
   if (path === '/head') {
@@ -40,6 +59,59 @@ export default function App() {
           structuredData={{ '@context': 'https://schema.org', name: 'Head fixture' }}
         />
         <h1>Nineteen head</h1>
+        <a href="/">Home</a>
+      </main>
+    );
+  }
+
+  if (path === '/head-extras') {
+    return (
+      <main>
+        <Head
+          title="Extras head"
+          description="Extras description"
+          images={['/share-19.png', '/share-19-b.png']}
+          alternateLocales={['en_US', 'de_DE']}
+          titleAttributes={{ itemProp: 'name' }}
+          htmlAttributes={{ lang: 'fr', 'data-theme': 'dark' }}
+          bodyAttributes={{ class: 'extras', 'data-scroll': 'locked' }}
+          tags={[
+            { tag: 'base', attrs: { href: '/' } },
+            {
+              tag: 'script',
+              attrs: { type: 'application/json' },
+              text: '{"extras":true,"closing":"</script>"}',
+            },
+            { tag: 'style', attrs: { media: 'screen' }, text: 'body{color:red}' },
+            { tag: 'noscript', html: '<img src="/pixel.png" alt="">' },
+          ]}
+        />
+        <h1>Extras head</h1>
+        <a href="/">Home</a>
+      </main>
+    );
+  }
+
+  if (path === '/native-head') {
+    return (
+      <main>
+        <title>Native and Head</title>
+        <meta name="description" content="Native description" />
+        <link rel="canonical" href="https://example.com/native-head/" />
+        <Head title="Native and Head" description="Native description" canonical="/native-head" />
+        <h1>Native and Head</h1>
+        <button type="button" onClick={() => navigate('/head')}>
+          Go to head
+        </button>
+      </main>
+    );
+  }
+
+  if (path === '/default-title') {
+    return (
+      <main>
+        <Head defaultTitle="Fixture default title" />
+        <h1>Default title</h1>
         <a href="/">Home</a>
       </main>
     );

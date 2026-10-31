@@ -110,6 +110,23 @@
   background: var(--orange);
 }
 
+.code__copy {
+  margin-left: auto;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--dark-line);
+  background: transparent;
+  color: var(--dark-muted);
+  font-family: var(--font-mono);
+  font-size: 0.45rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.code__copy:hover {
+  border-color: var(--orange);
+  color: var(--dark-text);
+}
+
 .code__body {
   margin: 0;
   padding: 1.25rem;

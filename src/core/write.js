@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { parse, serialize } from 'parse5';
 import { findBuildOriginUrls } from './build-origin.js';
 import { applyCspHashesToDocument } from './csp.js';
+import { resolveHydrationPolicy } from './hydration-policy.js';
 import { inlineCriticalCss } from './inline-css.js';
+import { applyLocaleMetadata, buildLocaleLinks, localePageUrl } from './locales.js';
 import { minifyHtml } from './minify.js';
 import { normaliseHtml } from './normalize.js';
 import {
@@ -19,6 +21,12 @@ import { collectPageResourcesFromDocument } from './preload-manifest.js';
 import { resolveRouteConfig } from './route-config.js';
 import { normaliseRoute, toPublicPath } from './routes.js';
 import { mapLimit } from './scheduler.js';
+import {
+  buildSeoLocaleScript,
+  injectSeoLocaleScript,
+  resolveSeoLocale,
+  seoLocaleMetadataOptions,
+} from './seo-locale.js';
 
 const WRITE_CONCURRENCY = 4;
 
@@ -28,6 +36,8 @@ const WRITE_CONCURRENCY = 4;
  */
 export async function writeAllRoutes({
   rendered,
+  routeLocales = new Map(),
+  localePlan = null,
   outputDir,
   config,
   log,
@@ -43,12 +53,13 @@ export async function writeAllRoutes({
 
   const verifiable = [];
   const hashes = new Map();
+  const localeScripts = new Map();
   const { results } = await mapLimit(
     sorted,
     Math.min(WRITE_CONCURRENCY, config.concurrency),
     async (route) => {
       if (conflicted.has(route)) return null;
-      const routeReport = { errors: [], duplicateTitles: [], cspSkipped: [] };
+      const routeReport = { errors: [], duplicateTitles: [], cspSkipped: [], files: [] };
       try {
         const routeConfig = resolveRouteConfig(config, route);
         const result = rendered.get(route);
@@ -61,6 +72,10 @@ export async function writeAllRoutes({
           state,
           report: routeReport,
           caches,
+          locale: routeLocales.get(route)?.locale ?? null,
+          baseRoute: routeLocales.get(route)?.baseRoute ?? route,
+          localePlan,
+          localeScripts,
         });
         return {
           route,
@@ -83,11 +98,13 @@ export async function writeAllRoutes({
     for (const error of entry.report.errors) report.errors.push(error);
     for (const route of entry.report.duplicateTitles) report.duplicateTitles.push(route);
     for (const route of entry.report.cspSkipped) report.cspSkipped.push(route);
+    for (const file of entry.report.files ?? []) report.files.push(file);
     if (!entry.file) continue;
     const { route, result, file, resources } = entry;
     report.files.push(file);
     report.routeDetails.push({
       route,
+      locale: routeLocales.get(route)?.locale?.code ?? null,
       order: result.order ?? null,
       file: file.file,
       status: file.status,
@@ -102,9 +119,13 @@ export async function writeAllRoutes({
       meta: file.meta ?? null,
       images: file.images ?? [],
       alternates: file.alternates ?? [],
+      localeUrl: file.localeUrl ?? null,
       mode: null,
       framework: null,
       hydrationErrors: [],
+      ignoredHydrationErrors: [],
+      hydrationPolicy: resolveHydrationPolicy(config, route),
+      hydrationAllowed: false,
       pageErrors: result.pageErrors ?? [],
       consoleErrors: result.consoleErrors ?? [],
       failedRequests: result.failedRequests ?? [],
@@ -205,7 +226,20 @@ function reportOutputCollisions({ routes, config, log, report }) {
  * Applies the configured post-processing to one rendered route and writes it: DOM
  * cleanups and link hints, critical CSS extraction, then optional minification.
  */
-async function writeRouteOutput({ route, result, outputDir, config, log, state, report, caches }) {
+async function writeRouteOutput({
+  route,
+  result,
+  outputDir,
+  config,
+  log,
+  state,
+  report,
+  caches,
+  locale = null,
+  baseRoute = route,
+  localePlan = null,
+  localeScripts = new Map(),
+}) {
   if (result.screenshot) {
     const file = routeToScreenshotFile(route, config);
     if (config.dryRun) {
@@ -254,6 +288,7 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
   let document = normalised.document;
   let preTransformScripts = new Set();
   let transformedHtml = null;
+  let localeChanged = false;
   if (needsString) {
     let output = normalised.html;
     if (config.inlineCss === 'critical') {
@@ -277,6 +312,37 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
     }
     transformedHtml = output;
     document = parse(output);
+  }
+  const noindex =
+    documentHasNoindex(document) ||
+    (config.notFoundRoute !== null &&
+      normaliseRoute(baseRoute) === normaliseRoute(config.notFoundRoute));
+  const localeLinks =
+    locale && localePlan ? buildLocaleLinks({ locale, baseRoute, plan: localePlan, config }) : null;
+  if (localeLinks) {
+    localeChanged = true;
+    const seo = resolveSeoLocale(config, locale, route);
+    applyLocaleMetadata(document, localeLinks, {
+      skipAlternates: noindex,
+      ...seoLocaleMetadataOptions(seo),
+    });
+    if (seo?.inject) {
+      const script = buildSeoLocaleScript(seo);
+      const external = config.csp === 'strict' || (config.externalScripts && config.csp !== 'hash');
+      if (external) {
+        const externalHref = await ensureLocaleScript({
+          script,
+          outputDir,
+          config,
+          report,
+          log,
+          cache: localeScripts,
+        });
+        if (externalHref) injectSeoLocaleScript(document, script, externalHref);
+      } else {
+        injectSeoLocaleScript(document, script, null);
+      }
+    }
   }
   if (
     stats.removedElements > 0 ||
@@ -331,10 +397,13 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
     }
   }
   const meta = collectPageMetaFromDocument(document);
-  const output =
-    transformedHtml !== null && preloadAdded === 0 && !cspChanged
+  let output =
+    transformedHtml !== null && preloadAdded === 0 && !cspChanged && !localeChanged
       ? transformedHtml
       : serialize(document);
+  if (localeChanged && config.minifyHtml) {
+    output = await minifyHtml(output, config.minifyHtml, config.minifyCss);
+  }
   warnOnBuildOriginMetadata({
     origins: stats.metadataOrigins,
     removed: stats.removedMetadata,
@@ -368,6 +437,9 @@ async function writeRouteOutput({ route, result, outputDir, config, log, state, 
       meta,
       images: meta.images,
       alternates: meta.alternates,
+      localeUrl: locale
+        ? localePageUrl(locale, baseRoute, config, localePlan?.mode ?? 'path')
+        : null,
       inlineStyleAttributes: meta.inlineStyleAttributes,
       buildOriginUrls: buildOrigins,
     },
@@ -396,6 +468,59 @@ async function applyCriticalCss({ output, outputDir, config, log, state, caches 
     );
   }
   return output;
+}
+
+/**
+ * Reports whether the document already declares a noindex policy. Locale alternates are
+ * skipped on those pages, while language attributes are still applied.
+ * @param {object} document
+ * @returns {boolean}
+ */
+function documentHasNoindex(document) {
+  let noindex = false;
+  const walk = (node) => {
+    if (noindex) return;
+    if (
+      node.tagName === 'meta' &&
+      node.attrs?.some((entry) => entry.name === 'name' && entry.value.toLowerCase() === 'robots')
+    ) {
+      const content = node.attrs.find((entry) => entry.name === 'content')?.value ?? '';
+      if (/\b(noindex|none)\b/i.test(content)) noindex = true;
+    }
+    for (const child of node.childNodes ?? []) walk(child);
+  };
+  walk(document);
+  return noindex;
+}
+
+/**
+ * Writes the external SEO locale bootstrap once per unique script. The file is
+ * content-addressed, so reruns and locales that produce the same script share it.
+ * @returns {Promise<string | null>} public href, or null when the write failed
+ */
+async function ensureLocaleScript({ script, outputDir, config, report, log, cache }) {
+  const hash = createHash('sha256').update(script).digest('hex').slice(0, 16);
+  const file = `snappy-seo-locale-${hash}.js`;
+  if (cache.has(file)) return cache.get(file);
+  const pending = (async () => {
+    const bytes = Buffer.byteLength(script);
+    if (config.dryRun) {
+      report.files.push({ route: null, file, status: 'dry-run', bytes });
+      return toPublicPath(`/${file}`, config.base);
+    }
+    try {
+      const written = await writeFileIfChanged({ dir: outputDir, file, contents: script });
+      report.files.push({ route: null, ...written });
+      log.debug(`  wrote ${file}: ${written.status}`);
+      return toPublicPath(`/${file}`, config.base);
+    } catch (error) {
+      report.errors.push({ route: null, message: `locale script write failed: ${error.message}` });
+      log.error(`  write failed for ${file}: ${error.message}`);
+      return null;
+    }
+  })();
+  cache.set(file, pending);
+  return pending;
 }
 
 /**
