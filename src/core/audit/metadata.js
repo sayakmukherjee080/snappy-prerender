@@ -18,7 +18,7 @@ export function auditMetadata({ pages, config, add }) {
         route: page.route,
       });
     }
-    if (!meta.canonical) {
+    if (!meta.canonical && !page.notFound) {
       add('warning', 'missing-canonical', `no canonical link on ${page.route}`, {
         route: page.route,
       });

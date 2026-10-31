@@ -32,6 +32,24 @@ describe('detectFramework', () => {
     assert.deepEqual(detectFramework(container), { name: 'svelte', mounted: true });
   });
 
+  it('detects Svelte 5 hydration anchors', () => {
+    const container = { childNodes: [{ nodeType: 8, data: '[' }, { nodeType: 1 }] };
+    assert.deepEqual(detectFramework(container), { name: 'svelte', mounted: true });
+    const elseBlock = { childNodes: [{ nodeType: 8, data: '[!' }] };
+    assert.deepEqual(detectFramework(elseBlock), { name: 'svelte', mounted: true });
+    assert.deepEqual(detectFramework({ childNodes: [{ nodeType: 8, data: 'plain comment' }] }), {
+      name: null,
+      mounted: false,
+    });
+  });
+
+  it('detects a Svelte 5 client runtime from the page global', () => {
+    const container = {
+      ownerDocument: { defaultView: { __svelte: { v: new Set(['5.0.0']) } } },
+    };
+    assert.deepEqual(detectFramework(container), { name: 'svelte', mounted: true });
+  });
+
   it('does not mistake plain keys for a framework', () => {
     assert.deepEqual(detectFramework({ __custom: true, _children: undefined }), {
       name: null,

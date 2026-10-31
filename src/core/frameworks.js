@@ -17,7 +17,15 @@ const PREACT = (container) =>
       container.firstElementChild?._children,
   );
 const SVELTE = (container) =>
-  Boolean(container.__svelte_meta || container.querySelector?.('[data-svelte-h]'));
+  Boolean(
+    container.__svelte_meta ||
+      container.querySelector?.('[data-svelte-h]') ||
+      container.ownerDocument?.defaultView?.__svelte ||
+      (container.childNodes &&
+        [...container.childNodes].some(
+          (node) => node.nodeType === 8 && (node.data === '[' || node.data === '[!'),
+        )),
+  );
 
 const DETECTORS = { react: REACT, vue: VUE, preact: PREACT, svelte: SVELTE };
 const AUTO_ORDER = ['react', 'vue', 'preact', 'svelte'];
