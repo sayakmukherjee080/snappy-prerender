@@ -51,6 +51,41 @@ test('API article routes use the live article title and description', () => {
   );
   assert.equal(page.title, 'A live article title');
   assert.match(page.description, /^API article 1: A live article summary/);
+  assert.equal(page.notFound, false);
+  assert.equal(page.noindex, false);
+
+  const missing = renderRoute(
+    route,
+    { index: '999' },
+    {
+      path: '/api/articles/999',
+      search: '',
+      hash: '',
+      preferences: {},
+      hiddenUnlocked: false,
+      news: { status: 'ready', data: { articles: [] } },
+    },
+  );
+  assert.equal(missing.notFound, true);
+  assert.equal(missing.noindex, true);
+});
+
+test('the API index is noindex while the live source is failing', () => {
+  const route = routes.find((item) => item.page === 'api-index');
+  const page = renderRoute(
+    route,
+    {},
+    {
+      path: '/api',
+      search: '',
+      hash: '',
+      preferences: {},
+      hiddenUnlocked: false,
+      news: { status: 'error', data: null },
+    },
+  );
+  assert.equal(page.noindex, true);
+  assert.match(page.content, /The source is not responding/);
 });
 
 test('the live article normaliser rejects unsafe URLs', () => {

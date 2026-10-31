@@ -42,6 +42,10 @@ function setupDemo(demo, ctx) {
     let running = true;
     const draw = () => {
       if (!running) return;
+      if (!canvas.isConnected) {
+        running = false;
+        return;
+      }
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = '#101417';
       context.fillRect(0, 0, canvas.width, canvas.height);
@@ -178,7 +182,7 @@ function setupDemo(demo, ctx) {
     action.addEventListener('click', () => {
       output.textContent = 'Loading…';
       setTimeout(() => {
-        output.textContent = 'Resource resolved: 24 nodes, p50 18 ms.';
+        if (output.isConnected) output.textContent = 'Resource resolved: 24 nodes, p50 18 ms.';
       }, 900);
     });
     output.textContent = 'Load a delayed resource.';
@@ -244,6 +248,10 @@ function setupDemo(demo, ctx) {
       let progress = 0;
       output.textContent = 'Simulating… 0%';
       const timer = setInterval(() => {
+        if (!output.isConnected) {
+          clearInterval(timer);
+          return;
+        }
         progress += 10;
         output.textContent = `Simulating… ${progress}%`;
         if (progress >= 100) {

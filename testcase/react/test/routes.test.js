@@ -33,3 +33,11 @@ test('hidden routes are limited to the lab', () => {
   assert.equal(hidden.length, 24);
   assert.ok(hidden.every((route) => route.path === '/lab' || route.path.startsWith('/lab/')));
 });
+
+test('a malformed percent escape falls through to the not-found route', () => {
+  assert.equal(matchRoute(routes, '/docs/api/%E0%A4%A'), null);
+  const valid = matchRoute(routes, '/docs/api/chat-completions');
+  assert.ok(valid);
+  assert.equal(valid.route.path, '/docs/api/:slug');
+  assert.equal(valid.params.slug, 'chat-completions');
+});
