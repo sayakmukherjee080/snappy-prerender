@@ -1,5 +1,7 @@
+import { installClock, installClockScripts } from './clock.js';
 import { captureFormState } from './form-state.js';
 import { inlineStylesheets } from './inline-css.js';
+import { localeContextOptions, localeStorageState, seedLocaleContext } from './locale-context.js';
 import { readPageState } from './page-content.js';
 import { createResourceCollector } from './resources.js';
 import { normaliseRoute, toAppRoute, toServerUrl } from './routes.js';
@@ -17,6 +19,7 @@ export async function renderRoute({
   browser,
   origin,
   route,
+  locale = null,
   config,
   screenshot = false,
   traceFile = null,
@@ -24,11 +27,12 @@ export async function renderRoute({
 }) {
   const context = await browser.newContext({
     viewport: config.viewport,
-    storageState: config.storageState ?? undefined,
+    storageState: localeStorageState(config, locale),
     userAgent: config.userAgent ?? undefined,
     ignoreHTTPSErrors: config.ignoreHTTPSErrors,
     reducedMotion: config.freezeAnimations ? 'reduce' : 'no-preference',
     serviceWorkers: 'block',
+    ...localeContextOptions(config, locale),
   });
   let tracing = false;
   if (traceFile) {
@@ -36,6 +40,11 @@ export async function renderRoute({
     tracing = true;
   }
   const page = await context.newPage();
+  await installClock(page, config.fixedTime ?? null);
+  await installClockScripts(page, {
+    fixedTime: config.fixedTime ?? null,
+    randomSeed: config.randomSeed ?? null,
+  });
   const pageErrors = [];
   const consoleErrors = [];
   const failedRequests = [];
@@ -63,6 +72,15 @@ export async function renderRoute({
   const metadataDefaults = config.metadata
     ? { base: config.base, flatOutput: config.flatOutput, ...config.metadata }
     : null;
+  await seedLocaleContext({
+    page,
+    context,
+    origin,
+    config,
+    route,
+    locale,
+    phase: 'render',
+  });
   if (metadataDefaults) {
     await page.addInitScript((defaults) => {
       window.__SNAPPY_META__ = defaults;

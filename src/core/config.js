@@ -1,5 +1,14 @@
 import fs from 'node:fs';
 import os from 'node:os';
+import {
+  validateClock,
+  validateHydrationConfig,
+  validateLocales,
+  validateMetadata,
+  validateRouteOverrides,
+  validateSeoLocale,
+} from './config-validation.js';
+import { addConfigWarnings } from './config-warnings.js';
 
 /**
  * Upper bound applied to the derived default concurrency. Browser pages are memory
@@ -32,6 +41,9 @@ const NULLABLE_KEYS = [
   'routesFile',
   'routesFromSitemap',
   'transformHtml',
+  'timezone',
+  'locales',
+  'seoLocale',
 ];
 const ARRAY_KEYS = [
   'include',
@@ -118,6 +130,12 @@ export const DEFAULTS = Object.freeze({
   verify: true,
   verifyChangedOnly: false,
   reuseVerificationContext: false,
+  freezeTime: false,
+  timezone: null,
+  randomSeed: null,
+  hydration: Object.freeze({ allowRerender: Object.freeze([]), skip: Object.freeze([]) }),
+  locales: null,
+  seoLocale: null,
   failOnHydrationError: false,
   failOnRerender: false,
   failOnPageError: false,
@@ -141,7 +159,7 @@ export const DEFAULTS = Object.freeze({
 
 // Options whose default is boolean but which accept other shapes, so their own validators
 // below decide what is allowed.
-const MULTI_TYPE_KEYS = new Set(['inlineCss', 'minifyHtml', 'minifyCss']);
+const MULTI_TYPE_KEYS = new Set(['inlineCss', 'minifyHtml', 'minifyCss', 'freezeTime']);
 
 // Freeze the nested list defaults as well, so a consumer cannot mutate the defaults
 // used by every later run in the same process.
@@ -173,6 +191,18 @@ export function resolveConfig(userOptions = {}) {
   const config = { ...DEFAULTS, ...userOptions };
   for (const key of NULLABLE_KEYS) config[key] = config[key] ?? null;
   for (const key of ARRAY_KEYS) config[key] = toArray(config[key]);
+  if (
+    userOptions.hydration !== undefined &&
+    (typeof userOptions.hydration !== 'object' ||
+      userOptions.hydration === null ||
+      Array.isArray(userOptions.hydration))
+  ) {
+    throw new TypeError('hydration must be an object');
+  }
+  config.hydration = {
+    allowRerender: toArray(userOptions.hydration?.allowRerender),
+    skip: toArray(userOptions.hydration?.skip),
+  };
   config.viewport = { ...DEFAULTS.viewport, ...(userOptions.viewport ?? {}) };
   config.base = normaliseBase(config.base);
   config.concurrency =
@@ -190,126 +220,108 @@ export function resolveConfig(userOptions = {}) {
     config.criticalCssPreload = config.csp === 'strict' || config.csp === 'hash' ? false : 'media';
   }
   config.warnings = [];
+  normaliseLocales(config);
+  normaliseSeoLocale(config);
   validateConfig(config);
-  addConfigWarnings(config, userOptions);
+  addConfigWarnings(config, userOptions, DEFAULTS);
   return config;
 }
 
 /**
- * Reports options that do nothing in the current combination, so a build does not
- * quietly skip a gate the caller believes is active.
+ * Reports whether a value is a plain object rather than an array or null.
+ * @param {unknown} value
+ * @returns {boolean}
  */
-function addConfigWarnings(config, userOptions) {
-  const warn = (message) => config.warnings.push(message);
-  for (const key of Object.keys(userOptions)) {
-    if (!Object.hasOwn(DEFAULTS, key)) {
-      warn(`unknown option "${key}" is ignored; check the spelling`);
-    }
-  }
-  if (!config.verify) {
-    for (const key of [
-      'verifyChangedOnly',
-      'failOnHydrationError',
-      'failOnRerender',
-      'failOnUndetected',
-      'failOnVerificationError',
-    ]) {
-      if (config[key]) warn(`${key} has no effect because verify is false`);
-    }
-  }
-  if (config.verify && (config.serveCmd || config.saveAs !== 'html')) {
-    for (const key of [
-      'failOnHydrationError',
-      'failOnRerender',
-      'failOnUndetected',
-      'failOnVerificationError',
-    ]) {
-      if (config[key]) {
-        warn(
-          `${key} has no effect because hydration verification is skipped with ${config.serveCmd ? 'serveCmd' : `saveAs: '${config.saveAs}'`}`,
-        );
-      }
-    }
-    if (userOptions.framework !== undefined) {
-      warn(
-        `framework has no effect because hydration verification is skipped with ${config.serveCmd ? 'serveCmd' : `saveAs: '${config.saveAs}'`}`,
-      );
-    }
-  }
-  if (!config.verify && userOptions.framework !== undefined) {
-    warn('framework has no effect because verify is false');
-  }
-  if (!config.verify && config.reuseVerificationContext) {
-    warn('reuseVerificationContext has no effect because verify is false');
-  }
-  if (config.reuseVerificationContext && config.storageState) {
-    warn(
-      'reuseVerificationContext shares browser storage across routes; authenticated routes may see state from another route',
-    );
-  }
-  if (!config.audit && config.failOnAuditError) {
-    warn('failOnAuditError has no effect because audit is false');
-  }
-  if (!config.audit && config.auditIgnoreLinks.length > 0) {
-    warn('auditIgnoreLinks has no effect because audit is false');
-  }
-  if (config.preloadLinks && config.saveAs !== 'html') {
-    warn(`preloadLinks has no effect when saveAs is '${config.saveAs}'`);
-  }
-  if (config.preloadLinks && config.removeScriptTags) {
-    warn('preloadLinks skips script hints because removeScriptTags strips every script');
-  }
-  if (config.imageSitemap && !config.sitemap) {
-    warn('imageSitemap has no effect because sitemap is false');
-  }
-  if (config.traceOnError && config.dryRun) {
-    warn('traceOnError has no effect in dry-run mode');
-  }
-  if (
-    userOptions.criticalCssPreload !== undefined &&
-    config.criticalCssPreload !== false &&
-    config.inlineCss !== 'critical'
-  ) {
-    warn('criticalCssPreload has no effect unless inlineCss is "critical"');
-  }
-  if (config.minifyCss && !config.minifyHtml && !config.inlineCss) {
-    warn('minifyCss has no effect unless minifyHtml or inlineCss is enabled');
-  }
-  if (config.allowedHosts.length > 0 && !config.blockThirdParty) {
-    warn('allowedHosts has no effect unless blockThirdParty is true');
-  }
-  if (config.csp === 'strict' && config.inlineCss) {
-    warn(
-      "csp controls script-src; inlineCss emits inline styles, which need style-src 'unsafe-inline' or hashes",
-    );
-  }
-  if (
-    (config.csp === 'strict' || config.csp === 'hash') &&
-    userOptions.criticalCssPreload !== undefined &&
-    config.criticalCssPreload !== false
-  ) {
-    warn(
-      "criticalCssPreload emits an inline onload handler that a script-src 'self' policy blocks",
-    );
-  }
-  if (config.removeStyleTags && config.inlineCss === 'critical') {
-    warn('removeStyleTags removes CSS-in-JS styles before critical CSS is extracted');
-  }
-  if (config.sitemap && config.saveAs !== 'html') {
-    warn(`sitemap has no effect when saveAs is '${config.saveAs}'`);
-  }
-  const metadataBase = config.metadata?.base;
-  if (metadataBase && metadataBase !== config.base) {
-    warn(
-      `metadata.base (${metadataBase}) differs from base (${config.base}); canonical, social URLs and routing will disagree`,
-    );
-  }
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
- * Ensures the base path always carries a leading and trailing slash so route and
- * URL helpers can strip or append it without branching on user input shape.
+ * Fills locale defaults so downstream code can rely on a complete matrix: the default
+ * code, x-default, prefixes, html lang and browser locale. Validation still rejects bad
+ * shapes after this normalisation.
  */
+function normaliseLocales(config) {
+  if (!isPlainObject(config.locales)) return;
+  const locales = config.locales;
+  const list = Array.isArray(locales.list) ? locales.list : [];
+  const defaultCode =
+    locales.default ?? (list.length === 1 && isPlainObject(list[0]) ? list[0].code : undefined);
+  config.locales = {
+    ...locales,
+    mode: locales.mode,
+    default: defaultCode,
+    xDefault: locales.xDefault === undefined ? defaultCode : locales.xDefault,
+    hreflang: locales.hreflang === undefined ? true : locales.hreflang,
+    list: list.map((locale) => {
+      if (!isPlainObject(locale)) return locale;
+      const prefix =
+        locale.prefix === undefined
+          ? locales.mode === 'single' || locale.code === defaultCode
+            ? ''
+            : locale.code
+              ? `/${locale.code}`
+              : undefined
+          : locale.prefix === '/'
+            ? ''
+            : locale.prefix;
+      return {
+        ...locale,
+        prefix,
+        htmlLang: locale.htmlLang ?? locale.code,
+        locale: locale.locale ?? locale.code,
+      };
+    }),
+  };
+  if (locales.active !== undefined) config.locales.active = locales.active;
+}
+
+/**
+ * Fills the SEO locale recipe defaults. The feature stays off unless seoLocale was set,
+ * and the code falls back to the active locale in single mode.
+ */
+function normaliseSeoLocale(config) {
+  if (!isPlainObject(config.seoLocale)) return;
+  const seo = config.seoLocale;
+  config.seoLocale = {
+    ...seo,
+    code: seo.code ?? (config.locales?.mode === 'single' ? config.locales.active : undefined),
+    source: seo.source ?? 'both',
+    value: seo.value ?? null,
+    localStorageKey: seo.localStorageKey ?? 'locale',
+    cookie:
+      seo.cookie === undefined
+        ? {
+            name: 'locale',
+            path: '/',
+            domain: null,
+            sameSite: 'Lax',
+            secure: false,
+            maxAge: null,
+          }
+        : isPlainObject(seo.cookie)
+          ? {
+              name: 'locale',
+              path: '/',
+              domain: null,
+              sameSite: 'Lax',
+              secure: false,
+              maxAge: null,
+              ...seo.cookie,
+            }
+          : seo.cookie,
+    seedRender: seo.seedRender === undefined ? true : seo.seedRender,
+    seedVerification: seo.seedVerification === undefined ? true : seo.seedVerification,
+    inject: seo.inject === undefined ? true : seo.inject,
+    overwrite: seo.overwrite === undefined ? true : seo.overwrite,
+    navigator: seo.navigator === undefined ? false : seo.navigator,
+    htmlLang: seo.htmlLang === undefined ? true : seo.htmlLang,
+    forceHtmlLang: seo.forceHtmlLang === undefined ? false : seo.forceHtmlLang,
+    dir: seo.dir ?? null,
+    routes: toArray(seo.routes ?? ['/*']),
+  };
+}
+
 export function normaliseBase(base) {
   if (typeof base !== 'string' || base.length === 0) {
     throw new TypeError('base must be a non-empty string');
@@ -364,6 +376,8 @@ export function validateConfig(config) {
 
   patternList(config.include, 'include');
   patternList(config.exclude, 'exclude');
+  patternList(config.hydration.allowRerender, 'hydration.allowRerender');
+  patternList(config.hydration.skip, 'hydration.skip');
   stringList(config.allowedHosts, 'allowedHosts');
   stringList(config.browserArgs, 'browserArgs');
   stringList(config.ignoreForPreload, 'ignoreForPreload');
@@ -378,6 +392,7 @@ export function validateConfig(config) {
     'reportPath',
     'routesFile',
     'routesFromSitemap',
+    'timezone',
   ]) {
     nullableString(key);
   }
@@ -386,6 +401,11 @@ export function validateConfig(config) {
     throw new TypeError('transformHtml must be a function or null');
   }
   for (const key of BOOLEAN_KEYS) booleanOption(key);
+  validateClock(config);
+  validateHydrationConfig(config);
+  validateMetadata(config);
+  validateLocales(config);
+  validateSeoLocale(config);
   validateRouteOverrides(config.routeOverrides);
 
   if (config.browserDownloadHash !== null && !/^[a-f0-9]{64}$/i.test(config.browserDownloadHash)) {
@@ -487,107 +507,7 @@ export function validateConfig(config) {
       "removeStyleTags cannot be combined with inlineCss 'inline' or true: it would strip the CSS the inline step just added",
     );
   }
-  validateMetadata(config);
   if (config.sitemap && !config.metadata?.siteUrl) {
     throw new TypeError('sitemap needs metadata.siteUrl so the sitemap can list absolute URLs');
-  }
-}
-
-// Per-route overrides may only change the settings that make sense for one route.
-const ROUTE_OVERRIDE_KEYS = new Set([
-  'match',
-  'timeout',
-  'waitFor',
-  'readySelector',
-  'readyFlag',
-  'crawl',
-  'storageState',
-]);
-
-/**
- * Validates per-route overrides. Matching patterns stay strings or RegExp; every
- * override key is checked so a typo cannot silently leave the base config in place.
- */
-function validateRouteOverrides(overrides) {
-  for (const override of overrides) {
-    if (typeof override !== 'object' || override === null || Array.isArray(override)) {
-      throw new TypeError('routeOverrides entries must be objects');
-    }
-    for (const key of Object.keys(override)) {
-      if (!ROUTE_OVERRIDE_KEYS.has(key)) {
-        throw new TypeError(`routeOverrides.${key} is not a recognised option`);
-      }
-    }
-    if (!(typeof override.match === 'string' || override.match instanceof RegExp)) {
-      throw new TypeError('routeOverrides entries need a string or RegExp match');
-    }
-    if (override.timeout !== undefined) {
-      if (!Number.isFinite(override.timeout) || override.timeout <= 0) {
-        throw new TypeError('routeOverrides.timeout must be a positive number of milliseconds');
-      }
-    }
-    for (const key of ['waitFor', 'readySelector', 'readyFlag', 'storageState']) {
-      const value = override[key];
-      if (value !== undefined && typeof value !== 'string') {
-        throw new TypeError(`routeOverrides.${key} must be a string`);
-      }
-    }
-    if (override.crawl !== undefined && typeof override.crawl !== 'boolean') {
-      throw new TypeError('routeOverrides.crawl must be a boolean');
-    }
-  }
-}
-
-// The metadata keys the head component reads, so a typo is reported instead of ignored.
-const METADATA_KEYS = new Set([
-  'siteUrl',
-  'siteName',
-  'titleTemplate',
-  'defaultImage',
-  'trailingSlash',
-  'base',
-]);
-
-/**
- * Validates the defaults handed to the head component, so a typo surfaces at config time
- * rather than as metadata that silently points at the build server.
- */
-function validateMetadata(config) {
-  const metadata = config.metadata;
-  if (metadata === null) return;
-  if (typeof metadata !== 'object' || Array.isArray(metadata)) {
-    throw new TypeError('metadata must be null or an options object');
-  }
-  for (const key of Object.keys(metadata)) {
-    if (!METADATA_KEYS.has(key)) throw new TypeError(`metadata.${key} is not a recognised option`);
-  }
-  for (const key of METADATA_KEYS) {
-    const value = metadata[key];
-    if (value !== undefined && value !== null && typeof value !== 'string') {
-      throw new TypeError(`metadata.${key} must be a string`);
-    }
-  }
-  if (metadata.siteUrl && !/^https?:\/\//.test(metadata.siteUrl)) {
-    throw new TypeError('metadata.siteUrl must be an absolute http(s) URL');
-  }
-  if (metadata.siteUrl) {
-    const parsed = new URL(metadata.siteUrl);
-    if (parsed.pathname !== '/' && parsed.pathname !== '') {
-      throw new TypeError(
-        'metadata.siteUrl must be an origin without a path; set base for a sub-path deployment',
-      );
-    }
-  }
-  if (metadata.base && !metadata.base.startsWith('/')) {
-    throw new TypeError('metadata.base must start with a slash, for example /app/');
-  }
-  if (metadata.trailingSlash && !['preserve', 'always', 'never'].includes(metadata.trailingSlash)) {
-    throw new TypeError("metadata.trailingSlash must be 'preserve', 'always' or 'never'");
-  }
-  if (metadata.titleTemplate && !metadata.titleTemplate.includes('%s')) {
-    config.warnings ??= [];
-    config.warnings.push(
-      'metadata.titleTemplate has no %s placeholder, so the title is left as the page set it',
-    );
   }
 }

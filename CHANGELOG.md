@@ -6,7 +6,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
-## [Unreleased]
+## [2.8.0] - 2026-10-31
+
+### Added
+
+- `freezeTime`, `timezone` and `randomSeed` make `Date`/`Date.now()` and optional
+  `Math.random()` deterministic across render and verification. `SOURCE_DATE_EPOCH` is
+  honoured, and pages can read `window.__SNAPPY_NOW__` / `window.__SNAPPY_NOW_ISO__`.
+- `hydration.allowRerender` and `hydration.skip`, plus `routeOverrides[].hydration`, let
+  explicitly dynamic routes re-render without being reported as failures.
+- `locales` adds path or single locale modes with automatic `<html lang>`, canonical,
+  `og:locale`, `og:locale:alternate`, self/alternate/`x-default` hreflang, sitemap
+  alternates, translated route maps and hreflang audit rules.
+- `seoLocale` seeds a cookie or `localStorage` locale before render and verification, and
+  optionally writes a pre-app bootstrap into the output. It supports localStorage, cookie
+  or both, `overwrite`, `navigator`, `forceHtmlLang`, route scoping, CSP hash and strict
+  externalization.
+- CLI flags for the clock, hydration policies, simple locale matrices and SEO locale.
+- Report fields for the fixed clock, locale counts, per-route locale, hydration policy,
+  allowed re-renders, ignored hydration errors and generated locale scripts.
+- `Head` accepts `tags` for arbitrary `script`, `style`, `noscript` and `base` elements,
+  with attribute objects, text, trusted `noscript` HTML and explicit keys.
+- `Head` accepts `htmlAttributes`, `bodyAttributes` and `titleAttributes`, restoring the
+  document's original attributes when no Head wants them.
+- `Head` accepts `defaultTitle`, multiple `images` and multiple `alternateLocales`; repeated
+  same-name `extra` metas can opt into duplicates. These replace the client-side surface of
+  React Helmet and React Helmet Async.
+- `Head` accepts `onChangeClientState` for observing added, removed and changed entries
+  after real DOM updates.
+- React 19 native `<meta>` and `<link>` tags are adopted and updated instead of
+  duplicated. A correct native `<title>` is left to React so navigation can remove it, while
+  older template titles are removed.
+- The head entry documents `HeadProps`, `HeadTag`, `HeadAttributes` and `HeadChange` with
+  JSDoc types; the package remains plain JavaScript and adds no TypeScript files.
 
 ### Changed
 
@@ -20,6 +52,8 @@ the release tags; see the Git history for those changes.
 - Relative route-source loading and browser/server startup overlap where safe.
 - The JSON report includes phase timings, and `npm run benchmark` measures large sites.
 - `reuseVerificationContext` optionally reuses one browser context per verification worker.
+- A not-found page's generated noindex replaces an existing robots directive instead of
+  adding a second meta tag.
 
 ## [2.7.0] - 2026-10-29
 

@@ -2,6 +2,7 @@ export const NAV_LINKS = [
   { label: 'Home', to: '/' },
   { label: 'Platform', to: '/platform' },
   { label: 'Network', to: '/network' },
+  { label: 'API', to: '/api' },
   { label: 'Pricing', to: '/pricing' },
   { label: 'Company', to: '/company' },
 ];
@@ -43,6 +44,16 @@ export const FOOTER_GROUPS = [
       { label: 'Ground stations', to: `/network#${SECTION_IDS.groundSegment}` },
       { label: 'Telemetry', to: `/network#${SECTION_IDS.telemetry}` },
       { label: 'Service status', to: `/network#${SECTION_IDS.telemetry}` },
+    ],
+  },
+  {
+    title: 'Developers',
+    links: [
+      { label: 'Docs', to: '/docs' },
+      { label: 'API explorer', to: '/api' },
+      { label: 'Models', to: '/models' },
+      { label: 'Resources', to: '/resources' },
+      { label: 'Changelog', to: '/docs/changelog/2026-10' },
     ],
   },
   {

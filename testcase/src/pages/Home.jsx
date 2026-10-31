@@ -13,7 +13,6 @@ import {
   ORBIT_FEATURES,
   SECTION_IDS,
 } from '../content/site.js';
-import { usePageMeta } from '../hooks/usePageMeta.js';
 import { Link } from '../router.jsx';
 
 const ARCH_STEPS = [
@@ -54,12 +53,6 @@ const CURL_EXAMPLE = String.raw`curl https://orbit.aethercompute.space/v1/chat/c
  * Renders the mission, architecture, latency, and operator story for the orbital network.
  */
 export default function Home() {
-  usePageMeta({
-    title: 'Orbital inference network',
-    description:
-      'Aether Compute operates radiation-hardened GPU nodes in low Earth orbit, serving low-latency LLM inference over an optical mesh.',
-  });
-
   return (
     <>
       <section className="hero">

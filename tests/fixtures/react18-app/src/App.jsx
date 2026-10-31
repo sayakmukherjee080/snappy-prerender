@@ -46,7 +46,18 @@ export default function App() {
   } else if (path === '/head-a') {
     page = (
       <main>
-        <Head title="Head A" description="Page A description" image="/share-a.png" />
+        <Head
+          title="Head A"
+          description="Page A description"
+          image="/share-a.png"
+          titleAttributes={{ itemProp: 'name' }}
+          htmlAttributes={{ lang: 'fr', 'data-theme': 'dark' }}
+          bodyAttributes={{ class: 'head-a', 'data-scroll': 'locked' }}
+          tags={[
+            { tag: 'style', key: 'head-a-style', text: 'body{background:red}' },
+            { tag: 'noscript', key: 'head-a-pixel', html: '<img src="/pixel.png" alt="">' },
+          ]}
+        />
         <h1>Head A</h1>
         <button type="button" onClick={() => navigate('/head-b')}>
           Go to Head B
@@ -78,7 +89,18 @@ export default function App() {
     <>
       {/* Layout metadata applies to every route; a page's own Head overrides what it sets.
           The template's description is the fallback that must reappear once no page sets one. */}
-      <Head title="Snappy Fixture" robots="index,follow" />
+      <Head
+        title="Snappy Fixture"
+        robots="index,follow"
+        onChangeClientState={(state, added, removed) => {
+          window.__snappyHeadChanges ??= [];
+          window.__snappyHeadChanges.push({
+            title: state.title?.text ?? null,
+            added: added.map((entry) => entry.key),
+            removed: removed.map((entry) => entry.key),
+          });
+        }}
+      />
       {page}
     </>
   );

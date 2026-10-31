@@ -1,5 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {
+  activeLocale,
+  isLocalePrefixedRoute,
+  localeByCode,
+  localeRoute,
+  stripLocalePrefix,
+} from './locales.js';
 import { renderRoute } from './render.js';
 import { resolveRouteConfig } from './route-config.js';
 import {
@@ -25,12 +32,36 @@ export async function renderAllRoutes({
   outputDir,
   sourceSeeds = [],
   caches = null,
+  localePlan = null,
 }) {
   const visited = new Set();
   const scheduled = new Set();
   const rendered = new Map();
+  const routeLocales = new Map();
   const cap = config.maxRoutes ?? Number.POSITIVE_INFINITY;
   let nextOrder = 0;
+  const defaultLocale = localePlan ? localeByCode(localePlan, localePlan.default) : null;
+  const notFoundRoute = config.notFoundRoute ? normaliseRoute(config.notFoundRoute) : null;
+
+  // Expands a base route into every locale variant it publishes. The not-found route is
+  // deliberately not localized: a host needs one 404 document.
+  const variantsFor = (route) => {
+    if (!localePlan) return [{ route, locale: null, baseRoute: route }];
+    if (localePlan.mode === 'single') {
+      return [{ route, locale: activeLocale(localePlan), baseRoute: route }];
+    }
+    const baseRoute = defaultLocale ? stripLocalePrefix(route, defaultLocale) : route;
+    const isNotFound = notFoundRoute !== null && normaliseRoute(baseRoute) === notFoundRoute;
+    const variants = [];
+    for (const locale of localePlan.list) {
+      if (isNotFound && locale !== defaultLocale) continue;
+      const localized = isNotFound
+        ? normaliseRoute(config.notFoundRoute)
+        : localeRoute(locale, baseRoute);
+      variants.push({ route: localized, locale, baseRoute });
+    }
+    return variants;
+  };
 
   // Queues routes up to maxRoutes, recording exactly which candidates did not fit.
   // A seed used only to reach wildcard routes is given output: false and is rendered
@@ -39,14 +70,24 @@ export async function renderAllRoutes({
     const accepted = [];
     const dropped = [];
     for (const route of routes) {
-      if (scheduled.has(route)) continue;
-      if (scheduled.size >= cap) {
-        dropped.push(route);
-        continue;
+      if (isLocalePrefixedRoute(route, localePlan)) continue;
+      for (const variant of variantsFor(route)) {
+        if (scheduled.has(variant.route)) continue;
+        if (scheduled.size >= cap) {
+          dropped.push(variant.route);
+          continue;
+        }
+        scheduled.add(variant.route);
+        routeLocales.set(variant.route, variant);
+        accepted.push({
+          route: variant.route,
+          output: outputFor(variant.baseRoute),
+          order: nextOrder,
+          locale: variant.locale,
+          baseRoute: variant.baseRoute,
+        });
+        nextOrder += 1;
       }
-      scheduled.add(route);
-      accepted.push({ route, output: outputFor(route), order: nextOrder });
-      nextOrder += 1;
     }
     if (dropped.length > 0) {
       const previous = report.truncated?.droppedRoutes ?? [];
@@ -59,7 +100,14 @@ export async function renderAllRoutes({
     return accepted;
   };
 
-  const renderOne = async ({ route, output, depth = 0, order = null }) => {
+  const renderOne = async ({
+    route,
+    output,
+    depth = 0,
+    order = null,
+    locale = null,
+    baseRoute = route,
+  }) => {
     if (visited.has(route)) return null;
     visited.add(route);
     log.debug(`rendering ${route}${output ? '' : ' as a crawl seed'}`);
@@ -75,13 +123,14 @@ export async function renderAllRoutes({
       outputDir,
       screenshot: config.saveAs !== 'html',
       caches,
+      locale,
     });
     if (!result) return null;
     result.depth = depth;
     result.order = order;
     try {
       const notFoundRoute = config.notFoundRoute ? normaliseRoute(config.notFoundRoute) : null;
-      const isNotFoundRoute = notFoundRoute !== null && route === notFoundRoute;
+      const isNotFoundRoute = notFoundRoute !== null && normaliseRoute(baseRoute) === notFoundRoute;
       if (result.statusCode === 404 && !isNotFoundRoute) {
         report.errors.push({ route, message: 'returned 404' });
         log.error(`  route ${route} returned 404`);
@@ -149,7 +198,12 @@ export async function renderAllRoutes({
   if (sourceSeeds.length === 0 || config.includeProvided) {
     candidates.push(...crawlRoots(config));
   }
-  const roots = accept([...new Set(sortRoutes(candidates, config))], outputFor);
+  const roots = accept(
+    [...new Set(sortRoutes(candidates, config))].filter(
+      (route) => !isLocalePrefixedRoute(route, localePlan),
+    ),
+    outputFor,
+  );
 
   const deterministic = config.maxRoutes !== null || config.routePriority.length > 0;
   if (deterministic) {
@@ -157,15 +211,17 @@ export async function renderAllRoutes({
   } else {
     const pool = createPool({
       concurrency: config.concurrency,
-      handler: async ({ route, depth, output, order }) => {
-        const renderedRoute = await renderOne({ route, output, depth, order });
+      handler: async ({ route, depth, output, order, locale, baseRoute }) => {
+        const renderedRoute = await renderOne({ route, output, depth, order, locale, baseRoute });
         if (!renderedRoute) return;
         const { result, routeConfig } = renderedRoute;
         if (routeConfig.crawl && withinDepth(depth + 1, routeConfig.maxDepth)) {
           const discovered = filterRoutes(result.links, {
             include: config.includeProvided ? config.include : [],
             exclude: config.exclude,
-          }).filter((candidate) => !scheduled.has(candidate));
+          })
+            .filter((candidate) => !isLocalePrefixedRoute(candidate, localePlan))
+            .filter((candidate) => !scheduled.has(candidate));
           const accepted = accept(sortRoutes(discovered, config));
           pool.push(accepted.map((item) => ({ ...item, depth: depth + 1 })));
         }
@@ -178,7 +234,7 @@ export async function renderAllRoutes({
       log.error(`  pool error on ${item.route}: ${error.message}`);
     }
   }
-  return rendered;
+  return { rendered, routeLocales };
 }
 
 /**
@@ -197,6 +253,7 @@ async function renderWithRetries({
   outputDir,
   screenshot,
   caches,
+  locale,
 }) {
   const attempts = config.retries + 1;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -209,6 +266,7 @@ async function renderWithRetries({
         browser,
         origin: server.origin,
         route,
+        locale,
         config: routeConfig,
         screenshot,
         traceFile,

@@ -418,3 +418,212 @@ describe('resolveConfig 2.7 options', () => {
     assert.match(warnings, /traceOnError has no effect/);
   });
 });
+
+describe('resolveConfig clock, hydration and locale options', () => {
+  it('defaults every new feature off', () => {
+    const config = resolveConfig();
+    assert.equal(config.freezeTime, false);
+    assert.equal(config.timezone, null);
+    assert.equal(config.randomSeed, null);
+    assert.deepEqual(config.hydration, { allowRerender: [], skip: [] });
+    assert.equal(config.locales, null);
+    assert.equal(config.seoLocale, null);
+  });
+
+  it('normalises the deterministic clock and hydration lists', () => {
+    const config = resolveConfig({
+      freezeTime: '2026-05-04T12:00:00Z',
+      timezone: 'Europe/Paris',
+      randomSeed: 42,
+      hydration: { allowRerender: '/live/*', skip: ['/admin/*'] },
+    });
+    assert.equal(config.freezeTime, '2026-05-04T12:00:00Z');
+    assert.equal(config.timezone, 'Europe/Paris');
+    assert.equal(config.randomSeed, 42);
+    assert.deepEqual(config.hydration, {
+      allowRerender: ['/live/*'],
+      skip: ['/admin/*'],
+    });
+  });
+
+  it('rejects invalid clock and hydration values', () => {
+    assert.throws(() => resolveConfig({ freezeTime: 'not-a-date' }), /freezeTime/);
+    assert.throws(() => resolveConfig({ freezeTime: -1 }), /freezeTime/);
+    assert.throws(() => resolveConfig({ timezone: 'Mars/Olympus' }), /timezone/);
+    assert.throws(() => resolveConfig({ randomSeed: -1 }), /randomSeed/);
+    assert.throws(() => resolveConfig({ hydration: [] }), /hydration/);
+    assert.throws(
+      () => resolveConfig({ routeOverrides: [{ match: '/', hydration: 'ignore' }] }),
+      /routeOverrides.hydration/,
+    );
+  });
+
+  it('normalises a path locale matrix', () => {
+    const config = resolveConfig({
+      metadata: { siteUrl: 'https://example.com' },
+      locales: {
+        mode: 'path',
+        default: 'en',
+        list: [{ code: 'en' }, { code: 'fr', routes: { '/about': '/a-propos' } }],
+      },
+    });
+    assert.equal(config.locales.mode, 'path');
+    assert.equal(config.locales.hreflang, true);
+    assert.equal(config.locales.xDefault, 'en');
+    assert.equal(config.locales.list[0].prefix, '');
+    assert.equal(config.locales.list[1].prefix, '/fr');
+    assert.equal(config.locales.list[1].htmlLang, 'fr');
+    assert.equal(config.locales.list[1].locale, 'fr');
+  });
+
+  it('normalises a single locale matrix without prefixes', () => {
+    const config = resolveConfig({
+      metadata: { siteUrl: 'https://example.com' },
+      locales: {
+        mode: 'single',
+        active: 'fr',
+        default: 'en',
+        list: [
+          { code: 'en', url: 'https://example.com' },
+          { code: 'fr', url: 'https://fr.example.com' },
+        ],
+      },
+    });
+    assert.deepEqual(
+      config.locales.list.map((locale) => locale.prefix),
+      ['', ''],
+    );
+  });
+
+  it('validates locale defaults, duplicates and active mode', () => {
+    assert.throws(
+      () =>
+        resolveConfig({
+          locales: { mode: 'path', list: [{ code: 'en' }, { code: 'fr' }] },
+        }),
+      /locales.default/,
+    );
+    assert.throws(
+      () =>
+        resolveConfig({
+          locales: {
+            mode: 'path',
+            default: 'en',
+            list: [{ code: 'en' }, { code: 'en' }],
+          },
+        }),
+      /duplicate locale code/,
+    );
+    assert.throws(
+      () =>
+        resolveConfig({
+          locales: {
+            mode: 'single',
+            default: 'en',
+            list: [{ code: 'en' }, { code: 'fr' }],
+          },
+        }),
+      /locales.active/,
+    );
+    assert.throws(
+      () =>
+        resolveConfig({
+          locales: {
+            mode: 'path',
+            default: 'en',
+            list: [{ code: 'en' }, { code: 'fr', prefix: '' }],
+          },
+        }),
+      /duplicate locale prefix/,
+    );
+    assert.throws(
+      () =>
+        resolveConfig({
+          metadata: { siteUrl: 'https://example.com' },
+          locales: {
+            mode: 'path',
+            default: 'en',
+            list: [
+              { code: 'en', url: 'https://example.com' },
+              { code: 'fr', url: 'https://fr.example.com' },
+            ],
+          },
+        }),
+      /path mode uses one public origin/,
+    );
+  });
+
+  it('normalises seoLocale defaults from the active locale', () => {
+    const config = resolveConfig({
+      metadata: { siteUrl: 'https://example.com' },
+      locales: {
+        mode: 'single',
+        active: 'fr',
+        default: 'en',
+        list: [{ code: 'en' }, { code: 'fr', url: 'https://fr.example.com' }],
+      },
+      seoLocale: { source: 'localStorage' },
+    });
+    assert.equal(config.seoLocale.code, 'fr');
+    assert.equal(config.seoLocale.source, 'localStorage');
+    assert.equal(config.seoLocale.localStorageKey, 'locale');
+    assert.equal(config.seoLocale.cookie.name, 'locale');
+    assert.equal(config.seoLocale.inject, true);
+    assert.equal(config.seoLocale.seedRender, true);
+    assert.equal(config.seoLocale.seedVerification, true);
+    assert.equal(config.seoLocale.overwrite, true);
+    assert.equal(config.seoLocale.forceHtmlLang, false);
+    assert.deepEqual(config.seoLocale.routes, ['/*']);
+  });
+
+  it('rejects conflicting or unsafe seoLocale controls', () => {
+    assert.throws(
+      () =>
+        resolveConfig({
+          removeScriptTags: true,
+          seoLocale: { code: 'fr', inject: true },
+        }),
+      /removeScriptTags/,
+    );
+    assert.throws(
+      () =>
+        resolveConfig({
+          locales: { mode: 'single', active: 'fr', list: [{ code: 'fr' }] },
+          seoLocale: { code: 'en' },
+        }),
+      /must match locales.active/,
+    );
+    assert.throws(
+      () => resolveConfig({ seoLocale: { code: 'fr', cookie: { name: 'bad name' } } }),
+      /cookie.name/,
+    );
+    assert.throws(
+      () => resolveConfig({ seoLocale: { code: 'fr', cookie: 'bad' } }),
+      /seoLocale.cookie/,
+    );
+    assert.throws(
+      () => resolveConfig({ seoLocale: { code: 'fr', forceHtmlLang: 'yes' } }),
+      /forceHtmlLang/,
+    );
+  });
+
+  it('warns about locale and clock combinations that weaken verification', () => {
+    const config = resolveConfig({
+      metadata: { siteUrl: 'https://example.com' },
+      freezeTime: true,
+      verifyChangedOnly: true,
+      reuseVerificationContext: true,
+      locales: {
+        mode: 'single',
+        active: 'fr',
+        default: 'en',
+        list: [{ code: 'en' }, { code: 'fr', url: 'https://fr.example.com' }],
+      },
+      seoLocale: { inject: false, overwrite: false },
+    });
+    const warnings = config.warnings.join('\n');
+    assert.match(warnings, /freezeTime with verifyChangedOnly/);
+    assert.match(warnings, /reuseVerificationContext is ignored/);
+    assert.match(warnings, /seoLocale.inject is false/);
+  });
+});

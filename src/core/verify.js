@@ -1,9 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { blockThirdPartyRequests } from './blocking.js';
+import { installClock, installClockScripts } from './clock.js';
 import { DEFAULTS } from './config.js';
 import { frameworkFromMarkers, isHydrationError } from './frameworks.js';
 import { compareContainers } from './hydration-diff.js';
+import { isHydrationAllowed, resolveHydrationPolicy } from './hydration-policy.js';
+import { localeContextOptions, localeStorageState, seedLocaleContext } from './locale-context.js';
+import { activeLocale } from './locales.js';
 import { routeToFile } from './output.js';
 import { CONTAINER_SELECTOR, readBootState } from './page-content.js';
 import { resolveRouteConfig } from './route-config.js';
@@ -52,22 +56,33 @@ export function classifyBoot({ markupPreserved, frameworkMounted }) {
  * hydration errors plus how each route booted. This is the pass that catches markup
  * that only breaks once the app re-attaches, and apps that never attach to it at all.
  */
-export async function verifyRoutes({ browser, origin, routes, config, outputDir = null }) {
-  const results = new Array(routes.length).fill(undefined);
+export async function verifyRoutes({
+  browser,
+  origin,
+  routes,
+  config,
+  outputDir = null,
+  routeLocales = new Map(),
+}) {
+  const policySkipped = routes.filter((route) => resolveHydrationPolicy(config, route) === 'skip');
+  const policySkippedSet = new Set(policySkipped);
+  const toVerify = routes.filter((route) => !policySkippedSet.has(route));
+  const results = new Array(toVerify.length).fill(undefined);
   const errors = [];
   let cursor = 0;
-  const workerCount = Math.max(1, Math.min(config.concurrency, routes.length || 1));
+  const canReuse = config.reuseVerificationContext && !config.locales && !config.seoLocale;
+  const workerCount = Math.max(1, Math.min(config.concurrency, toVerify.length || 1));
   await Promise.all(
     Array.from({ length: workerCount }, async () => {
       let sharedContext = null;
       try {
-        if (config.reuseVerificationContext && routes.length > 0) {
-          sharedContext = await createContext(browser, config);
+        if (canReuse && toVerify.length > 0) {
+          sharedContext = await createContext(browser, config, activeLocale(config.locales));
         }
-        while (cursor < routes.length) {
+        while (cursor < toVerify.length) {
           const index = cursor;
           cursor += 1;
-          const route = routes[index];
+          const route = toVerify[index];
           try {
             results[index] = await verifyRoute({
               browser,
@@ -76,6 +91,9 @@ export async function verifyRoutes({ browser, origin, routes, config, outputDir 
               config: resolveRouteConfig(config, route),
               outputDir,
               context: sharedContext,
+              locale:
+                routeLocales.get(route)?.locale ??
+                (config.locales?.mode === 'single' ? activeLocale(config.locales) : null),
             });
           } catch (error) {
             errors.push({ item: route, error });
@@ -98,21 +116,26 @@ export async function verifyRoutes({ browser, origin, routes, config, outputDir 
     routes: verified,
     modes,
     frameworks,
+    allowed: verified.filter((entry) => entry.allowed).length,
+    allowedRerender: verified.filter((entry) => entry.allowed && entry.mode === 're-rendered')
+      .length,
+    skippedRoutes: policySkipped,
     ok: verified.every((entry) => entry.ok) && errors.length === 0,
     errors: errors.map(({ item, error }) => ({ route: item, message: error.message })),
   };
 }
 
 // Creates the browser context a verification worker reuses across routes.
-function createContext(browser, config) {
+function createContext(browser, config, locale = null) {
   return browser.newContext({
     viewport: config.viewport,
-    storageState: config.storageState ?? undefined,
+    storageState: localeStorageState(config, locale),
     userAgent:
       config.userAgent === DEFAULTS.userAgent ? undefined : (config.userAgent ?? undefined),
     ignoreHTTPSErrors: config.ignoreHTTPSErrors,
     reducedMotion: config.freezeAnimations ? 'reduce' : 'no-preference',
     serviceWorkers: 'block',
+    ...localeContextOptions(config, locale),
   });
 }
 
@@ -121,10 +144,23 @@ function createContext(browser, config) {
  * verified matches what was rendered. A supplied context is reused by the worker; the
  * page is always fresh.
  */
-async function verifyRoute({ browser, origin, route, config, outputDir, context = null }) {
+async function verifyRoute({
+  browser,
+  origin,
+  route,
+  config,
+  outputDir,
+  context = null,
+  locale = null,
+}) {
   const ownsContext = context === null;
-  const activeContext = context ?? (await createContext(browser, config));
+  const activeContext = context ?? (await createContext(browser, config, locale));
   const page = await activeContext.newPage();
+  await installClock(page, config.fixedTime ?? null);
+  await installClockScripts(page, {
+    fixedTime: config.fixedTime ?? null,
+    randomSeed: config.randomSeed ?? null,
+  });
   const consoleMessages = [];
   const pageMessages = [];
   page.on('console', (message) => {
@@ -137,6 +173,15 @@ async function verifyRoute({ browser, origin, route, config, outputDir, context 
     if (config.blockThirdParty) {
       await blockThirdPartyRequests(page, origin, config.allowedHosts);
     }
+    await seedLocaleContext({
+      page,
+      context: activeContext,
+      origin,
+      config,
+      route,
+      locale,
+      phase: 'verify',
+    });
     await page.addInitScript(bootProbe);
     const response = await page.goto(toServerUrl(route, config.base, origin), {
       waitUntil: 'domcontentloaded',
@@ -177,6 +222,9 @@ async function verifyRoute({ browser, origin, route, config, outputDir, context 
       const expectedHtml = await fs.readFile(file, 'utf8').catch(() => null);
       if (liveHtml && expectedHtml) firstMismatch = compareContainers(expectedHtml, liveHtml);
     }
+    const hydrationPolicy = resolveHydrationPolicy(config, route);
+    const allowed = isHydrationAllowed(hydrationPolicy, { mode, hydrationErrors });
+    const effectiveHydrationErrors = allowed ? [] : hydrationErrors;
 
     return {
       route,
@@ -185,11 +233,14 @@ async function verifyRoute({ browser, origin, route, config, outputDir, context 
       notFound,
       framework: detected.name,
       empty,
-      hydrationErrors,
+      hydrationErrors: effectiveHydrationErrors,
+      ignoredHydrationErrors: allowed ? hydrationErrors : [],
+      hydrationPolicy,
+      allowed,
       consoleErrors,
       pageErrors,
       ok:
-        hydrationErrors.length === 0 &&
+        effectiveHydrationErrors.length === 0 &&
         (status === null || status < 400 || (isNotFoundRoute && status === 404)) &&
         !empty,
       mode,

@@ -326,6 +326,26 @@ describe('prerender integration: react 18 app', () => {
       // Hydration adopted the prerendered tags rather than adding a second set.
       assert.equal(await page.locator('meta[property="og:title"]').count(), 1);
       assert.equal(await page.title(), 'Head A | PPS');
+      assert.equal(await page.locator('html').getAttribute('lang'), 'fr');
+      assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+      assert.equal(await page.locator('body').getAttribute('class'), 'head-a');
+      assert.equal(await page.locator('body').getAttribute('data-scroll'), 'locked');
+      assert.equal(await page.locator('title').getAttribute('itemprop'), 'name');
+      assert.equal(
+        await page.locator('style[data-snappy-head="style:key:head-a-style"]').count(),
+        1,
+      );
+      assert.equal(
+        await page.locator('noscript[data-snappy-head="noscript:key:head-a-pixel"]').count(),
+        1,
+      );
+      const firstChanges = await page.evaluate(() => window.__snappyHeadChanges);
+      assert.ok(Array.isArray(firstChanges) && firstChanges.length > 0);
+      assert.equal(firstChanges.at(-1).title, 'Head A | PPS');
+      assert.equal(
+        firstChanges.some((change) => change.added.length > 0),
+        true,
+      );
 
       await page.getByRole('button', { name: 'Go to Head B' }).click();
       await page.waitForFunction(
@@ -335,6 +355,30 @@ describe('prerender integration: react 18 app', () => {
       );
 
       assert.equal(await page.title(), 'Head B | PPS');
+      // Attributes the previous route added are restored to the document's own values.
+      assert.equal(await page.locator('html').getAttribute('lang'), 'en');
+      assert.equal(await page.locator('html').getAttribute('data-theme'), null);
+      assert.equal(await page.locator('body').getAttribute('class'), null);
+      assert.equal(await page.locator('body').getAttribute('data-scroll'), null);
+      assert.equal(await page.locator('title').getAttribute('itemprop'), null);
+      assert.equal(
+        await page.locator('style[data-snappy-head="style:key:head-a-style"]').count(),
+        0,
+      );
+      assert.equal(
+        await page.locator('noscript[data-snappy-head="noscript:key:head-a-pixel"]').count(),
+        0,
+      );
+      const afterNavigation = await page.evaluate(() => window.__snappyHeadChanges);
+      assert.ok(afterNavigation.length > firstChanges.length);
+      assert.equal(afterNavigation.at(-1).title, 'Head B | PPS');
+      const afterFirst = afterNavigation.slice(firstChanges.length);
+      assert.equal(
+        afterFirst.some(
+          (change) => change.added.includes('title') && change.removed.includes('title'),
+        ),
+        true,
+      );
       assert.equal(await page.locator('meta[property="og:title"]').count(), 1);
       assert.equal(await page.locator('meta[name="description"]').count(), 1);
       assert.equal(

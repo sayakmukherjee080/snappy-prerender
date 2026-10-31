@@ -76,6 +76,15 @@ describe('collectPageMeta', () => {
     ]);
   });
 
+  it('reads html language and Open Graph locale', () => {
+    const meta = collectPageMeta(
+      '<!doctype html><html lang="fr" dir="ltr"><head><meta property="og:locale" content="fr_FR"></head><body></body></html>',
+    );
+    assert.equal(meta.lang, 'fr');
+    assert.equal(meta.dir, 'ltr');
+    assert.equal(meta.ogLocale, 'fr_FR');
+  });
+
   it('reports missing values as absent rather than inventing them', () => {
     const meta = collectPageMeta(html({}));
     assert.equal(meta.title, null);

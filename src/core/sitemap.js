@@ -26,7 +26,7 @@ export function buildSitemap({ files, config, maxUrls = SITEMAP_MAX_URLS }) {
         })
       : publicPath(file.file);
     entries.push({
-      loc: `${siteUrl}${toPublicPath(path, config.base)}`,
+      loc: file.localeUrl ?? `${siteUrl}${toPublicPath(path, config.base)}`,
       alternates: normaliseAlternates(file.alternates ?? [], siteUrl, config.base),
       images: config.imageSitemap ? normaliseImages(file.images ?? [], siteUrl, config.base) : [],
     });

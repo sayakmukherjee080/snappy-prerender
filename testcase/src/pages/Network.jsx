@@ -14,7 +14,6 @@ import {
   SATELLITES,
   SECTION_IDS,
 } from '../content/site.js';
-import { usePageMeta } from '../hooks/usePageMeta.js';
 
 const HANDOFF_STEPS = [
   {
@@ -39,12 +38,6 @@ const HANDOFF_STEPS = [
  * Renders the constellation, ground segment, route latency, handoff sequence, and telemetry.
  */
 export default function Network() {
-  usePageMeta({
-    title: 'Network',
-    description:
-      'Twenty-four satellites, six orbital planes, eight ground stations, and an optical mesh that routes LLM inference around the horizon.',
-  });
-
   return (
     <>
       <PageHero

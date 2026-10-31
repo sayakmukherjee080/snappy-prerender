@@ -36,6 +36,9 @@ export function buildReport(report, config = null) {
     durationMs: report.durationMs,
     timings: report.timings,
     ok: report.ok,
+    clock: report.clock ?? null,
+    locales: report.locales ?? null,
+    seoLocale: report.seoLocale ?? null,
     summary: {
       routes: report.routeDetails.length,
       files: report.files.filter((file) => file.status !== 'dry-run').length,
@@ -49,6 +52,9 @@ export function buildReport(report, config = null) {
           modes: report.verification.modes,
           frameworks: report.verification.frameworks,
           skipped: report.verification.skipped ?? 0,
+          policySkipped: report.verification.policySkipped ?? 0,
+          allowed: report.verification.allowed ?? 0,
+          allowedRerender: report.verification.allowedRerender ?? 0,
           errors: report.verification.errors,
         }
       : null,
