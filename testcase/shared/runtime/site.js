@@ -5,6 +5,11 @@ import { loadNews, resetNews } from './news.js';
 import { preferencesFromSearch, readPreferences, writePreferences } from './preferences.js';
 import { matchRoute, normalizePath } from './router.js';
 
+// Routes whose prerendered document carries a non-default locale fixture.
+const LOCALE_FIXTURES = {
+  '/lab/head-parity': { lang: 'fr', ogLocale: 'fr_FR' },
+};
+
 /**
  * Reads the metadata defaults the prerenderer persisted, either from the inert JSON script
  * or from the init-script global used during rendering.
@@ -53,7 +58,7 @@ function publicPageUrl(path, defaults) {
  * the island mount hook, so routing, metadata, preferences, the demo gate, and the live feed
  * behave identically in every framework.
  * @param {{ renderHtml: (html: string) => void, mountIslands: (root: HTMLElement, ctx: object) => void, getRoot?: () => HTMLElement | null }} options
- * @returns {{ start: () => void, state: object, navigate: Function, setPreferences: Function, setHidden: Function }}
+ * @returns {{ start: () => void, state: object, navigate: Function, setPreferences: Function, setHidden: Function, dispose: () => void }}
  */
 export function createSiteApp({
   renderHtml,
@@ -68,6 +73,8 @@ export function createSiteApp({
     hiddenUnlocked: readUnlocked(),
     news: { status: 'idle', data: null },
   };
+  let renderVersion = 0;
+  let disposed = false;
 
   /**
    * Copies the address bar into the application state.
@@ -115,6 +122,20 @@ export function createSiteApp({
     setMeta('name', 'twitter:title', fullTitle);
     setMeta('name', 'twitter:description', meta.description);
 
+    const locale = state.hiddenUnlocked ? LOCALE_FIXTURES[state.path] : null;
+    document.documentElement.lang = locale?.lang ?? 'en';
+    if (locale) document.documentElement.dataset.snappyLocaleLang = 'true';
+    else document.documentElement.removeAttribute('data-snappy-locale-lang');
+    for (const tag of document.head.querySelectorAll(
+      'meta[property="og:locale"], meta[property="og:locale:alternate"]',
+    )) {
+      tag.remove();
+    }
+    for (const link of document.head.querySelectorAll('link[rel="alternate"][hreflang]')) {
+      link.remove();
+    }
+    if (locale) setMeta('property', 'og:locale', locale.ogLocale);
+
     if (meta.notFound) {
       // A missing page must not advertise a canonical URL for a path that does not exist.
       document.head.querySelector('link[rel="canonical"]')?.remove();
@@ -159,6 +180,19 @@ export function createSiteApp({
    * @returns {Promise<void>}
    */
   async function render({ scroll = true } = {}) {
+    if (disposed) return;
+    renderVersion += 1;
+    const version = renderVersion;
+    // Lab dialogs are appended to <body>, outside the root that this render replaces.
+    // Close and remove them so a navigation cannot leave a modal blocking the new page.
+    for (const dialog of document.querySelectorAll('dialog.lab-dialog')) {
+      dialog.close();
+      dialog.remove();
+    }
+    // A navigation can happen while the mobile menu has locked body scrolling.
+    // Clearing it here keeps the new page scrollable even when the link was outside
+    // the menu and therefore never called the menu's close handler.
+    document.body.style.removeProperty('overflow');
     const matched = matchRoute(routes, state.path);
     const route = matched?.route ?? NOT_FOUND_ROUTE;
     const params = matched?.params ?? {};
@@ -175,6 +209,9 @@ export function createSiteApp({
     });
 
     await renderHtml(page.html);
+    // A newer navigation may have started while the host framework was rendering.
+    // Only the latest render may update the head and attach island listeners.
+    if (disposed || version !== renderVersion) return;
     applyHead(page);
 
     const root = getRoot();
@@ -196,7 +233,8 @@ export function createSiteApp({
     if (scroll) {
       if (state.hash) {
         const target = document.getElementById(state.hash.slice(1));
-        target?.scrollIntoView({ block: 'start' });
+        if (target) target.scrollIntoView({ block: 'start' });
+        else window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
       } else {
         window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
       }
@@ -224,29 +262,38 @@ export function createSiteApp({
   /**
    * Persists a preference snapshot and re-renders.
    * @param {{ flags: Record<string, boolean>, variant: string }} next
+   * @returns {Promise<void>}
    */
   function setPreferences(next) {
     state.preferences = next;
     writePreferences(next);
-    render({ scroll: false });
+    return render({ scroll: false });
   }
 
   /**
    * Persists the demo lab lock state and re-renders.
    * @param {boolean} value
+   * @returns {Promise<void>}
    */
   function setHidden(value) {
     state.hiddenUnlocked = value;
     writeUnlocked(value);
-    render({ scroll: false });
+    return render({ scroll: false });
   }
 
-  window.addEventListener('popstate', () => {
+  /**
+   * Restores state from the address bar after a history navigation.
+   */
+  function handlePopState() {
     syncLocation();
     render({ scroll: true });
-  });
+  }
 
-  document.addEventListener('click', (event) => {
+  /**
+   * Routes same-origin anchor clicks through the client renderer.
+   * @param {MouseEvent} event
+   */
+  function handleDocumentClick(event) {
     if (event.defaultPrevented || event.button !== 0) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const anchor = event.target?.closest?.('a');
@@ -265,12 +312,24 @@ export function createSiteApp({
     if (url.origin !== window.location.origin) return;
     event.preventDefault();
     navigate(`${url.pathname}${url.search}${url.hash}`);
-  });
+  }
+
+  window.addEventListener('popstate', handlePopState);
+  document.addEventListener('click', handleDocumentClick);
 
   return {
     start() {
       syncLocation();
       render({ scroll: true });
+    },
+    /**
+     * Removes the document-level listeners so a host framework can unmount this instance
+     * without leaving a second router attached to the page.
+     */
+    dispose() {
+      disposed = true;
+      window.removeEventListener('popstate', handlePopState);
+      document.removeEventListener('click', handleDocumentClick);
     },
     state,
     navigate,

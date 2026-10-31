@@ -23,7 +23,12 @@ export function matchPath(pattern, pathname) {
 
     if (segment.startsWith(':')) {
       if (pathSegments[index] === undefined) return null;
-      params[segment.slice(1)] = decodeURIComponent(pathSegments[index]);
+      try {
+        params[segment.slice(1)] = decodeURIComponent(pathSegments[index]);
+      } catch {
+        // A malformed percent escape cannot name a route; let the caller render the 404.
+        return null;
+      }
       continue;
     }
 

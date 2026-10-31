@@ -81,7 +81,9 @@ export function apiIndexPage(data) {
         )
         .join('')}</fieldset>
     </div>
-    <p class="docs-index__count" aria-live="polite" data-filter-count>${articles.length} articles</p>
+    <p class="docs-index__count" aria-live="polite" data-filter-count>${articles.length} ${
+      articles.length === 1 ? 'article' : 'articles'
+    }</p>
     <div class="api-grid" data-filter-list>${articles
       .map(
         (article, index) =>

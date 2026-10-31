@@ -1,4 +1,3 @@
-import { flushSync } from 'preact/compat';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import '../../shared/styles/site.css';
 import { mountIslands } from '../../shared/runtime/islands.js';
@@ -15,12 +14,15 @@ function App({ initialHtml = '' }) {
   useEffect(() => {
     const site = createSiteApp({
       async renderHtml(value) {
-        flushSync(() => setHtml(value));
+        setHtml(value);
+        // Let Preact commit the state update before islands are wired to the new DOM.
+        await Promise.resolve();
       },
       mountIslands,
       getRoot: () => container.current,
     });
     site.start();
+    return () => site.dispose();
   }, []);
 
   // biome-ignore lint/security/noDangerouslySetInnerHtml: the shared renderer produces the trusted site HTML.

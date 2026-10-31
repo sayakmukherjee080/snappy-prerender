@@ -174,9 +174,14 @@ function renderWithLayout(route, params, state, content) {
  */
 export function renderRoute(route, params, state) {
   let meta = route.meta?.(params) ?? DEFAULT_META;
+  let notFound = route.page === 'not-found';
+  let noindex = Boolean(route.noindex || route.hidden);
+  if (route.page === 'api-index' && state.news?.status === 'error') noindex = true;
   if (route.page === 'api-article') {
     const index = Number(params.index);
     const article = state.news?.status === 'ready' ? state.news.data?.articles?.[index - 1] : null;
+    if (state.news?.status === 'ready') notFound = !article;
+    else if (state.news?.status === 'error') notFound = true;
     meta = article
       ? {
           title: article.title,
@@ -192,8 +197,8 @@ export function renderRoute(route, params, state) {
     content: renderWithLayout(route, params, state, content),
     title: meta.title ?? DEFAULT_META.title,
     description: meta.description ?? DEFAULT_META.description,
-    noindex: Boolean(route.noindex || route.hidden),
-    notFound: route.page === 'not-found',
+    noindex: Boolean(noindex || notFound),
+    notFound,
     headOnly: Boolean(route.headOnly),
     layout: route.layout,
   };

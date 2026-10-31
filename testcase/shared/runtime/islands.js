@@ -25,6 +25,7 @@ function bindKeyboard() {
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
+      activeMenuClose?.();
       activePalette?.open();
     } else if (event.key === 'Escape') {
       activePalette?.close();
@@ -154,7 +155,7 @@ function setupPalette(root, ctx) {
   });
 
   for (const action of backdrop.querySelectorAll('[data-palette-action]')) {
-    action.addEventListener('click', () => {
+    action.addEventListener('click', async () => {
       const kind = action.dataset.paletteAction;
       if (kind === 'telemetry') {
         const next = {
@@ -164,14 +165,14 @@ function setupPalette(root, ctx) {
             telemetry: !ctx.state.preferences.flags.telemetry,
           },
         };
-        ctx.setPreferences(next);
+        await ctx.setPreferences(next);
         reopen();
       } else if (kind === 'variant') {
         const next = {
           ...ctx.state.preferences,
           variant: ctx.state.preferences.variant === 'a' ? 'b' : 'a',
         };
-        ctx.setPreferences(next);
+        await ctx.setPreferences(next);
         reopen();
       } else if (kind === 'hidden') {
         const next = {
@@ -181,11 +182,11 @@ function setupPalette(root, ctx) {
             showHidden: !ctx.state.preferences.flags.showHidden,
           },
         };
-        ctx.setPreferences(next);
+        await ctx.setPreferences(next);
         reopen();
       } else if (kind === 'lock') {
         close();
-        ctx.setHidden(false);
+        await ctx.setHidden(false);
       }
     });
   }
@@ -247,7 +248,7 @@ function setupHeader(root, palette) {
   }
 
   toggle.addEventListener('click', () => setMenu(menu.hidden));
-  for (const link of header.querySelectorAll('[data-menu-link]')) {
+  for (const link of header.querySelectorAll('a')) {
     link.addEventListener('click', () => setMenu(false));
   }
   activeMenuClose = () => setMenu(false);
