@@ -1,0 +1,18 @@
+import { html, render } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import '../../shared/styles/site.css';
+import { mountIslands } from '../../shared/runtime/islands.js';
+import { createSiteApp } from '../../shared/runtime/site.js';
+
+const root = document.getElementById('root');
+
+const site = createSiteApp({
+  async renderHtml(value) {
+    render(html`<div>${unsafeHTML(value)}</div>`, root);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  },
+  mountIslands,
+  getRoot: () => root,
+});
+
+site.start();

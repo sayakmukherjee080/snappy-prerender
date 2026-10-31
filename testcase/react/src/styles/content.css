@@ -1,0 +1,342 @@
+.api-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: start;
+}
+
+.api-aside {
+  padding-top: 0.5rem;
+}
+
+.endpoint {
+  margin-top: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--dark-line);
+  background: var(--dark-raised);
+  color: var(--dark-text);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.check-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1.5rem 0;
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--dark-line);
+  border-bottom: 1px solid var(--dark-line);
+  list-style: none;
+}
+
+.check-list li {
+  position: relative;
+  padding-left: 1.2rem;
+  color: var(--dark-muted);
+  font-size: 0.85rem;
+}
+
+.check-list li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  color: var(--orange);
+  font-family: var(--font-mono);
+}
+
+.api-aside__note {
+  color: var(--dark-muted);
+  font-size: 0.75rem;
+}
+
+.api-aside__note code {
+  color: var(--dark-text);
+  font-family: var(--font-mono);
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.tile {
+  padding: 2rem;
+  background: var(--paper-raised);
+}
+
+.tile__data {
+  color: var(--orange-strong);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tile h3 {
+  margin-top: 1.25rem;
+  font-size: 1.2rem;
+}
+
+.tile p {
+  margin-top: 0.6rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.security-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: start;
+}
+
+.security-list {
+  display: grid;
+  padding: 0;
+  border-top: 1px solid var(--dark-line);
+  list-style: none;
+}
+
+.security-list li {
+  position: relative;
+  padding: 1rem 0 1rem 1.75rem;
+  border-bottom: 1px solid var(--dark-line);
+  color: var(--dark-muted);
+  font-size: 0.9rem;
+}
+
+.security-list li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  color: var(--orange);
+  font-family: var(--font-mono);
+}
+
+.security-panel {
+  padding: 1.5rem;
+  border: 1px solid var(--dark-line);
+  background: var(--dark-raised);
+}
+
+.security-panel ol {
+  display: grid;
+  margin: 1rem 0 1.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.security-panel li {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--dark-line);
+  color: var(--dark-muted);
+  font-size: 0.8rem;
+}
+
+.security-panel li span {
+  padding-top: 0.15rem;
+  color: var(--orange);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+}
+
+.security-panel__note {
+  margin-top: 1.25rem;
+  color: var(--dark-muted);
+  font-size: 0.72rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--paper-raised);
+}
+
+.data-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.data-table caption {
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.data-table thead th {
+  background: var(--paper-deep);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.data-table tbody th {
+  font-weight: 500;
+}
+
+.data-table tbody tr:last-child th,
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table-primary {
+  display: block;
+  font-weight: 500;
+}
+
+.table-secondary {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.mono-cell {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status-pill::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-pill--warn {
+  color: #a86a00;
+}
+
+.util {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 8rem;
+}
+
+.util__track {
+  flex: 1;
+  height: 5px;
+  background: var(--paper-deep);
+}
+
+.util__bar {
+  display: block;
+  height: 100%;
+  background: var(--orange);
+}
+
+.util__value {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+}
+
+.accordion {
+  border-top: 1px solid var(--line);
+}
+
+.accordion__item {
+  border-bottom: 1px solid var(--line);
+}
+
+.accordion__heading {
+  margin: 0;
+}
+
+.accordion__button {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 1.5rem;
+  gap: 1rem;
+  align-items: center;
+  width: 100%;
+  padding: 1.2rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.accordion__index {
+  color: var(--orange-strong);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+}
+
+.accordion__question {
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.accordion__icon {
+  color: var(--orange-strong);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  text-align: right;
+}
+
+.accordion__button:hover .accordion__question {
+  color: var(--orange-strong);
+}
+
+.accordion__panel {
+  padding: 0 0 1.4rem 3rem;
+}
+
+.accordion__panel p {
+  max-width: 44rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 960px) {
+  .api-layout,
+  .security-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .tile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

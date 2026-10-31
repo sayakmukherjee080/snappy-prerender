@@ -3,6 +3,9 @@ node_modules
 /temp
 /coverage
 /tests/fixtures/*/dist
+testcase/*/dist
+testcase/*/dist-*
+testcase/*/tmp
 *.log
 *.tgz
 .DS_Store
