@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [2.10.0] - 2026-10-31
+
+### Fixed
+
+- Framework parity fixtures now release mobile scroll locks and close the header menu on
+  every navigation path, including brand links, browser history, and the palette shortcut.
+- Palette preference changes wait for asynchronous host renders before reopening, and rapid
+  navigation renders no longer attach duplicate island listeners.
+- The Preact fixture no longer double-mounts through `flushSync`, and site controllers expose
+  `dispose()` for effect cleanup.
+- The French lab fixture no longer leaks `lang` or `og:locale` metadata onto later pages, and
+  locked lab pages stay English.
+- Lab dialogs, canvas animation frames, and worker timers are cleaned up when their route is
+  replaced.
+- Missing API records and API source failures are noindex and non-canonical; missing hashes
+  scroll to the top instead of preserving the previous position.
+- The React reference router falls through to the 404 page for malformed percent escapes.
+
 ## [2.9.0] - 2026-10-31
 
 ### Added
