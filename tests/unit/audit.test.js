@@ -105,6 +105,21 @@ describe('auditRun metadata', () => {
     assert.ok(rules.includes('heading-count'));
   });
 
+  it('does not require a canonical on the not-found page', async () => {
+    const outputDir = await makeOutput({ '404.html': '' });
+    const report = reportOf([
+      detail('/404', pageMeta({ noindex: true }), {
+        file: '404.html',
+        notFound: true,
+      }),
+    ]);
+    const audit = await auditRun({ report, config: configOf(), outputDir });
+    assert.equal(
+      audit.warnings.some((finding) => finding.rule === 'missing-canonical'),
+      false,
+    );
+  });
+
   it('warns about build-origin metadata and canonical mismatches', async () => {
     const outputDir = await makeOutput({ 'index.html': '' });
     const report = reportOf([

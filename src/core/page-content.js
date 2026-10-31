@@ -16,12 +16,25 @@ export async function readPageState(page) {
 }
 
 /**
+ * Decides whether the app kept the prerendered markup. Every captured wrapper on the
+ * path from the container to the page body must still be connected; a framework that
+ * replaces the wrapper's content but keeps the wrapper itself is a re-render.
+ * @param {{ seen: boolean, childConnected: boolean, chainConnected: boolean[] }} boot
+ * @returns {boolean | null}
+ */
+export function isBootMarkupPreserved({ seen, childConnected, chainConnected }) {
+  if (!seen) return null;
+  if (chainConnected.length > 0) return chainConnected.every(Boolean);
+  return Boolean(childConnected);
+}
+
+/**
  * Reads the empty-page state, status marker, framework markers and boot state in one
  * round trip. Verification runs this on every route, so the combined probe avoids three
  * separate CDP calls.
  */
 export async function readBootState(page, selector = CONTAINER_SELECTOR) {
-  return page.evaluate((containerSelector) => {
+  const { boot, ...state } = await page.evaluate((containerSelector) => {
     const pageContainer =
       document.querySelector(containerSelector) ?? document.body?.firstElementChild ?? null;
     const contentContainer = document.querySelector(containerSelector) ?? document.body;
@@ -48,16 +61,27 @@ export async function readBootState(page, selector = CONTAINER_SELECTOR) {
               pageContainer.firstElementChild?._children,
           ),
           svelte: Boolean(
-            pageContainer.__svelte_meta || pageContainer.querySelector?.('[data-svelte-h]'),
+            pageContainer.__svelte_meta ||
+              pageContainer.querySelector?.('[data-svelte-h]') ||
+              globalThis.__svelte ||
+              [...(pageContainer.childNodes ?? [])].some(
+                (node) => node.nodeType === 8 && (node.data === '[' || node.data === '[!'),
+              ),
           ),
         }
       : {};
     const child = window.__snappyBoot?.prerenderedChild ?? null;
+    const chain = window.__snappyBoot?.prerenderedChain ?? [];
     return {
       empty,
       statusCode: Number.isFinite(value) ? value : null,
       markers,
-      markupPreserved: child ? child.isConnected : null,
+      boot: {
+        seen: Boolean(child),
+        childConnected: Boolean(child?.isConnected),
+        chainConnected: chain.map((node) => Boolean(node?.isConnected)),
+      },
     };
   }, selector);
+  return { ...state, markupPreserved: isBootMarkupPreserved(boot) };
 }

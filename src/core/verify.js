@@ -20,16 +20,25 @@ import { settlePage, trackNetwork } from './settle.js';
  * client re-render: hydration adopts those nodes, createRoot discards them.
  */
 function bootProbe() {
-  window.__snappyBoot = { prerenderedChild: null };
+  window.__snappyBoot = { prerenderedChild: null, prerenderedChain: [] };
 
-  // Records the container's first child while the parser is still building the page.
+  // Records the container's first child and the first-element chain beneath it while the
+  // parser is still building the page. A framework that keeps only the outer wrapper but
+  // replaces everything inside it is a re-render, so checking the wrapper alone is not
+  // enough to call a route hydrated.
   const capture = () => {
-    if (window.__snappyBoot.prerenderedChild) return;
     const container =
       document.querySelector('#root, #app, #__next') ?? document.body?.firstElementChild;
     if (!container) return;
-    window.__snappyBoot.prerenderedChild =
-      container.firstElementChild ?? container.firstChild ?? null;
+    const boot = window.__snappyBoot;
+    if (!boot.prerenderedChild) {
+      boot.prerenderedChild = container.firstElementChild ?? container.firstChild ?? null;
+    }
+    let node = container.firstElementChild;
+    for (let depth = 0; node && depth < 6; depth += 1) {
+      if (!boot.prerenderedChain[depth]) boot.prerenderedChain[depth] = node;
+      node = node.firstElementChild;
+    }
   };
 
   const observer = new MutationObserver(capture);

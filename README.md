@@ -254,20 +254,20 @@ After writing the output, each route is loaded again in a fresh browser context 
 
 **Hydration errors.** Mismatch messages for React, Vue, Svelte and Preact are reported with the route, framework and message. React text mismatches and minified production codes (`#418`, `#423`, `#425`) are recognised; Preact uses the React-compatible messages. A mismatch means the client re-renders the page instead of adopting the static markup. The crawler-visible HTML is unchanged.
 
-The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`); nothing is imported or executed. Set `framework` when a custom root defeats detection. When a route has hydration errors or re-rendered, `firstMismatch` reports the first difference between the written HTML and the live container as `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
+The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`, Svelte 5's `<!--[-->` hydration anchor, and the Svelte 5 `window.__svelte` runtime global); nothing is imported or executed. Set `framework` when a custom root defeats detection. When a route has hydration errors or re-rendered, `firstMismatch` reports the first difference between the written HTML and the live container as `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
 
-A probe installed before the app's scripts run records the first prerendered node and checks whether it survived:
+A probe installed before the app's scripts run records the container's first prerendered node and the first-element chain beneath it, then checks whether every captured wrapper survived:
 
 | Mode | Meaning |
 | --- | --- |
-| `hydrated` | The app kept the prerendered markup. |
-| `re-rendered` | The app discarded it and rendered from scratch. |
+| `hydrated` | The app kept the prerendered markup, including the wrappers beneath the container. |
+| `re-rendered` | The app discarded it and rendered from scratch, or kept only the outer wrapper while replacing everything inside it. |
 | `undetected` | No framework root was found on the container. |
 | `unknown` | The prerendered node was not seen, for example a container outside the usual ids. |
 
 A verification navigation that returns HTTP 4xx/5xx, or a container with no content, is reported as failed with its `status` or `empty` flag. `undetected` and `unknown` are reported as counts; `failOnUndetected: true` fails the build for them. A verification pass that cannot run is listed in `verification.errors`; `failOnVerificationError: true` fails separately from hydration errors.
 
-`re-rendered` usually means the app calls `createRoot` instead of `hydrateRoot`. Since `createRoot` does not emit a hydration error, the mode report is the only signal. It is reported per route as `verification.routes[].mode` and summarised in `verification.modes`. Set `failOnRerender: true` to fail the build.
+`re-rendered` usually means the app calls `createRoot` instead of `hydrateRoot`, or mounts a string-rendered shell over a prerendered page. Since `createRoot` does not emit a hydration error, the mode report is the only signal. It is reported per route as `verification.routes[].mode` and summarised in `verification.modes`. Set `failOnRerender: true` to fail the build.
 
 **Page errors.** Uncaught browser errors are reported as warnings, and console errors at debug level. Errors thrown during rendering are counted in the summary and reported per route; `failOnPageError: true` makes them fail the build. By default the static HTML is still written.
 
