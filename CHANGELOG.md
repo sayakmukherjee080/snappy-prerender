@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [2.8.1] - 2026-10-31
+
+### Changed
+
+- README now includes the Product Hunt launch badge. No runtime behaviour changed.
+
 ## [2.8.0] - 2026-10-31
 
 ### Added
