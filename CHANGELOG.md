@@ -6,7 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [2.10.1] - 2026-11-01
+
+### Changed
+
+- An explicit `framework` is now authoritative: it selects mismatch patterns and treats
+  the route as mounted even when a custom root has no framework marker.
+- Svelte auto-detection no longer treats the page-wide `window.__svelte` global as a root
+  marker; Svelte 5 mount-only shells must set `framework: 'svelte'`.
+
+### Fixed
+
+- `Head` preserves URL fragments when a trailing-slash convention is applied.
+- The head manager prefers the newest matching tag when React 19 native metadata and
+  app-owned metadata share a key, so React can remove its own node on navigation.
+
 ## [2.10.0] - 2026-10-31
+
+> The items below are repository test-fixture changes. `testcase/` is not included in the
+> published npm package, so 2.10.0 does not change package runtime behavior.
 
 ### Fixed
 
