@@ -142,6 +142,21 @@ test('a malformed percent escape does not throw while matching routes', () => {
   });
 });
 
+test('locale metadata only applies to the unlocked locale fixture', () => {
+  const route = routes.find((item) => item.path === '/lab/head-parity');
+  const baseState = {
+    path: '/lab/head-parity',
+    search: '',
+    hash: '',
+    preferences: {},
+    news: { status: 'idle', data: null },
+  };
+  const locked = renderRoute(route, {}, { ...baseState, hiddenUnlocked: false });
+  const unlocked = renderRoute(route, {}, { ...baseState, hiddenUnlocked: true });
+  assert.equal(locked.locale, null);
+  assert.deepEqual(unlocked.locale, { lang: 'fr', ogLocale: 'fr_FR' });
+});
+
 test('the not-found document is marked noindex and not canonicalised', () => {
   const page = renderDocument(
     NOT_FOUND_ROUTE,

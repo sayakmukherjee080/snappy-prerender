@@ -31,6 +31,7 @@ export default function ApiArticlePage() {
         title={`API article ${index}`}
         description={`API article ${index} from the live Spaceflight News API.`}
         robots="noindex,follow"
+        canonical={false}
       />
       <NewsBoundary>
         <Suspense fallback={<ApiSkeleton />}>
@@ -57,6 +58,7 @@ function ApiArticleContent() {
           title={`API article ${index} is missing`}
           description={`The live Spaceflight News API returned ${data.articles.length} records, so article ${index} is not available right now.`}
           robots="noindex,nofollow"
+          canonical={false}
         />
         <section className="api-error">
           <p className="eyebrow">API / Missing record</p>

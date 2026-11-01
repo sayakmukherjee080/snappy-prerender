@@ -20,13 +20,16 @@ export function pagePath(route, { flatOutput = false, trailingSlash = 'preserve'
  */
 export function withTrailingSlash(url, convention) {
   if (convention !== 'always' && convention !== 'never') return url;
-  const [path, query] = url.split('?');
+  const hashIndex = url.indexOf('#');
+  const hash = hashIndex === -1 ? '' : url.slice(hashIndex);
+  const withoutHash = hashIndex === -1 ? url : url.slice(0, hashIndex);
+  const [path, query] = withoutHash.split('?');
+  const suffix = `${query ? `?${query}` : ''}${hash}`;
   const isRoot = /^https?:\/\/[^/]+\/?$/i.test(path);
   if (convention === 'always') {
     const next = path.endsWith('/') ? path : `${path}/`;
-    return query ? `${next}?${query}` : next;
+    return `${next}${suffix}`;
   }
-  if (isRoot) return query ? `${path.replace(/\/$/, '/')}?${query}` : path.replace(/\/?$/, '/');
-  const next = path.replace(/\/+$/, '');
-  return query ? `${next}?${query}` : next;
+  if (isRoot) return `${path.replace(/\/?$/, '/')}${suffix}`;
+  return `${path.replace(/\/+$/, '')}${suffix}`;
 }

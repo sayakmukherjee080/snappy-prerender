@@ -5,11 +5,6 @@ import { loadNews, resetNews } from './news.js';
 import { preferencesFromSearch, readPreferences, writePreferences } from './preferences.js';
 import { matchRoute, normalizePath } from './router.js';
 
-// Routes whose prerendered document carries a non-default locale fixture.
-const LOCALE_FIXTURES = {
-  '/lab/head-parity': { lang: 'fr', ogLocale: 'fr_FR' },
-};
-
 /**
  * Reads the metadata defaults the prerenderer persisted, either from the inert JSON script
  * or from the init-script global used during rendering.
@@ -89,7 +84,7 @@ export function createSiteApp({
 
   /**
    * Applies the active route metadata to the document head.
-   * @param {{ title: string, description: string, noindex: boolean, notFound?: boolean }} meta
+   * @param {{ title: string, description: string, noindex: boolean, notFound?: boolean, locale?: object | null }} meta
    */
   function applyHead(meta) {
     const fullTitle = `${meta.title} — Aether Compute`;
@@ -122,7 +117,7 @@ export function createSiteApp({
     setMeta('name', 'twitter:title', fullTitle);
     setMeta('name', 'twitter:description', meta.description);
 
-    const locale = state.hiddenUnlocked ? LOCALE_FIXTURES[state.path] : null;
+    const locale = meta.locale ?? null;
     document.documentElement.lang = locale?.lang ?? 'en';
     if (locale) document.documentElement.dataset.snappyLocaleLang = 'true';
     else document.documentElement.removeAttribute('data-snappy-locale-lang');
@@ -131,10 +126,13 @@ export function createSiteApp({
     )) {
       tag.remove();
     }
-    for (const link of document.head.querySelectorAll('link[rel="alternate"][hreflang]')) {
-      link.remove();
+    if (locale) {
+      setMeta('property', 'og:locale', locale.ogLocale);
+    } else {
+      for (const link of document.head.querySelectorAll('link[rel="alternate"][hreflang]')) {
+        link.remove();
+      }
     }
-    if (locale) setMeta('property', 'og:locale', locale.ogLocale);
 
     if (meta.notFound) {
       // A missing page must not advertise a canonical URL for a path that does not exist.

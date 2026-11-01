@@ -15,8 +15,9 @@ function App({ initialHtml = '' }) {
     const site = createSiteApp({
       async renderHtml(value) {
         setHtml(value);
-        // Let Preact commit the state update before islands are wired to the new DOM.
-        await Promise.resolve();
+        // Let Preact commit before islands are wired to the new DOM. A macrotask is
+        // robust even if the scheduler changes from microtask batching.
+        await new Promise((resolve) => setTimeout(resolve, 0));
       },
       mountIslands,
       getRoot: () => container.current,

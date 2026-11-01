@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 
 const SITE_NAME = 'Aether Compute';
+const PAGE_META_MARKER = 'data-page-meta';
 
 /**
  * Creates or updates a single meta tag so each route can own its search and social preview text.
+ * Tags created here carry a marker so a Head-owned route can remove only this hook's tags.
  * @param {'name' | 'property'} attribute
  * @param {string} key
  * @param {string} content
@@ -13,6 +15,7 @@ function setMetaTag(attribute, key, content) {
   if (!tag) {
     tag = document.createElement('meta');
     tag.setAttribute(attribute, key);
+    tag.setAttribute(PAGE_META_MARKER, '');
     document.head.appendChild(tag);
   }
   tag.setAttribute('content', content);
@@ -49,6 +52,10 @@ export function usePageMeta({
   enabled = true,
 }) {
   useEffect(() => {
+    // Remove the previous route's tags before applying the next metadata surface.
+    for (const tag of document.head.querySelectorAll(`[${PAGE_META_MARKER}]`)) {
+      tag.remove();
+    }
     if (!enabled) return;
     const defaults = readMetadataDefaults();
     const fullTitle = `${title} — ${SITE_NAME}`;
@@ -98,6 +105,7 @@ function setCanonical(href) {
   if (!link) {
     link = document.createElement('link');
     link.setAttribute('rel', 'canonical');
+    link.setAttribute(PAGE_META_MARKER, '');
     document.head.appendChild(link);
   }
   link.setAttribute('href', href);

@@ -29,6 +29,7 @@ export default function ApiIndexPage() {
         title="API explorer"
         description="Fifty live pages built at runtime from the Spaceflight News API, with no local article fixtures."
         robots="noindex,follow"
+        canonical={false}
       />
       <NewsBoundary>
         <Suspense fallback={<ApiSkeleton />}>

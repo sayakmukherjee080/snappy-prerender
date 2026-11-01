@@ -24,6 +24,7 @@ export default class SiteApp extends Component {
       getRoot: () => component.root,
     });
     component.site.start();
+    return () => component.site?.dispose();
   });
 
   <template>

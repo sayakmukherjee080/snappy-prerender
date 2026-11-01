@@ -18,6 +18,7 @@ onMount(() => {
     getRoot: () => container,
   });
   site.start();
+  return () => site.dispose();
 });
 </script>
 

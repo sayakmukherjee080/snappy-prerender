@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onMounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { mountIslands } from '../../shared/runtime/islands.js';
 import { createSiteApp } from '../../shared/runtime/site.js';
 
@@ -11,9 +11,10 @@ const props = defineProps({
 });
 const html = ref(props.initialHtml);
 const container = ref(null);
+let site;
 
 onMounted(() => {
-  const site = createSiteApp({
+  site = createSiteApp({
     async renderHtml(value) {
       html.value = value;
       await nextTick();
@@ -23,6 +24,8 @@ onMounted(() => {
   });
   site.start();
 });
+
+onUnmounted(() => site?.dispose());
 </script>
 
 <template>

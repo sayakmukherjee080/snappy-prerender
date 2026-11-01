@@ -170,7 +170,7 @@ function renderWithLayout(route, params, state, content) {
  * @param {object} route
  * @param {Record<string, string>} params
  * @param {object} state
- * @returns {{ content: string, title: string, description: string, noindex: boolean, notFound: boolean, headOnly: boolean, layout: string }}
+ * @returns {{ content: string, title: string, description: string, noindex: boolean, notFound: boolean, locale: object | null, headOnly: boolean, layout: string }}
  */
 export function renderRoute(route, params, state) {
   let meta = route.meta?.(params) ?? DEFAULT_META;
@@ -193,12 +193,14 @@ export function renderRoute(route, params, state) {
         };
   }
   const content = renderContent(route, params, state);
+  const locale = route.locale && (!route.hidden || state.hiddenUnlocked) ? route.locale : null;
   return {
     content: renderWithLayout(route, params, state, content),
     title: meta.title ?? DEFAULT_META.title,
     description: meta.description ?? DEFAULT_META.description,
     noindex: Boolean(noindex || notFound),
     notFound,
+    locale,
     headOnly: Boolean(route.headOnly),
     layout: route.layout,
   };
@@ -209,7 +211,7 @@ export function renderRoute(route, params, state) {
  * @param {object} route
  * @param {Record<string, string>} params
  * @param {object} state
- * @returns {{ html: string, title: string, description: string, noindex: boolean, notFound: boolean, headOnly: boolean }}
+ * @returns {{ html: string, title: string, description: string, noindex: boolean, notFound: boolean, locale: object | null, headOnly: boolean }}
  */
 export function renderDocument(route, params, state) {
   const page = renderRoute(route, params, state);
@@ -219,6 +221,7 @@ export function renderDocument(route, params, state) {
     description: page.description,
     noindex: page.noindex,
     notFound: page.notFound,
+    locale: page.locale,
     headOnly: page.headOnly,
   };
 }
