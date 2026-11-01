@@ -114,6 +114,28 @@ describe('prerender integration: framework detection and mismatch locator', () =
     assert.equal(entry.consoleErrors.length, 1);
   });
 
+  it('trusts an explicit framework on a custom root without a marker', async () => {
+    const staticDir = await makeStaticSite({
+      'index.html': `<!doctype html><html><head><title>Custom root</title></head><body>
+        <div id="root"><h1>Custom root</h1></div>
+      </body></html>`,
+    });
+    const report = await prerender({
+      sourceDir: staticDir,
+      include: ['/'],
+      framework: 'react',
+      verify: true,
+      audit: false,
+      logLevel: 'silent',
+      captureFormState: false,
+      captureRuntimeStyles: false,
+    });
+    const entry = report.verification.routes.find((route) => route.route === '/');
+    assert.equal(entry.framework, 'react');
+    assert.equal(entry.mode, 'hydrated');
+    assert.equal(entry.ok, true);
+  });
+
   it('reuses verification contexts when requested', async () => {
     const staticDir = await makeStaticSite({
       'index.html':

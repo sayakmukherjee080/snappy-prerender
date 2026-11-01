@@ -43,11 +43,12 @@ describe('detectFramework', () => {
     });
   });
 
-  it('detects a Svelte 5 client runtime from the page global', () => {
+  it('does not auto-detect Svelte from the page global alone', () => {
     const container = {
       ownerDocument: { defaultView: { __svelte: { v: new Set(['5.0.0']) } } },
     };
-    assert.deepEqual(detectFramework(container), { name: 'svelte', mounted: true });
+    assert.deepEqual(detectFramework(container), { name: null, mounted: false });
+    assert.deepEqual(detectFramework(container, 'svelte'), { name: 'svelte', mounted: true });
   });
 
   it('does not mistake plain keys for a framework', () => {
@@ -57,15 +58,16 @@ describe('detectFramework', () => {
     });
   });
 
-  it('limits detection to an explicitly requested framework', () => {
+  it('treats an explicitly requested framework as authoritative', () => {
     assert.deepEqual(detectFramework({ __vue_app__: {} }, 'react'), {
       name: 'react',
-      mounted: false,
+      mounted: true,
     });
     assert.deepEqual(detectFramework({ __vue_app__: {} }, 'vue'), {
       name: 'vue',
       mounted: true,
     });
+    assert.deepEqual(detectFramework({}, 'react'), { name: 'react', mounted: true });
   });
 });
 
@@ -79,6 +81,14 @@ describe('frameworkFromMarkers', () => {
 
   it('reports no framework when nothing matches', () => {
     assert.deepEqual(frameworkFromMarkers({}), { name: null, mounted: false });
+  });
+
+  it('trusts an explicit framework even without its marker', () => {
+    assert.deepEqual(frameworkFromMarkers({}, 'react'), { name: 'react', mounted: true });
+    assert.deepEqual(frameworkFromMarkers({ svelte: true }, 'vue'), {
+      name: 'vue',
+      mounted: true,
+    });
   });
 });
 

@@ -20,14 +20,12 @@ const SVELTE = (container) =>
   Boolean(
     container.__svelte_meta ||
       container.querySelector?.('[data-svelte-h]') ||
-      container.ownerDocument?.defaultView?.__svelte ||
       (container.childNodes &&
         [...container.childNodes].some(
           (node) => node.nodeType === 8 && (node.data === '[' || node.data === '[!'),
         )),
   );
 
-const DETECTORS = { react: REACT, vue: VUE, preact: PREACT, svelte: SVELTE };
 const AUTO_ORDER = ['react', 'vue', 'preact', 'svelte'];
 
 /**
@@ -37,7 +35,9 @@ const AUTO_ORDER = ['react', 'vue', 'preact', 'svelte'];
 export function detectFramework(container, requested = 'auto') {
   if (!container) return { name: null, mounted: false };
   if (requested !== 'auto') {
-    return { name: requested, mounted: Boolean(DETECTORS[requested]?.(container)) };
+    // An explicit framework is authoritative: the caller has opted into the mismatch
+    // patterns even when a custom root has no framework-specific DOM marker.
+    return { name: requested, mounted: true };
   }
   const markers = {
     react: REACT(container),
@@ -54,7 +54,9 @@ export function detectFramework(container, requested = 'auto') {
  */
 export function frameworkFromMarkers(markers, requested = 'auto') {
   if (requested !== 'auto') {
-    return { name: requested, mounted: markers?.[requested] === true };
+    // Explicit framework selection trusts the app to have mounted; the empty-page and
+    // page-error checks still catch a route that never rendered.
+    return { name: requested, mounted: true };
   }
   for (const name of AUTO_ORDER) {
     if (markers?.[name] === true) return { name, mounted: true };

@@ -15,7 +15,7 @@ export function RouteView() {
   const { route, params, location } = useRouter();
   const hiddenUnlocked = useHiddenAccess();
   const meta = useMemo(() => route.meta?.(params) ?? {}, [route, params]);
-  const headOwned = route.headOnly === true && hiddenUnlocked;
+  const headOwned = route.headOnly === true && (!route.hidden || hiddenUnlocked);
 
   usePageMeta({
     title: meta.title ?? 'Orbital inference network',

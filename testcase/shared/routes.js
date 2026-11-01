@@ -54,6 +54,10 @@ const docsSectionRoute = (section) =>
     },
   });
 
+const LAB_LOCALES = {
+  'head-parity': { lang: 'fr', ogLocale: 'fr_FR' },
+};
+
 export const routes = [
   makeRoute({
     path: '/',
@@ -444,6 +448,7 @@ export const routes = [
       layout: 'lab',
       hidden: true,
       props: { slug: lab.slug },
+      locale: LAB_LOCALES[lab.slug],
       meta: () => ({ title: lab.title, description: lab.summary }),
       breadcrumbs: () => [{ label: 'Lab', to: '/lab' }, { label: lab.title }],
     }),

@@ -177,7 +177,10 @@ function findTags(head, key, entry) {
     const matches = [...head.querySelectorAll(entry.kind)].filter((element) =>
       entry.match.every(([name, value]) => element.getAttribute(name) === value),
     );
-    if (matches.length > 0) return matches;
+    // Prefer the last matching tag. A React 19 hoisted tag is appended after the
+    // app's older metadata, so updating the newest node leaves React's own removal
+    // intact and lets the older duplicate be released instead.
+    if (matches.length > 0) return matches.reverse();
     if (entry.adopt) {
       return [...head.querySelectorAll(entry.kind)]
         .filter(

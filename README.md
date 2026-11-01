@@ -6,7 +6,7 @@
 
 Render a single-page app to static HTML at build time. Point the tool at the build output; it renders each route in Chrome, writes one HTML file per route, and leaves the app unchanged. The output includes page content, titles, meta tags, canonical links and Open Graph tags.
 
-Version 2.8 adds deterministic clock and randomness controls, locale and hreflang generation, cookie/localStorage SEO locale seeding, and a client-side head layer that replaces React Helmet or React Helmet Async for prerendered apps.
+Recent releases add deterministic clock and randomness controls, locale and hreflang generation, cookie/localStorage SEO locale seeding, and a client-side head layer that replaces React Helmet or React Helmet Async for prerendered apps.
 
 [![npm](https://img.shields.io/npm/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![npm downloads](https://img.shields.io/npm/dm/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
@@ -222,9 +222,9 @@ Rules:
 - `lang` and `dir` are written on `<html>`. Later Heads win, and the original values return when no Head wants them. `htmlAttributes` covers every other document attribute, and `bodyAttributes` / `titleAttributes` do the same for body and title.
 - `alternateLocales` emits `og:locale:alternate` for each listed locale.
 - `alternates` emits `<link rel="alternate" hreflang="...">` with absolute URLs using the same `siteUrl`/`base`/`trailingSlash` policy as canonical links. The same alternates feed sitemap `xhtml:link` entries.
-- `og:url`, `og:image` and canonical need absolute URLs. `metadata.siteUrl` must be an origin; put a sub-path deployment in `base`. Without `siteUrl`, build-server URLs are removed by default and the run warns. `trailingSlash` applies to page URLs only. Canonical, social and sitemap URLs share the page-path policy: directory output keeps its slash, flat output stays extensionless, and `trailingSlash` wins.
+- `og:url`, `og:image` and canonical need absolute URLs. `metadata.siteUrl` must be an origin; put a sub-path deployment in `base`. Without `siteUrl`, build-server URLs are removed by default and the run warns. `trailingSlash` applies to page URLs only. Canonical, social and sitemap URLs share the page-path policy: directory output keeps its slash, flat output stays extensionless, and `trailingSlash` wins. Explicit URLs keep their `#fragment` when the convention is applied.
 - `metadata.base` overrides the base path for absolute URLs and defaults to `base`.
-- On React 19, React also hoists `<title>`, `<meta>` and `<link>` from JSX. `Head` adopts a matching hoisted `<meta>` or `<link>` and updates it in place. A hoisted `<title>` that already has the Head text is left untouched so React can remove it on navigation; older template titles are removed so the written page has one document title. `titleAttributes` apply only when `Head` owns the title. Use one metadata system; the run warns when a page still ships more than one `<title>`.
+- On React 19, React also hoists `<title>`, `<meta>` and `<link>` from JSX. `Head` adopts a matching hoisted `<meta>` or `<link>` and updates it in place. When both app-owned and hoisted copies exist, the newest matching node is updated and older duplicates are released, so React can still remove its own node on navigation. A hoisted `<title>` that already has the Head text is left untouched so React can remove it on navigation; older template titles are removed so the written page has one document title. `titleAttributes` apply only when `Head` owns the title. Use one metadata system; the run warns when a page still ships more than one `<title>`.
 - Every metadata value has a CLI flag: `--metadata-site-url`, `--metadata-site-name`, `--metadata-title-template`, `--metadata-default-image`, `--metadata-trailing-slash`.
 - `react` is an optional peer dependency for this entry point. Non-React code can call `setHead(id, props)` and `clearHead(id)`.
 
@@ -254,7 +254,7 @@ After writing the output, each route is loaded again in a fresh browser context 
 
 **Hydration errors.** Mismatch messages for React, Vue, Svelte and Preact are reported with the route, framework and message. React text mismatches and minified production codes (`#418`, `#423`, `#425`) are recognised; Preact uses the React-compatible messages. A mismatch means the client re-renders the page instead of adopting the static markup. The crawler-visible HTML is unchanged.
 
-The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`, Svelte 5's `<!--[-->` hydration anchor, and the Svelte 5 `window.__svelte` runtime global); nothing is imported or executed. Set `framework` when a custom root defeats detection. When a route has hydration errors or re-rendered, `firstMismatch` reports the first difference between the written HTML and the live container as `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
+The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`, and Svelte 5's `<!--[-->` hydration anchor); nothing is imported or executed. Set `framework` when a custom root defeats detection: an explicit framework is treated as mounted and selects the matching mismatch patterns without requiring a marker. Svelte 5 apps that only call `mount()` and emit no hydration anchor should set `framework: 'svelte'`. When a route has hydration errors or re-rendered, `firstMismatch` reports the first difference between the written HTML and the live container as `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
 
 A probe installed before the app's scripts run records the container's first prerendered node and the first-element chain beneath it, then checks whether every captured wrapper survived:
 
@@ -691,7 +691,7 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `saveAs` | `html` | `html`, `png` or `jpeg`; identical screenshots are left untouched |
 | `metadata` | `null` | Defaults for the head component: `siteUrl` (origin only), `siteName`, `titleTemplate`, `defaultImage`, `trailingSlash`, `base` |
 | `verify` | `true` | Run the hydration verification pass |
-| `framework` | `auto` | `auto`, `react`, `vue`, `svelte` or `preact`; detects the mounted framework from DOM markers |
+| `framework` | `auto` | `auto`, `react`, `vue`, `svelte` or `preact`; `auto` detects from DOM markers, an explicit value is trusted and selects mismatch patterns |
 | `retries` | `0` | Retry a retryable render failure this many times |
 | `retryDelay` | `500` | Wait between render attempts, in ms |
 | `traceOnError` | `false` | Write a Playwright trace for the final failed attempt under `snappy-traces/` |

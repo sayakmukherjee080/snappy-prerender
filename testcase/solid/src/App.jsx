@@ -20,6 +20,7 @@ function App() {
       getRoot: () => container,
     });
     site.start();
+    return () => site.dispose();
   });
 
   return <div ref={container} innerHTML={html()} />;

@@ -63,7 +63,6 @@ export async function readBootState(page, selector = CONTAINER_SELECTOR) {
           svelte: Boolean(
             pageContainer.__svelte_meta ||
               pageContainer.querySelector?.('[data-svelte-h]') ||
-              globalThis.__svelte ||
               [...(pageContainer.childNodes ?? [])].some(
                 (node) => node.nodeType === 8 && (node.data === '[' || node.data === '[!'),
               ),
