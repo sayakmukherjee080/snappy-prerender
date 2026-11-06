@@ -1,0 +1,11 @@
+{
+  "name": "snappy-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Before/after demo for snappy-prerender: an SPA build and the same app prerendered.",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "node serve.mjs"
+  }
+}

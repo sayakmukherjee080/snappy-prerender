@@ -6,6 +6,7 @@ node_modules
 testcase/*/dist
 testcase/*/dist-*
 testcase/*/tmp
+demo/site
 *.log
 *.tgz
 .DS_Store
