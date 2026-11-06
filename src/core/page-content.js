@@ -2,17 +2,28 @@
 export const CONTAINER_SELECTOR = '#root, #app, #__next';
 
 /**
- * Reads the empty-page and status-marker state in one browser round trip.
+ * Reads the empty-page and status-marker state in one browser round trip. A configured
+ * container selector takes precedence; otherwise the common roots are used, with Ember's
+ * application body as the fallback for its script-first document.
  */
-export async function readPageState(page) {
-  return page.evaluate(() => {
-    const container = document.querySelector('#root, #app, #__next') ?? document.body;
+export async function readPageState(page, selector = null) {
+  return page.evaluate((containerSelector) => {
+    const resolveContainer = (document) => {
+      if (containerSelector) return document.querySelector(containerSelector);
+      if (document.body?.classList?.contains('ember-application')) return document.body;
+      return document.querySelector('#root, #app, #__next') ?? document.body;
+    };
+    const container = resolveContainer(document);
     const text = (container?.textContent ?? '').trim();
     const empty = !container || (container.childElementCount === 0 && text.length === 0);
     const marker = document.querySelector('meta[name="prerender-status-code"]');
     const value = marker ? Number.parseInt(marker.getAttribute('content') ?? '', 10) : null;
-    return { empty, statusCode: Number.isFinite(value) ? value : null };
-  });
+    return {
+      empty,
+      statusCode: Number.isFinite(value) ? value : null,
+      containerMissing: Boolean(containerSelector && !container),
+    };
+  }, selector);
 }
 
 /**
@@ -33,11 +44,15 @@ export function isBootMarkupPreserved({ seen, childConnected, chainConnected }) 
  * round trip. Verification runs this on every route, so the combined probe avoids three
  * separate CDP calls.
  */
-export async function readBootState(page, selector = CONTAINER_SELECTOR) {
+export async function readBootState(page, selector = null) {
   const { boot, ...state } = await page.evaluate((containerSelector) => {
-    const pageContainer =
-      document.querySelector(containerSelector) ?? document.body?.firstElementChild ?? null;
-    const contentContainer = document.querySelector(containerSelector) ?? document.body;
+    const resolveContainer = (document) => {
+      if (containerSelector) return document.querySelector(containerSelector);
+      if (document.body?.classList?.contains('ember-application')) return document.body;
+      return document.querySelector('#root, #app, #__next') ?? document.body?.firstElementChild;
+    };
+    const pageContainer = resolveContainer(document);
+    const contentContainer = pageContainer ?? document.body;
     const text = (contentContainer?.textContent ?? '').trim();
     const empty =
       !contentContainer || (contentContainer.childElementCount === 0 && text.length === 0);
@@ -67,6 +82,17 @@ export async function readBootState(page, selector = CONTAINER_SELECTOR) {
                 (node) => node.nodeType === 8 && (node.data === '[' || node.data === '[!'),
               ),
           ),
+          angular: Boolean(
+            pageContainer.hasAttribute?.('ng-version') ||
+              pageContainer.querySelector?.('[ng-version]') ||
+              pageContainer.__ngContext__,
+          ),
+          ember: Boolean(
+            pageContainer.classList?.contains('ember-application') ||
+              pageContainer.classList?.contains('ember-view') ||
+              pageContainer.querySelector?.('.ember-view'),
+          ),
+          lit: Boolean(pageContainer._$litPart$ || pageContainer.firstElementChild?._$litPart$),
         }
       : {};
     const child = window.__snappyBoot?.prerenderedChild ?? null;
@@ -74,6 +100,7 @@ export async function readBootState(page, selector = CONTAINER_SELECTOR) {
     return {
       empty,
       statusCode: Number.isFinite(value) ? value : null,
+      containerMissing: Boolean(containerSelector && !pageContainer),
       markers,
       boot: {
         seen: Boolean(child),

@@ -38,3 +38,4 @@ This file is committed to the public repository — never record secrets, tokens
 [2026-10-30] [architecture] [all] React 19 native head tags are adopted and extra duplicate titles are removed, with one owner per tag documented; this replaces the earlier warning-only behaviour. — supersedes entry 2026-09-25 about never auto-reducing duplicate titles.
 [2026-10-30] [infra] [all] Testcase deployments and browser tests use a Cloudflare quick tunnel. The URL changes when the tunnel restarts; the tunnelled port is recorded when running. — user chose quick tunnel on 2026-10-30.
 [2026-10-30] [infra] [testcase] The quick tunnel serves the prerendered testcase build on 127.0.0.1:4173. — public and lab builds are swapped behind the same port during verification.
+[2026-11-06] [process] [all] This batch ships as v2.11.0 (verification parity) and v2.11.1 (content drift and sitemap lastmod) — supersedes the plan's earlier 2.12.0 numbering.

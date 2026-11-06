@@ -18,6 +18,21 @@ export function compareContainers(expectedHtml, liveHtml) {
   return diffNode(expected, actual, 'body', 0, state);
 }
 
+/**
+ * Compares two already-selected outerHTML fragments. Verification uses this when a
+ * custom container selector has been resolved in the browser, where full CSS selectors
+ * are available to both the live and expected documents.
+ * @param {string} expectedHtml
+ * @param {string} liveHtml
+ * @returns {{ path: string, kind: string, expected: unknown, actual: unknown } | null}
+ */
+export function compareContainerFragments(expectedHtml, liveHtml) {
+  const expected = bodyFirstElement(parse(expectedHtml));
+  const actual = bodyFirstElement(parse(liveHtml));
+  if (!expected || !actual) return null;
+  return diffNode(expected, actual, 'body', 0, { visited: 0 });
+}
+
 // Finds the app container in a parsed document, falling back to the body's first child.
 function containerOf(document) {
   const html = (document.childNodes ?? []).find((node) => node.tagName === 'html');
@@ -27,6 +42,13 @@ function containerOf(document) {
     (node) => node.tagName && CONTAINER_IDS.has(attribute(node, 'id')),
   );
   return container ?? (body.childNodes ?? []).find((node) => node.tagName) ?? null;
+}
+
+// Finds the first element inside a parsed document's body.
+function bodyFirstElement(document) {
+  const html = (document.childNodes ?? []).find((node) => node.tagName === 'html');
+  const body = (html?.childNodes ?? []).find((node) => node.tagName === 'body');
+  return (body?.childNodes ?? []).find((node) => node.tagName) ?? null;
 }
 
 // Compares one node pair and descends into the first differing child.

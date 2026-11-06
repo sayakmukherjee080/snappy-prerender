@@ -76,7 +76,7 @@ describe('prerender integration: audit and report', () => {
     const report = await prerender(options(sourceDir, { reportPath }));
     assert.equal(report.ok, true);
     const written = JSON.parse(await fs.readFile(reportPath, 'utf8'));
-    assert.equal(written.version, 1);
+    assert.equal(written.version, 2);
     assert.equal(written.ok, true);
     assert.equal(written.summary.routes, 4);
     assert.equal(written.routes.length, 4);

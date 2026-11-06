@@ -133,6 +133,18 @@ API article routes that re-render from their own live data. The lab run still hy
 - [x] Verify 230 sitemap entries, 254 preload-manifest entries and a single noindex robots directive on the 404 page.
 - [x] Final suites: 366 unit, 157 integration, 17 testcase tests; public browser suite 9/9 and lab suite 13/13 through the tunnel before it was stopped.
 
+## 2.11 verification and drift
+
+- [x] Add Angular, Ember and Lit framework detection and mismatch patterns.
+- [x] Add explicit Solid framework verification.
+- [x] Add a configurable `container` selector and CLI flag.
+- [x] Add drift baselines with `htmlHash` and `contentHash`.
+- [x] Report added, removed, moved, changed, HTML-only and status-changed routes.
+- [x] Add `failOnDrift` gating and CLI flags.
+- [x] Add `sitemapLastmod` with baseline-backed dates.
+- [x] Update report schema, README, limitations and changelog.
+- [x] Run unit, integration and framework acceptance tests.
+
 ## Later
 
 - [x] Add a per-route hydration ignore list so known false positives can be suppressed for specific routes without disabling verification globally.

@@ -42,7 +42,7 @@ function reportOf(overrides = {}) {
 describe('buildReport', () => {
   it('builds the versioned public shape', () => {
     const built = buildReport(reportOf());
-    assert.equal(built.version, 1);
+    assert.equal(built.version, 2);
     assert.match(built.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(built.durationMs, 42);
     assert.deepEqual(built.timings, { render: 1, write: 2, artifacts: 3, verify: 4, audit: 5 });
@@ -97,6 +97,33 @@ describe('buildReport', () => {
       unknown: 0,
     });
     assert.equal(built.verification.skipped, 2);
+  });
+
+  it('includes the drift summary and leaves it null when disabled', () => {
+    const disabled = buildReport(reportOf());
+    assert.equal(disabled.drift, null);
+
+    const report = reportOf({
+      drift: {
+        enabled: true,
+        baseline: { file: '.snappy-baseline.json', state: 'compared', generatedAt: null },
+        summary: { added: 1, removed: 0, changed: 2, unchanged: 3 },
+        added: [{ route: '/new', file: 'new/index.html' }],
+        removed: [],
+        changed: [],
+        moved: [],
+        htmlOnly: [],
+        statusChanged: [],
+        failures: [],
+        ok: true,
+        scopeChanged: false,
+        unchanged: 3,
+      },
+    });
+    const built = buildReport(report);
+    assert.equal(built.drift.enabled, true);
+    assert.equal(built.drift.summary.changed, 2);
+    assert.equal(built.drift.added[0].route, '/new');
   });
 
   it('includes clock, locale and hydration policy fields', () => {
@@ -195,7 +222,7 @@ describe('writeReport', () => {
     });
     assert.equal(result.file, target);
     const written = JSON.parse(await fs.readFile(target, 'utf8'));
-    assert.equal(written.version, 1);
+    assert.equal(written.version, 2);
   });
 
   it('does not write in dry-run mode', async () => {

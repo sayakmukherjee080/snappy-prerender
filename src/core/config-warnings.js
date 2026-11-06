@@ -104,6 +104,15 @@ export function addConfigWarnings(config, userOptions, defaults) {
   if (config.sitemap && config.saveAs !== 'html') {
     warn(`sitemap has no effect when saveAs is '${config.saveAs}'`);
   }
+  if (config.drift && config.saveAs !== 'html') {
+    warn(`drift is skipped when saveAs is '${config.saveAs}'`);
+  }
+  if (config.failOnDrift && !config.drift) {
+    warn('failOnDrift has no effect because drift is false');
+  }
+  if (config.sitemapLastmod && config.saveAs !== 'html') {
+    warn(`sitemapLastmod is skipped when saveAs is '${config.saveAs}'`);
+  }
   if (config.freezeTime && config.verifyChangedOnly) {
     warn(
       'freezeTime with verifyChangedOnly makes output timestamps vary per run; use an explicit ISO time or SOURCE_DATE_EPOCH for stable files',

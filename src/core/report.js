@@ -31,7 +31,7 @@ export async function writeReport({ report, config, log }) {
 export function buildReport(report, config = null) {
   const audit = report.audit ?? { errors: [], warnings: [], linksChecked: 0 };
   const document = {
-    version: 1,
+    version: 2,
     generatedAt: new Date().toISOString(),
     durationMs: report.durationMs,
     timings: report.timings,
@@ -46,6 +46,7 @@ export function buildReport(report, config = null) {
       warnings: audit.warnings.length,
     },
     routes: report.routeDetails,
+    drift: report.drift ?? null,
     verification: report.verification
       ? {
           ok: report.verification.ok,

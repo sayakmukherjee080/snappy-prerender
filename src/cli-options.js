@@ -109,6 +109,15 @@ export function cliOptions({ values, positionals }) {
   if (values['preload-links']) options.preloadLinks = true;
   if (values['image-sitemap']) options.imageSitemap = true;
   if (values.framework !== undefined) options.framework = values.framework;
+  if (values.container !== undefined) options.container = values.container;
+  if (values.drift) options.drift = true;
+  if (values.baseline !== undefined) options.baselinePath = values.baseline;
+  if (values['fail-on-drift-status'] !== undefined) {
+    options.failOnDrift = splitList(values['fail-on-drift-status']);
+  } else if (values['fail-on-drift']) {
+    options.failOnDrift = true;
+  }
+  if (values['sitemap-lastmod']) options.sitemapLastmod = true;
   if (values.retries !== undefined) options.retries = Number(values.retries);
   if (values['retry-delay'] !== undefined) options.retryDelay = Number(values['retry-delay']);
   if (values['trace-on-error']) options.traceOnError = true;
@@ -156,7 +165,8 @@ export function cliOptions({ values, positionals }) {
 
 // Splits comma separated flag values and drops empty entries.
 function splitList(entries) {
-  return entries.flatMap((entry) => entry.split(',')).filter((entry) => entry.length > 0);
+  const list = Array.isArray(entries) ? entries : [entries];
+  return list.flatMap((entry) => String(entry).split(',')).filter((entry) => entry.length > 0);
 }
 
 // Parses repeatable code=value flags used by the locale matrix.

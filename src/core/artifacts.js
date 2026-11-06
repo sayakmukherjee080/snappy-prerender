@@ -67,6 +67,7 @@ export async function writeSitemap({ outputDir, config, log, report }) {
     report.sitemap = {
       file: 'sitemap.xml',
       routes: sitemap.routes,
+      lastmod: sitemap.lastmod ?? 0,
       robotsUpdated: patched !== null,
       files: names,
       locs: sitemap.locs,
@@ -88,6 +89,7 @@ export async function writeSitemap({ outputDir, config, log, report }) {
   report.sitemap = {
     file: 'sitemap.xml',
     routes: sitemap.routes,
+    lastmod: sitemap.lastmod ?? 0,
     robotsUpdated: patched !== null,
     files: names,
     locs: sitemap.locs,

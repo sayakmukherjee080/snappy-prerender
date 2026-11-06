@@ -15,6 +15,7 @@ import {
   writeFileIfChanged,
   writeRouteHtml,
 } from './output.js';
+import { fingerprintDocument } from './page-fingerprint.js';
 import { collectPageMetaFromDocument } from './page-meta.js';
 import { collectScriptSourcesFromDocument, injectPreloadLinksInto } from './preload-links.js';
 import { collectPageResourcesFromDocument } from './preload-manifest.js';
@@ -109,6 +110,9 @@ export async function writeAllRoutes({
       file: file.file,
       status: file.status,
       bytes: file.bytes,
+      htmlHash: file.htmlHash ?? null,
+      contentHash: file.contentHash ?? null,
+      textLength: file.textLength ?? null,
       depth: result.depth ?? null,
       attempts: result.attempts ?? 1,
       httpStatus: result.httpStatus ?? null,
@@ -420,6 +424,8 @@ async function writeRouteOutput({
       log.error(`  ${route}: ${message}`);
     }
   }
+  const fingerprint = config.drift ? fingerprintDocument(document) : null;
+  const htmlHash = config.drift ? createHash('sha256').update(output).digest('hex') : null;
   const file = await writeRouteHtml({ dir: outputDir, route, html: output, config });
   const resources = config.preloadManifest
     ? collectPageResourcesFromDocument(document, { base: config.base, route })
@@ -432,6 +438,9 @@ async function writeRouteOutput({
       hash: createHash('sha256')
         .update(result.html ?? output)
         .digest('hex'),
+      htmlHash,
+      contentHash: fingerprint?.contentHash ?? null,
+      textLength: fingerprint?.textLength ?? null,
       noindex: meta.noindex,
       notFound: result.notFound === true,
       meta,

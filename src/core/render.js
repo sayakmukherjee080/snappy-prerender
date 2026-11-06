@@ -133,7 +133,13 @@ export async function renderRoute({
       }
     }
     await settlePage(page, config, tracker);
-    const { empty, statusCode } = await readPageState(page);
+    const { empty, statusCode, containerMissing } = await readPageState(
+      page,
+      config.container ?? null,
+    );
+    if (containerMissing) {
+      throw new Error(`container selector "${config.container}" matched no element`);
+    }
     const finalUrl = page.url();
 
     if (config.captureRuntimeStyles) await captureRuntimeStyles(page);

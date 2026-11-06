@@ -1,10 +1,26 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { compareContainers } from '../../src/core/hydration-diff.js';
+import { compareContainerFragments, compareContainers } from '../../src/core/hydration-diff.js';
 
 function documentOf(body) {
   return `<!doctype html><html><body>${body}</body></html>`;
 }
+
+describe('compareContainerFragments', () => {
+  it('returns null for identical selected fragments', () => {
+    const html = '<div id="app"><h1>Same</h1></div>';
+    assert.equal(compareContainerFragments(html, html), null);
+  });
+
+  it('finds a text change inside a custom selected fragment', () => {
+    const expected = '<div id="app"><h1>Before</h1></div>';
+    const actual = '<div id="app"><h1>After</h1></div>';
+    const difference = compareContainerFragments(expected, actual);
+    assert.equal(difference.kind, 'text');
+    assert.equal(difference.expected, 'Before');
+    assert.equal(difference.actual, 'After');
+  });
+});
 
 describe('compareContainers', () => {
   it('returns null for identical markup', () => {

@@ -10,6 +10,9 @@ const config = {
   include: [...getAllRoutePaths(routes), '/404'],
   crawl: false,
   notFoundRoute: '/404',
+  // Svelte 5 mount-only shells emit no hydration marker; keep the explicit framework so
+  // verification still classifies the route when the hydration skip is removed.
+  framework: 'svelte',
   transformHtml: guardApiContent,
   metadata: {
     siteUrl: 'https://aethercompute.space',

@@ -21,8 +21,26 @@ const LOG_LEVELS = ['silent', 'error', 'warn', 'info', 'debug'];
 const BROWSER_CHOICES = ['auto', 'chrome', 'msedge', 'chromium'];
 const INLINE_CSS_STRATEGIES = [false, true, 'inline', 'critical'];
 const CSP_MODES = ['off', 'strict', 'hash'];
-const FRAMEWORK_CHOICES = ['auto', 'react', 'vue', 'svelte', 'preact'];
+const FRAMEWORK_CHOICES = [
+  'auto',
+  'react',
+  'vue',
+  'svelte',
+  'preact',
+  'angular',
+  'solid',
+  'lit',
+  'ember',
+];
 const SAVE_AS_CHOICES = ['html', 'png', 'jpeg'];
+export const DRIFT_FAILURE_STATUSES = [
+  'added',
+  'removed',
+  'moved',
+  'changed',
+  'html-only',
+  'status-changed',
+];
 const CRITICAL_CSS_PRELOAD = ['body', 'media', 'swap', 'swap-high', 'swap-low', 'js', 'js-lazy'];
 const NULLABLE_KEYS = [
   'storageState',
@@ -42,6 +60,7 @@ const NULLABLE_KEYS = [
   'routesFromSitemap',
   'transformHtml',
   'timezone',
+  'container',
   'locales',
   'seoLocale',
 ];
@@ -127,6 +146,11 @@ export const DEFAULTS = Object.freeze({
   retryDelay: 500,
   traceOnError: false,
   framework: 'auto',
+  container: null,
+  drift: false,
+  baselinePath: '.snappy-baseline.json',
+  failOnDrift: false,
+  sitemapLastmod: false,
   verify: true,
   verifyChangedOnly: false,
   reuseVerificationContext: false,
@@ -159,7 +183,13 @@ export const DEFAULTS = Object.freeze({
 
 // Options whose default is boolean but which accept other shapes, so their own validators
 // below decide what is allowed.
-const MULTI_TYPE_KEYS = new Set(['inlineCss', 'minifyHtml', 'minifyCss', 'freezeTime']);
+const MULTI_TYPE_KEYS = new Set([
+  'inlineCss',
+  'minifyHtml',
+  'minifyCss',
+  'freezeTime',
+  'failOnDrift',
+]);
 
 // Freeze the nested list defaults as well, so a consumer cannot mutate the defaults
 // used by every later run in the same process.
@@ -220,6 +250,7 @@ export function resolveConfig(userOptions = {}) {
     config.criticalCssPreload = config.csp === 'strict' || config.csp === 'hash' ? false : 'media';
   }
   config.warnings = [];
+  config.failOnDrift = normaliseFailOnDrift(config.failOnDrift);
   normaliseLocales(config);
   normaliseSeoLocale(config);
   validateConfig(config);
@@ -322,6 +353,25 @@ function normaliseSeoLocale(config) {
   };
 }
 
+// Normalises the drift gate: false stays off, true selects the safe default set, and an
+// explicit list is validated against the statuses the comparison can produce.
+function normaliseFailOnDrift(value) {
+  if (value === false) return false;
+  if (value === true) return ['removed', 'changed', 'status-changed'];
+  if (!Array.isArray(value)) {
+    throw new TypeError('failOnDrift must be false, true or an array of drift statuses');
+  }
+  const statuses = [...new Set(value)];
+  for (const status of statuses) {
+    if (!DRIFT_FAILURE_STATUSES.includes(status)) {
+      throw new TypeError(
+        `failOnDrift status must be one of: ${DRIFT_FAILURE_STATUSES.join(', ')}`,
+      );
+    }
+  }
+  return statuses;
+}
+
 export function normaliseBase(base) {
   if (typeof base !== 'string' || base.length === 0) {
     throw new TypeError('base must be a non-empty string');
@@ -390,6 +440,7 @@ export function validateConfig(config) {
     'waitFor',
     'notFoundRoute',
     'reportPath',
+    'container',
     'routesFile',
     'routesFromSitemap',
     'timezone',
@@ -456,6 +507,18 @@ export function validateConfig(config) {
   }
   if (!FRAMEWORK_CHOICES.includes(config.framework)) {
     throw new TypeError(`framework must be one of: ${FRAMEWORK_CHOICES.join(', ')}`);
+  }
+  if (config.container !== null && config.container.trim().length === 0) {
+    throw new TypeError('container must be a non-empty CSS selector or null');
+  }
+  if (typeof config.baselinePath !== 'string' || config.baselinePath.trim().length === 0) {
+    throw new TypeError('baselinePath must be a non-empty path');
+  }
+  if (config.sitemapLastmod && !config.drift) {
+    throw new TypeError('sitemapLastmod requires drift: true');
+  }
+  if (config.sitemapLastmod && !config.sitemap) {
+    throw new TypeError('sitemapLastmod requires sitemap: true');
   }
   if (config.storageState !== null) {
     if (typeof config.storageState !== 'string' || !fs.existsSync(config.storageState)) {

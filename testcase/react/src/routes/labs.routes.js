@@ -38,7 +38,7 @@ export const labRoutes = [
     hidden: true,
     meta: () => ({
       title: 'Unlisted lab',
-      description: 'Twenty-four experimental React demos behind a demo gate.',
+      description: 'Twenty-four experimental demos behind a demo gate.',
     }),
   }),
   ...LABS.map((lab) =>
