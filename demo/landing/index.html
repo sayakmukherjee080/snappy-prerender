@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>snappy-prerender demo: SPA vs prerendered HTML</title>
+    <meta
+      name="description"
+      content="A demo app built twice: a client-rendered SPA and the same routes with prerendered HTML. Compare the source, loading sequence and link previews."
+    />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔎</text></svg>" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0d1210;
+        --panel: #151c19;
+        --panel-2: #1b2521;
+        --text: #f2f0e8;
+        --muted: #a4b0a9;
+        --line: #2c3a34;
+        --accent: #d7ff64;
+        --accent-ink: #11170f;
+        --orange: #ff9f7a;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 12% 0%, rgba(215, 255, 100, 0.1), transparent 34rem),
+          radial-gradient(circle at 92% 18%, rgba(94, 234, 212, 0.06), transparent 28rem),
+          var(--bg);
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        line-height: 1.55;
+      }
+
+      a { color: inherit; }
+
+      .page {
+        width: min(1180px, calc(100% - 2rem));
+        margin: 0 auto;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.5rem;
+        padding: 1.25rem 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        text-decoration: none;
+      }
+
+      .brand-logo {
+        display: block;
+        width: auto;
+        height: 2rem;
+        border-radius: 0.4rem;
+      }
+
+      .brand-name {
+        font-size: 1.05rem;
+        letter-spacing: -0.03em;
+      }
+
+      .header-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+      .header-actions a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        text-decoration: none;
+      }
+      .header-actions a:hover { border-color: var(--accent); color: var(--text); }
+      .header-actions svg { width: 0.95rem; height: 0.95rem; fill: currentColor; }
+      .npm-mark, .ph-mark {
+        display: grid;
+        height: 1rem;
+        min-width: 1rem;
+        place-items: center;
+        border-radius: 0.25rem;
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 0.58rem;
+        font-weight: 800;
+      }
+      .npm-mark { padding: 0 0.15rem; background: #cb3837; color: white; }
+      .ph-mark { background: #da552f; color: white; }
+
+      .hero { padding: clamp(3rem, 7vw, 6rem) 0 2.5rem; }
+      .eyebrow {
+        margin: 0 0 0.9rem;
+        color: var(--accent);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 0.75rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 18ch;
+        margin: 0;
+        font-size: clamp(2.7rem, 7vw, 5.8rem);
+        font-weight: 650;
+        letter-spacing: -0.055em;
+        line-height: 0.95;
+      }
+
+      .lede {
+        max-width: 68ch;
+        margin: 1.5rem 0 0;
+        color: var(--muted);
+        font-size: clamp(1rem, 2vw, 1.2rem);
+      }
+
+      .timeline-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.7rem;
+        margin-top: 2rem;
+      }
+
+      .play-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        border: 0;
+        border-radius: 999px;
+        padding: 0.55rem 0.9rem;
+        background: var(--accent);
+        color: var(--accent-ink);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.85rem;
+        font-weight: 700;
+      }
+
+      .play-button:hover { filter: brightness(1.05); }
+      .play-icon { font-size: 0.65rem; }
+      #timeline { width: min(320px, 42vw); accent-color: var(--accent); cursor: pointer; }
+
+      .segment {
+        display: inline-flex;
+        padding: 0.25rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+      }
+
+      .segment button {
+        border: 0;
+        border-radius: 999px;
+        padding: 0.5rem 0.8rem;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.85rem;
+      }
+
+      .segment button[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-ink);
+        font-weight: 700;
+      }
+
+      .mode-note { color: var(--muted); font-size: 0.85rem; }
+
+      .compare {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        padding-bottom: 1rem;
+      }
+
+      .pane {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        background: var(--panel);
+      }
+
+      .pane-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.7rem;
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .pane-icon {
+        display: grid;
+        width: 2rem;
+        height: 2rem;
+        flex: none;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 0.6rem;
+        background: var(--panel-2);
+        color: var(--accent);
+      }
+
+      .pane-icon svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+      .pane-icon--missing { color: var(--orange); }
+
+      .pane-title { display: block; max-width: 28ch; font-size: 0.95rem; line-height: 1.25; }
+      .pane-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.35rem; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.68rem; letter-spacing: 0.03em; }
+      .state-time { color: var(--muted); }
+      .state-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.15rem 0.45rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel-2);
+        color: var(--muted);
+        font-size: 0.64rem;
+      }
+      .state-chip.is-empty { border-color: rgba(255, 159, 122, 0.4); background: rgba(255, 159, 122, 0.1); color: var(--orange); }
+      .state-chip.is-partial { border-color: rgba(215, 255, 100, 0.3); background: rgba(215, 255, 100, 0.08); color: var(--accent); }
+      .state-chip.is-ready { border-color: rgba(94, 234, 212, 0.35); background: rgba(94, 234, 212, 0.08); color: #8ef0dc; }
+
+      iframe {
+        display: block;
+        width: 100%;
+        height: 590px;
+        border: 0;
+        background: #0d1210;
+      }
+
+      .playback-frame { pointer-events: none; }
+
+      .stage-labels {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.5rem;
+        margin-top: 0.8rem;
+        color: var(--muted);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 0.63rem;
+        letter-spacing: 0.02em;
+      }
+
+      .stage-labels span {
+        padding-top: 0.4rem;
+        border-top: 1px solid var(--line);
+      }
+
+      .stage-labels span[aria-current="true"] {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .raw-section { padding: 2.5rem 0 2rem; }
+      .raw-heading { margin: 0.25rem 0 0; font-size: clamp(1.5rem, 3vw, 2rem); letter-spacing: -0.035em; }
+      .raw-lede { max-width: 68ch; margin: 0.5rem 0 1rem; color: var(--muted); font-size: 0.92rem; }
+      .raw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+      .raw-pane { overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); }
+      .raw-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--line); }
+      .raw-head strong { font-size: 0.9rem; }
+      .raw-head a { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.66rem; text-decoration: none; }
+      .raw-frame { display: block; width: 100%; height: 340px; border: 0; background: #0b100e; }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.8rem;
+        padding: 1rem 0 3rem;
+      }
+
+      .metric {
+        padding: 1rem;
+        border: 1px solid var(--line);
+        border-radius: 0.85rem;
+        background: var(--panel);
+      }
+
+      .metric-label {
+        display: block;
+        margin-bottom: 0.4rem;
+        color: var(--muted);
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .metric-values {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.6rem;
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      }
+
+      .metric-values b { font-size: 1.2rem; }
+      .metric-values span { color: var(--muted); font-size: 0.72rem; }
+      .metric-before { color: var(--orange); }
+      .metric-after { color: var(--accent); }
+
+      .social-section { padding: 1rem 0 3rem; }
+      .social-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+      .social-head h2 { margin: 0.25rem 0 0; font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -0.035em; }
+      .social-head p { max-width: 58ch; margin: 0.5rem 0 0; color: var(--muted); }
+
+      .social-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; margin-bottom: 1rem; }
+      .social-note { color: var(--muted); font-size: 0.84rem; }
+
+      .social-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.9rem; }
+      .social-app {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        background: var(--panel);
+      }
+
+      .social-app-head { display: flex; align-items: center; gap: 0.55rem; padding: 0.75rem 0.85rem; border-bottom: 1px solid var(--line); }
+      .social-app-head strong { font-size: 0.85rem; }
+      .social-app-head small { margin-left: auto; color: var(--muted); font-size: 0.7rem; }
+      .app-icon { display: grid; width: 1.55rem; height: 1.55rem; place-items: center; border-radius: 50%; background: var(--panel-2); color: var(--text); font-size: 0.8rem; font-weight: 800; }
+      .app-icon svg { width: 1rem; height: 1rem; fill: currentColor; }
+      .app-icon--wa { background: #1f9d63; color: white; }
+      .app-icon--x { background: #f2f0e8; color: #0d1210; }
+      .app-icon--fb { background: #1877f2; color: white; }
+
+      .social-body { padding: 0.85rem; }
+      .social-body > p { margin: 0 0 0.65rem; font-size: 0.82rem; color: var(--text); }
+      .link-card { overflow: hidden; border: 1px solid var(--line); border-radius: 0.7rem; background: var(--panel-2); }
+      .social-image, .social-image-empty { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; }
+      .social-image[hidden], .social-image-empty[hidden] { display: none; }
+      .social-image-empty { display: grid; place-items: center; background: repeating-linear-gradient(135deg, #202b25 0 8px, #1a231e 8px 16px); color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.68rem; }
+      .link-copy { padding: 0.6rem 0.7rem 0.7rem; }
+      .link-site { display: block; margin-bottom: 0.25rem; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.62rem; letter-spacing: 0.03em; text-transform: uppercase; }
+      .link-title { display: block; font-size: 0.82rem; line-height: 1.3; }
+      .link-description { display: -webkit-box; overflow: hidden; margin: 0.3rem 0 0; color: var(--muted); font-size: 0.72rem; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+      .social-time { display: block; margin-top: 0.5rem; color: var(--muted); font-size: 0.65rem; text-align: right; }
+      .social-empty-note { display: block; margin-top: 0.5rem; color: var(--orange); font-family: ui-monospace, monospace; font-size: 0.65rem; }
+
+      code { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.88em; }
+
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.25rem 0 2.5rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      @media (max-width: 900px) {
+        .compare, .social-grid, .raw-grid { grid-template-columns: 1fr; }
+        .metrics { grid-template-columns: 1fr 1fr; }
+        iframe { height: 480px; }
+        .raw-frame { height: 300px; }
+      }
+
+      @media (max-width: 480px) {
+        .metrics { grid-template-columns: 1fr; }
+        .header-actions { display: none; }
+        .stage-labels { grid-template-columns: 1fr 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <a class="brand" href="/" aria-label="snappy-prerender demo home">
+          <img class="brand-logo" src="/logo.png" alt="" />
+          <strong class="brand-name">snappy-prerender</strong>
+        </a>
+        <div class="header-actions">
+          <a href="/releases/">Releases</a>
+          <a href="https://github.com/sayakmukherjee080/snappy-prerender" target="_blank" rel="noreferrer">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.2.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.6 11.6 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.2c0 .4.2.7.8.6A11.5 11.5 0 0 0 12 .7Z"/></svg>
+            GitHub
+          </a>
+          <a href="https://www.npmjs.com/package/snappy-prerender" target="_blank" rel="noreferrer" aria-label="npm package">
+            <span class="npm-mark" aria-hidden="true">npm</span>
+          </a>
+          <a href="https://www.producthunt.com/products/snappy-prerender" target="_blank" rel="noreferrer">
+            <span class="ph-mark" aria-hidden="true">P</span>
+            Product Hunt
+          </a>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero">
+          <p class="eyebrow">Crawler comparison</p>
+          <h1>One page, two HTML files.</h1>
+          <p class="lede">
+            The demo app is built twice. The first build is a client-rendered SPA. The second is
+            the same app after snappy-prerender writes each route to HTML. Both panes replay
+            captured frames from those builds. The SPA starts with an empty <code>#root</code>;
+            the prerendered page is readable at t=0 and hydrates later.
+          </p>
+
+          <div class="timeline-controls">
+            <button type="button" class="play-button" id="play" aria-pressed="false">
+              <span class="play-icon" aria-hidden="true">▶</span>
+              <span id="play-label">Play loading sequence</span>
+            </button>
+            <input id="timeline" type="range" min="0" max="3" step="1" value="0" aria-label="Loading stage" />
+            <span class="mode-note" id="mode-note">t=0 ms · empty #root / HTML content</span>
+          </div>
+          <div class="stage-labels" id="stage-labels" aria-hidden="true">
+            <span data-stage-label="0" aria-current="true">0 ms · empty #root</span>
+            <span data-stage-label="1">500 ms · header</span>
+            <span data-stage-label="2">1,100 ms · hero</span>
+            <span data-stage-label="3">1,800 ms · full page</span>
+          </div>
+        </section>
+
+        <section class="compare" aria-label="Captured SPA and prerendered loading frames">
+          <article class="pane">
+            <div class="pane-head">
+              <span class="pane-icon pane-icon--missing" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4m-11-9 4 4m0-4-4 4"></path></svg>
+              </span>
+              <span>
+                <strong class="pane-title">Without snappy-prerender</strong>
+                <span class="pane-sub"><span class="state-time" id="before-time">t=0 ms</span><span class="state-chip is-empty" id="before-state">empty #root</span></span>
+              </span>
+            </div>
+            <iframe class="playback-frame" id="before-frame" title="Captured SPA load with an empty root" src="/playback/before-0.html" sandbox="allow-same-origin"></iframe>
+          </article>
+
+          <article class="pane">
+            <div class="pane-head">
+              <span class="pane-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4m-10-8 2 2 4-4"></path></svg>
+              </span>
+              <span>
+                <strong class="pane-title">With snappy-prerender</strong>
+                <span class="pane-sub"><span class="state-time" id="after-time">t=0 ms</span><span class="state-chip is-ready" id="after-state">HTML content</span></span>
+              </span>
+            </div>
+            <iframe class="playback-frame" id="after-frame" title="Captured prerendered load that hydrates" src="/playback/after-0.html" sandbox="allow-same-origin"></iframe>
+          </article>
+        </section>
+
+        <section class="raw-section" aria-label="Raw crawler HTML">
+          <p class="eyebrow">Raw HTML</p>
+          <h2 class="raw-heading">The file each build returns.</h2>
+          <p class="raw-lede">These iframes show the raw HTML served for the home page, before a browser renders anything. The left file is the SPA build; the right file is the same route after prerendering.</p>
+          <div class="raw-grid">
+            <article class="raw-pane">
+              <div class="raw-head"><strong>Without snappy-prerender</strong><a href="/playback/raw-before.html" target="_blank" rel="noreferrer">open raw file ↗</a></div>
+              <iframe class="raw-frame" title="Raw SPA HTML with an empty root" src="/playback/raw-before.html" sandbox="allow-same-origin"></iframe>
+            </article>
+            <article class="raw-pane">
+              <div class="raw-head"><strong>With snappy-prerender</strong><a href="/playback/raw-after.html" target="_blank" rel="noreferrer">open raw file ↗</a></div>
+              <iframe class="raw-frame" title="Raw prerendered HTML with page content" src="/playback/raw-after.html" sandbox="allow-same-origin"></iframe>
+            </article>
+          </div>
+        </section>
+
+        <section class="metrics" aria-label="Crawler-visible metrics">
+          <div class="metric">
+            <span class="metric-label">H1 in HTML</span>
+            <div class="metric-values"><span class="metric-before" data-before="h1">0</span><span class="metric-after" data-after="h1">1</span></div>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Text characters</span>
+            <div class="metric-values"><span class="metric-before" data-before="textLength">0</span><span class="metric-after" data-after="textLength">0</span></div>
+          </div>
+          <div class="metric">
+            <span class="metric-label">HTML bytes</span>
+            <div class="metric-values"><span class="metric-before" data-before="htmlBytes">0</span><span class="metric-after" data-after="htmlBytes">0</span></div>
+          </div>
+          <div class="metric">
+            <span class="metric-label">OG image in HTML</span>
+            <div class="metric-values"><span class="metric-before" data-before="ogImage">none</span><span class="metric-after" data-after="ogImage">none</span></div>
+          </div>
+        </section>
+
+        <section class="social-section" aria-label="Social link previews">
+          <div class="social-head">
+            <div>
+              <p class="eyebrow">Link previews</p>
+              <h2>The same URL in three apps.</h2>
+              <p>WhatsApp, X and Facebook read the HTML for the title, description and image. The SPA build has no Open Graph tags. The prerendered build does.</p>
+            </div>
+          </div>
+          <div class="social-controls">
+            <div class="segment" role="group" aria-label="OG metadata state">
+              <button type="button" data-social="before" aria-pressed="true">Without OG tags</button>
+              <button type="button" data-social="after" aria-pressed="false">With OG tags</button>
+            </div>
+            <span class="social-note" id="social-note">No og:image, og:description or twitter:card in the source.</span>
+          </div>
+
+          <div class="social-grid">
+            <article class="social-app">
+              <div class="social-app-head">
+                <span class="app-icon app-icon--wa" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3Zm0 16a7 7 0 0 1-3.6-1l-.3-.2-2.7.7.7-2.6-.2-.3A7 7 0 1 1 12 19Zm3.8-5.1c-.2-.1-1.2-.6-1.4-.7-.2-.1-.3-.1-.5.1l-.6.8c-.1.2-.3.2-.5.1a5.7 5.7 0 0 1-2.8-2.4c-.1-.2 0-.3.1-.5l.4-.5c.1-.2.1-.3 0-.5l-.6-1.4c-.2-.4-.4-.3-.5-.3h-.5c-.2 0-.5.1-.7.3-.2.3-.8.8-.8 1.9s.8 2.2 1 2.4c.1.2 1.6 2.5 4 3.5.6.2 1 .4 1.4.4.6.2 1.1.1 1.5.1.5-.1 1.2-.5 1.4-1 .2-.5.2-.9.1-1-.1-.1-.2-.2-.4-.3Z"/></svg></span>
+                <strong>WhatsApp</strong><small>now</small>
+              </div>
+              <div class="social-body">
+                <div class="wa-bubble">
+                  <p>Check the link preview.</p>
+                  <div class="link-card">
+                    <img class="social-image" data-social-image alt="" hidden />
+                    <div class="social-image-empty" data-social-empty>No og:image</div>
+                    <div class="link-copy"><span class="link-site" data-social-site>snappy-prerender</span><strong class="link-title" data-social-title>snappy-prerender</strong><p class="link-description" data-social-description>No og:description in the HTML.</p></div>
+                  </div>
+                  <span class="social-time">12:04</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="social-app">
+              <div class="social-app-head">
+                <span class="app-icon app-icon--x" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.2l-4.9-6.4L6.3 22H3.1l7.3-8.4L1.5 2h6.4l4.5 5.9L18.9 2Zm-1.1 18h1.7L7.4 3.9H5.6L17.8 20Z"/></svg></span>
+                <strong>X</strong><small>@snappy</small>
+              </div>
+              <div class="social-body">
+                <p>Testing the link preview on both builds.</p>
+                <div class="link-card">
+                  <img class="social-image" data-social-image alt="" hidden />
+                  <div class="social-image-empty" data-social-empty>No og:image</div>
+                  <div class="link-copy"><span class="link-site" data-social-site>snappy-prerender</span><strong class="link-title" data-social-title>snappy-prerender</strong><p class="link-description" data-social-description>No og:description in the HTML.</p></div>
+                </div>
+                <span class="social-time">12:04 · 1.2K views</span>
+              </div>
+            </article>
+
+            <article class="social-app">
+              <div class="social-app-head">
+                <span class="app-icon app-icon--fb" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.5 1.6-1.5h1.7V5c-.3 0-1.3-.1-2.4-.1-2.4 0-4 1.4-4 4V11H7.7v3h2.7v8h3.1Z"/></svg></span>
+                <strong>Facebook</strong><small>Public</small>
+              </div>
+              <div class="social-body">
+                <p>The feed reads the same Open Graph tags as the crawler.</p>
+                <div class="link-card">
+                  <img class="social-image" data-social-image alt="" hidden />
+                  <div class="social-image-empty" data-social-empty>No og:image</div>
+                  <div class="link-copy"><span class="link-site" data-social-site>snappy-prerender</span><strong class="link-title" data-social-title>snappy-prerender</strong><p class="link-description" data-social-description>No og:description in the HTML.</p></div>
+                </div>
+                <span class="social-time">Like · Comment · Share</span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+
+      </main>
+
+      <footer>
+        <span>snappy-prerender</span>
+        <span>© smoldev</span>
+      </footer>
+    </div>
+
+    <script>
+      const beforeFrame = document.getElementById('before-frame');
+      const afterFrame = document.getElementById('after-frame');
+      const beforeTime = document.getElementById('before-time');
+      const afterTime = document.getElementById('after-time');
+      const beforeState = document.getElementById('before-state');
+      const afterState = document.getElementById('after-state');
+      const playButton = document.getElementById('play');
+      const playLabel = document.getElementById('play-label');
+      const timeline = document.getElementById('timeline');
+      const modeNote = document.getElementById('mode-note');
+      const stageLabels = [...document.querySelectorAll('[data-stage-label]')];
+      const socialNote = document.getElementById('social-note');
+      let stages = [
+        {
+          time: 0,
+          before: '/playback/before-0.html',
+          after: '/playback/after-0.html',
+          beforeState: 'empty #root',
+          afterState: 'HTML content',
+        },
+        {
+          time: 500,
+          before: '/playback/before-1.html',
+          after: '/playback/after-0.html',
+          beforeState: 'header rendered',
+          afterState: 'HTML content',
+        },
+        {
+          time: 1100,
+          before: '/playback/before-2.html',
+          after: '/playback/after-1.html',
+          beforeState: 'hero rendered',
+          afterState: 'hydrated SPA',
+        },
+        {
+          time: 1800,
+          before: '/playback/before-3.html',
+          after: '/playback/after-1.html',
+          beforeState: 'full content',
+          afterState: 'hydrated SPA',
+        },
+      ];
+      let stageIndex = 0;
+      let timers = [];
+      let playing = false;
+      let comparison = null;
+      let socialMode = 'before';
+
+      /**
+       * Moves both iframes to one captured stage.
+       * @param {number} index
+       */
+      function setStage(index) {
+        const stage = stages[index];
+        if (!stage) return;
+        stageIndex = index;
+        if (stage.beforeHtml) beforeFrame.srcdoc = stage.beforeHtml;
+        else beforeFrame.src = stage.before;
+        if (stage.afterHtml) afterFrame.srcdoc = stage.afterHtml;
+        else afterFrame.src = stage.after;
+        beforeTime.textContent = `t=${stage.time.toLocaleString()} ms`;
+        afterTime.textContent = `t=${stage.time.toLocaleString()} ms`;
+        beforeState.textContent = stage.beforeState;
+        afterState.textContent = stage.afterState;
+        beforeState.className = `state-chip ${
+          index === 0 ? 'is-empty' : index === stages.length - 1 ? 'is-ready' : 'is-partial'
+        }`;
+        afterState.className = 'state-chip is-ready';
+        modeNote.textContent = `t=${stage.time.toLocaleString()} ms · ${
+          stage.beforeState
+        } / ${stage.afterState}`;
+        timeline.value = String(index);
+        for (const label of stageLabels) {
+          const active = Number(label.dataset.stageLabel) === index;
+          if (active) label.setAttribute('aria-current', 'true');
+          else label.removeAttribute('aria-current');
+        }
+      }
+
+      /**
+       * Stops a running playback and resets the control.
+       */
+      function stopPlayback() {
+        playing = false;
+        for (const timer of timers) clearTimeout(timer);
+        timers = [];
+        playButton.setAttribute('aria-pressed', 'false');
+        playLabel.textContent = 'Play loading sequence';
+      }
+
+      /**
+       * Replays the captured stages from t=0.
+       */
+      function playTimeline() {
+        stopPlayback();
+        playing = true;
+        playButton.setAttribute('aria-pressed', 'true');
+        playLabel.textContent = 'Pause playback';
+        setStage(0);
+        for (let index = 1; index < stages.length; index += 1) {
+          timers.push(
+            setTimeout(() => {
+              if (!playing) return;
+              setStage(index);
+              if (index === stages.length - 1) {
+                timers.push(
+                  setTimeout(() => {
+                    if (playing) stopPlayback();
+                  }, 700),
+                );
+              }
+            }, stages[index].time),
+          );
+        }
+      }
+
+      playButton.addEventListener('click', () => {
+        if (playing) stopPlayback();
+        else playTimeline();
+      });
+
+      timeline.addEventListener('input', () => {
+        stopPlayback();
+        setStage(Number(timeline.value));
+      });
+
+      /**
+       * Applies one metadata state to all social cards.
+       * @param {'before' | 'after'} mode
+       */
+      function setSocialMode(mode) {
+        socialMode = mode;
+        for (const button of document.querySelectorAll('[data-social]')) {
+          button.setAttribute('aria-pressed', String(button.dataset.social === mode));
+        }
+        const data = comparison?.social?.[mode] ?? {
+          title: 'snappy-prerender',
+          description: null,
+          image: null,
+          site: null,
+        };
+        const hasImage = Boolean(data.image);
+        for (const image of document.querySelectorAll('[data-social-image]')) {
+          image.hidden = !hasImage;
+          if (hasImage) image.src = data.image;
+        }
+        for (const empty of document.querySelectorAll('[data-social-empty]')) {
+          empty.hidden = hasImage;
+        }
+        for (const node of document.querySelectorAll('[data-social-title]')) {
+          node.textContent = data.title || 'snappy-prerender';
+        }
+        for (const node of document.querySelectorAll('[data-social-description]')) {
+          node.textContent = data.description || 'No og:description in the HTML.';
+        }
+        for (const node of document.querySelectorAll('[data-social-site]')) {
+          node.textContent = data.site || 'snappy-prerender';
+        }
+        socialNote.textContent =
+          mode === 'after'
+            ? 'og:title, og:description, og:image and twitter:card are in the source.'
+            : 'No og:image, og:description or twitter:card in the source.';
+      }
+
+      for (const button of document.querySelectorAll('[data-social]')) {
+        button.addEventListener('click', () => setSocialMode(button.dataset.social));
+      }
+
+      fetch('/playback.json')
+        .then((response) => response.json())
+        .then(async (data) => {
+          if (!Array.isArray(data.stages) || data.stages.length === 0) return;
+          stages = await Promise.all(
+            data.stages.map(async (stage) => ({
+              ...stage,
+              beforeHtml: await fetch(stage.before).then((response) => response.text()),
+              afterHtml: await fetch(stage.after).then((response) => response.text()),
+            })),
+          );
+          timeline.max = String(stages.length - 1);
+          setStage(0);
+        })
+        .catch(() => {});
+
+      fetch('/comparison.json')
+        .then((response) => response.json())
+        .then((data) => {
+          comparison = data;
+          const values = {
+            before: {
+              h1: data.before.h1,
+              textLength: data.before.textLength,
+              htmlBytes: data.before.htmlBytes.toLocaleString(),
+              ogImage: data.before.ogImage ? 'present' : 'none',
+            },
+            after: {
+              h1: data.after.h1,
+              textLength: data.after.textLength,
+              htmlBytes: data.after.htmlBytes.toLocaleString(),
+              ogImage: data.after.ogImage ? 'present' : 'none',
+            },
+          };
+          for (const side of ['before', 'after']) {
+            for (const [key, value] of Object.entries(values[side])) {
+              for (const node of document.querySelectorAll(`[data-${side}="${key}"]`)) {
+                node.textContent = value;
+              }
+            }
+          }
+          setSocialMode(socialMode);
+        })
+        .catch(() => {});
+    </script>
+  </body>
+</html>
