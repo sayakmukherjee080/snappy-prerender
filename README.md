@@ -6,7 +6,7 @@
 
 Render a single-page app to static HTML at build time. Point the tool at the build output; it renders each route in Chrome, writes one HTML file per route, and leaves the app unchanged. The output includes page content, titles, meta tags, canonical links and Open Graph tags.
 
-Recent releases add deterministic clock and randomness controls, locale and hreflang generation, cookie/localStorage SEO locale seeding, a client-side head layer that replaces React Helmet or React Helmet Async, first-class verification for eight framework families, and content-drift baselines for build-to-build change reports.
+2.11 adds Angular, Ember and Lit verification, explicit Solid support, a custom container selector, and a content baseline that reports route changes between builds. Earlier releases added deterministic clocks and random seeds, locale and hreflang generation, cookie/localStorage SEO locale seeding, and a head layer that replaces React Helmet or React Helmet Async.
 
 [![npm](https://img.shields.io/npm/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![npm downloads](https://img.shields.io/npm/dm/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
@@ -105,7 +105,7 @@ If you are moving over, [Migrating from react-snap](docs/react-snap-migration.md
 | **Static HTML per route** | `route/index.html` (or `route.html` with `flatOutput`), plus `404.html`. Identical files are left untouched. |
 | **Head and metadata** | Per-route title, description, robots, canonical, Open Graph and Twitter tags, updated on client-side navigation. |
 | **Hydration report** | Each route is reloaded with the real bundle and reported as `hydrated`, `re-rendered`, `undetected` or `unknown`, with mismatch messages. React, Vue, Preact, Svelte, Angular, Ember and Lit are detected automatically; Solid is selected explicitly. |
-| **Content drift** | A persisted baseline reports added, removed, moved, changed, HTML-only and status-changed routes on later builds. |
+| **Content drift** | A baseline of route hashes and metadata reports added, removed, moved, changed, HTML-only and status-changed routes on later builds. |
 | **Ready contract** | `window.__prerenderReady`, a selector, or network quiescence. |
 | **Output optimisation** | Critical CSS, HTML/CSS minification, preconnect hints, image preload, a preload manifest, script and style removal. |
 | **CSS-in-JS support** | CSSOM-only styles and constructable stylesheets are written back into the HTML. |
@@ -249,7 +249,7 @@ Routes can come from `include` and crawling, from a text/JSON `routesFile`, or f
 
 ## Content drift
 
-Enable drift to keep a route baseline between builds:
+Set `drift: true` to store a route baseline between builds:
 
 ```js
 snappy({
@@ -259,9 +259,9 @@ snappy({
 });
 ```
 
-The first complete run writes the baseline; it is not reported as a set of additions. Later runs compare the written routes and report additions, removals, moves, content changes, HTML-only changes and status changes. A route record contains a `contentHash` over the visible text and SEO metadata, and an `htmlHash` over the final file. Asset filename changes therefore show up as HTML-only, not as content changes.
+The first complete run writes the baseline. It does not report every route as added. Later runs compare the written routes and report additions, removals, moves, content changes, HTML-only changes and status changes. Each record stores a `contentHash` of visible text and SEO metadata, and an `htmlHash` of the final file. A bundle filename change is reported as HTML-only, not as content drift.
 
-The baseline is written only after a complete run with no route errors or route truncation, and a run that fails `failOnDrift` leaves the previous baseline untouched. Dry runs never write it. Keep it outside the output directory when using `cleanDestination`; the default is `.snappy-baseline.json` beside the project configuration (relative to the config file for the CLI, and to `process.cwd()` for the programmatic API). In CI, persist it as a cache or artifact, or commit it deliberately.
+The baseline is written only after a complete run with no route errors or truncation. A run that fails `failOnDrift` keeps the previous baseline. Dry runs never write it. Keep it outside the output directory when using `cleanDestination`; the default is `.snappy-baseline.json` beside the project configuration (relative to the config file for the CLI, and to `process.cwd()` for the programmatic API). In CI, persist it as a cache or artifact, or commit it deliberately.
 
 `report.drift` contains the comparison, and each route record carries `driftStatus` and `driftReasons`. `failOnDrift: true` fails on removed, changed and status-changed routes; pass an array to choose `added`, `removed`, `moved`, `changed`, `html-only` or `status-changed`. The full schema is in [docs/report.md](docs/report.md).
 
@@ -465,7 +465,7 @@ react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome
 snappy({ sitemap: true, metadata: { siteUrl: 'https://example.com' } });
 ```
 
-The sitemap is generated from the written routes using the same page-path policy as canonical URLs. `noindex` pages and the not-found route are omitted. Above 50,000 URLs it is split behind a sitemap index. Entries have no `<lastmod>` by default. Set `sitemapLastmod: true` (with `drift: true` and `sitemap: true`) to add dates from the baseline: a new or content-changed route gets the build time, while unchanged and HTML-only routes keep their previous date. This avoids claiming every page changed on every build. `lastmod` uses the real build start, not `freezeTime`, so a frozen content clock does not freeze deployment dates.
+The sitemap is generated from the written routes using the same page-path policy as canonical URLs. `noindex` pages and the not-found route are omitted. Above 50,000 URLs it is split behind a sitemap index. Entries have no `<lastmod>` by default. Set `sitemapLastmod: true` (with `drift: true` and `sitemap: true`) to add dates from the baseline: a new or content-changed route gets the build time, while unchanged and HTML-only routes keep their previous date. This avoids claiming every page changed on every build. `lastmod` uses the real build start, not `freezeTime`, so enabling a fixed content clock does not stop the date from advancing.
 
 When the output directory already has a `robots.txt`, a `Sitemap:` line is appended to it if it does not point anywhere yet; an existing directive is left alone. Without a `robots.txt`, the run logs the exact line to add instead of creating a file you did not ask for.
 

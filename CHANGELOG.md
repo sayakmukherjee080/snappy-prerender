@@ -10,8 +10,8 @@ the release tags; see the Git history for those changes.
 
 ### Added
 
-- Content drift baselines: `drift`, `baselinePath` and `failOnDrift` persist a per-route
-  baseline and report added, removed, moved, changed, HTML-only and status-changed routes.
+- `drift`, `baselinePath` and `failOnDrift` store a per-route baseline and report added,
+  removed, moved, changed, HTML-only and status-changed routes.
 - `htmlHash` for the exact written file and `contentHash` for a normalized fingerprint of
   visible text, SEO metadata, links, images and JSON-LD. Ordinary script and style changes
   do not count as content drift.
@@ -31,10 +31,10 @@ the release tags; see the Git history for those changes.
 
 ### Fixed
 
-- Sitemap `lastmod` uses the real build start instead of `freezeTime`, so a frozen content
-  clock no longer freezes deployment dates.
-- A run that fails `failOnDrift` no longer replaces the baseline, keeping the gate
-  repeatable.
+- Sitemap `lastmod` uses the real build start instead of `freezeTime`, so a fixed content
+  clock no longer prevents deployment dates from advancing.
+- A failed `failOnDrift` run keeps the previous baseline, so the next run still compares
+  against the last accepted build.
 
 ## [2.11.0] - 2026-11-06
 
