@@ -337,6 +337,11 @@ describe('resolveConfig 2.7 options', () => {
     assert.equal(config.verifyChangedOnly, false);
     assert.equal(config.reuseVerificationContext, false);
     assert.equal(config.framework, 'auto');
+    assert.equal(config.container, null);
+    assert.equal(config.drift, false);
+    assert.equal(config.baselinePath, '.snappy-baseline.json');
+    assert.equal(config.failOnDrift, false);
+    assert.equal(config.sitemapLastmod, false);
     assert.equal(config.retries, 0);
     assert.equal(config.retryDelay, 500);
     assert.equal(config.traceOnError, false);
@@ -373,8 +378,60 @@ describe('resolveConfig 2.7 options', () => {
   });
 
   it('validates the framework choice', () => {
-    assert.equal(resolveConfig({ framework: 'vue' }).framework, 'vue');
-    assert.throws(() => resolveConfig({ framework: 'angular' }), /framework must be one of/);
+    for (const framework of [
+      'react',
+      'vue',
+      'svelte',
+      'preact',
+      'angular',
+      'solid',
+      'lit',
+      'ember',
+    ]) {
+      assert.equal(resolveConfig({ framework }).framework, framework);
+    }
+    assert.throws(() => resolveConfig({ framework: 'nope' }), /framework must be one of/);
+  });
+
+  it('validates the custom container selector', () => {
+    assert.equal(resolveConfig({ container: '#app-root' }).container, '#app-root');
+    assert.throws(() => resolveConfig({ container: '' }), /container must be a non-empty/);
+  });
+
+  it('normalises and validates the drift gate', () => {
+    assert.deepEqual(resolveConfig({ failOnDrift: true }).failOnDrift, [
+      'removed',
+      'changed',
+      'status-changed',
+    ]);
+    assert.deepEqual(resolveConfig({ failOnDrift: ['changed', 'changed'] }).failOnDrift, [
+      'changed',
+    ]);
+    assert.throws(() => resolveConfig({ failOnDrift: ['content'] }), /failOnDrift status/);
+    assert.throws(() => resolveConfig({ failOnDrift: 'yes' }), /failOnDrift/);
+  });
+
+  it('requires drift and sitemap for sitemapLastmod', () => {
+    assert.throws(() => resolveConfig({ sitemapLastmod: true }), /drift/);
+    assert.throws(() => resolveConfig({ drift: true, sitemapLastmod: true }), /sitemap/);
+    const config = resolveConfig({
+      drift: true,
+      sitemap: true,
+      sitemapLastmod: true,
+      metadata: { siteUrl: 'https://example.com' },
+    });
+    assert.equal(config.sitemapLastmod, true);
+  });
+
+  it('allows a framework override per route', () => {
+    const config = resolveConfig({
+      routeOverrides: [{ match: '/solid/*', framework: 'solid' }],
+    });
+    assert.equal(config.routeOverrides[0].framework, 'solid');
+    assert.throws(
+      () => resolveConfig({ routeOverrides: [{ match: '/x', framework: 'nope' }] }),
+      /routeOverrides.framework/,
+    );
   });
 
   it('validates route priority and audit ignore patterns', () => {

@@ -6,6 +6,57 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [2.11.1] - 2026-11-06
+
+### Added
+
+- Content drift baselines: `drift`, `baselinePath` and `failOnDrift` persist a per-route
+  baseline and report added, removed, moved, changed, HTML-only and status-changed routes.
+- `htmlHash` for the exact written file and `contentHash` for a normalized fingerprint of
+  visible text, SEO metadata, links, images and JSON-LD. Ordinary script and style changes
+  do not count as content drift.
+- `report.drift` with per-route `driftStatus` and `driftReasons`, plus a baseline schema in
+  `docs/report.md`. The JSON report version is now 2.
+- `sitemapLastmod` adds `<lastmod>` from the baseline. New and content-changed routes get the
+  build date; unchanged and HTML-only routes keep their previous date.
+- CLI flags `--drift`, `--baseline`, `--fail-on-drift`, `--fail-on-drift-status` and
+  `--sitemap-lastmod`.
+
+### Changed
+
+- Baselines are written only after a complete, non-dry run. Incomplete builds and failed
+  `failOnDrift` runs keep the old baseline and preserve previous sitemap dates.
+- A baseline is kept outside the output directory by default so `cleanDestination` cannot
+  delete it.
+
+### Fixed
+
+- Sitemap `lastmod` uses the real build start instead of `freezeTime`, so a frozen content
+  clock no longer freezes deployment dates.
+- A run that fails `failOnDrift` no longer replaces the baseline, keeping the gate
+  repeatable.
+
+## [2.11.0] - 2026-11-06
+
+### Added
+
+- Framework verification for Angular, Ember and Lit from DOM markers, and explicit
+  `framework: 'solid'` support for Solid client renders.
+- Angular, Ember, Lit and Solid hydration mismatch patterns.
+- `container` config option and `--container` CLI flag for app roots outside
+  `#root`, `#app` or `#__next`. A missing configured selector fails the route instead of
+  silently using the body.
+- Ember's script-first body is handled by selecting the application body and skipping vendor
+  scripts when capturing the prerendered child.
+- Custom container selectors are resolved in the browser for both the live and written
+  documents before computing `firstMismatch`.
+- `routeOverrides[].framework` for per-route framework selection.
+
+### Changed
+
+- Verification results now identify Angular, Ember and Lit routes instead of reporting them
+  as `undetected` or `unknown`.
+
 ## [2.10.1] - 2026-11-01
 
 ### Changed

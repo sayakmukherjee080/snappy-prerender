@@ -7,6 +7,15 @@ import { resolveFixedTime } from './clock.js';
 import { resolveConfig } from './config.js';
 import { renderAllRoutes } from './crawl.js';
 import { prepareDestination } from './destination.js';
+import { buildDriftResult, readBaseline, toDriftRecord, writeBaseline } from './drift.js';
+import {
+  applyDriftDetails,
+  applyLastmods,
+  applyPreviousLastmods,
+  logDrift,
+  skippedDrift,
+  warnBaselineLocation,
+} from './drift-runtime.js';
 import { buildLocalePlan } from './locales.js';
 import { createLogger } from './log.js';
 import { routeToFile } from './output.js';
@@ -34,6 +43,9 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   const fixedTime = resolveFixedTime(config, startedAt);
   config.fixedTime = fixedTime;
   const localePlan = buildLocalePlan(config);
+  const driftBaselineFile =
+    config.drift && config.saveAs === 'html' ? path.resolve(config.baselinePath) : null;
+  const previousBaseline = driftBaselineFile ? await readBaseline(driftBaselineFile) : null;
 
   await assertSourceDir(sourceDir, config);
   const [outputDir, routeSources] = await Promise.all([
@@ -42,6 +54,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   ]);
   const previousManifest =
     config.pruneStaleRoutes && !config.dryRun ? await readPruneManifest(outputDir) : null;
+  if (driftBaselineFile) warnBaselineLocation(driftBaselineFile, outputDir, log);
   for (const source of routeSources.sources) {
     const skipped = source.skipped > 0 ? `, ${source.skipped} skipped` : '';
     log.info(`Route source ${source.source}: ${source.routes} route(s)${skipped}`);
@@ -94,6 +107,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       : null,
     cspSkipped: [],
     traces: [],
+    drift: null,
     verification: null,
     audit: null,
     preloadManifest: null,
@@ -102,11 +116,12 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     truncated: null,
     ok: false,
     durationMs: 0,
-    timings: { render: 0, write: 0, artifacts: 0, verify: 0, audit: 0 },
+    timings: { render: 0, write: 0, drift: 0, artifacts: 0, verify: 0, audit: 0 },
   };
   const manifestEntries = [];
   const state = { warnedBuildOriginMetadata: false, warnedCriticalCssSkipped: false };
   let browser = null;
+  let driftResult = null;
 
   try {
     const launched = await browserPromise;
@@ -174,6 +189,36 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     logFileSummary(report, log);
     logNotFoundNotice(report, config, log);
     logDuplicateTitles(report, log);
+
+    phaseStartedAt = Date.now();
+    if (config.drift) {
+      if (config.saveAs !== 'html') {
+        report.drift = skippedDrift(config, 'saveAs', previousBaseline);
+        log.warn(`Drift is skipped when saveAs is '${config.saveAs}'`);
+      } else if (report.errors.length > 0 || report.truncated !== null) {
+        report.drift = skippedDrift(config, 'run-incomplete', previousBaseline);
+        applyPreviousLastmods(report, previousBaseline);
+        log.warn(
+          'Drift comparison skipped because the run is incomplete; the baseline was not updated',
+        );
+      } else {
+        const buildTime = new Date(startedAt).toISOString();
+        driftResult = buildDriftResult({
+          previous: previousBaseline,
+          current: report.routeDetails.map(toDriftRecord),
+          config,
+          buildTime,
+        });
+        report.drift = driftResult.report;
+        if (config.dryRun && previousBaseline?.state !== 'ok') {
+          report.drift.baseline.state = 'dry-run';
+        }
+        applyDriftDetails(report, driftResult.report);
+        applyLastmods(report, driftResult.lastmods);
+        logDrift(driftResult.report, config, log);
+      }
+    }
+    report.timings.drift = Date.now() - phaseStartedAt;
 
     phaseStartedAt = Date.now();
     if (config.sitemap) {
@@ -292,6 +337,28 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     }
     report.timings.audit = Date.now() - auditStartedAt;
   }
+  if (
+    driftResult &&
+    config.drift &&
+    !config.dryRun &&
+    config.saveAs === 'html' &&
+    report.errors.length === 0 &&
+    report.truncated === null &&
+    report.drift?.ok !== false
+  ) {
+    try {
+      const written = await writeBaseline(driftBaselineFile, driftResult.baseline);
+      report.baselineFile = { file: config.baselinePath, status: written.status };
+      if (['invalid', 'version-mismatch'].includes(report.drift.baseline.state)) {
+        report.drift.baseline.state = 'replaced';
+      }
+    } catch (error) {
+      report.drift.baseline.state = 'write-failed';
+      report.errors.push({ route: null, message: `baseline write failed: ${error.message}` });
+      log.error(`baseline write failed: ${error.message}`);
+    }
+  }
+
   const reRendered = report.verification?.modes['re-rendered'] ?? 0;
   const allowedRerender = report.verification?.allowedRerender ?? 0;
   const notAllowedRerender = Math.max(0, reRendered - allowedRerender);
@@ -309,7 +376,8 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     !(config.failOnHydrationError && report.verification && !report.verification.ok) &&
     !(config.failOnVerificationError && report.verification?.errors.length > 0) &&
     !(config.failOnUndetected && undetected > 0) &&
-    !(config.failOnRerender && notAllowedRerender > 0);
+    !(config.failOnRerender && notAllowedRerender > 0) &&
+    !(config.failOnDrift && report.drift?.enabled === true && report.drift.ok === false);
   try {
     report.reportFile = await writeReport({ report, config, log });
   } catch (error) {

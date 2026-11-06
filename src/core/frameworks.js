@@ -25,8 +25,21 @@ const SVELTE = (container) =>
           (node) => node.nodeType === 8 && (node.data === '[' || node.data === '[!'),
         )),
   );
+const ANGULAR = (container) =>
+  Boolean(
+    container.hasAttribute?.('ng-version') ||
+      container.querySelector?.('[ng-version]') ||
+      container.__ngContext__,
+  );
+const EMBER = (container) =>
+  Boolean(
+    container.classList?.contains('ember-application') ||
+      container.classList?.contains('ember-view') ||
+      container.querySelector?.('.ember-view'),
+  );
+const LIT = (container) => Boolean(container._$litPart$ || container.firstElementChild?._$litPart$);
 
-const AUTO_ORDER = ['react', 'vue', 'preact', 'svelte'];
+const AUTO_ORDER = ['react', 'vue', 'preact', 'svelte', 'angular', 'ember', 'lit'];
 
 /**
  * Detects the framework that mounted into a container from its DOM markers. This is
@@ -44,6 +57,9 @@ export function detectFramework(container, requested = 'auto') {
     vue: VUE(container),
     preact: PREACT(container),
     svelte: SVELTE(container),
+    angular: ANGULAR(container),
+    ember: EMBER(container),
+    lit: LIT(container),
   };
   return frameworkFromMarkers(markers, requested);
 }
@@ -87,6 +103,10 @@ const FRAMEWORK_PATTERNS = {
   ],
   vue: [/hydration (?:node|text|children) mismatch/i, /hydration-mismatch/i, /hydrat/i],
   svelte: [/hydration_mismatch/i, /hydration failed/i],
+  angular: [/NG05\d{2}/, /angular.*hydrat/i, /hydrat.*angular/i],
+  ember: [/ember.*hydrat/i, /hydrat.*ember/i, /rehydrat/i],
+  lit: [/lit-html/i, /lit.*hydrat/i, /hydrat.*lit/i, /part.*(?:not found|mismatch)/i],
+  solid: [/solid.*hydrat/i, /hydrat.*solid/i],
 };
 
 /**

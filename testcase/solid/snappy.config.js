@@ -10,6 +10,9 @@ const config = {
   include: [...getAllRoutePaths(routes), '/404'],
   crawl: false,
   notFoundRoute: '/404',
+  // Solid's client render leaves no stable container marker, so verification needs the
+  // explicit framework when the hydration skip is removed for a lab run.
+  framework: 'solid',
   transformHtml: guardApiContent,
   metadata: {
     siteUrl: 'https://aethercompute.space',

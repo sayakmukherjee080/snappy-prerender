@@ -36,6 +36,24 @@ describe('buildSitemap', () => {
     assert.equal(contents.includes('404.html'), false);
   });
 
+  it('adds lastmod only when the sitemapLastmod option is on', () => {
+    const entry = {
+      route: '/',
+      file: 'index.html',
+      status: 'written',
+      lastmod: '2026-02-02T00:00:00.000Z',
+    };
+    const off = buildSitemap({ files: [entry], config: config() });
+    assert.equal(off.files[0].contents.includes('<lastmod>'), false);
+
+    const on = buildSitemap({
+      files: [entry],
+      config: config({ sitemapLastmod: true }),
+    });
+    assert.match(on.files[0].contents, /<lastmod>2026-02-02T00:00:00\.000Z<\/lastmod>/);
+    assert.equal(on.lastmod, 1);
+  });
+
   it('uses a locale-specific URL when one is provided', () => {
     const sitemap = buildSitemap({
       files: [

@@ -1,5 +1,16 @@
 import fs from 'node:fs';
 
+const ROUTE_FRAMEWORKS = [
+  'auto',
+  'react',
+  'vue',
+  'svelte',
+  'preact',
+  'angular',
+  'solid',
+  'lit',
+  'ember',
+];
 const ROUTE_OVERRIDE_KEYS = new Set([
   'match',
   'timeout',
@@ -9,6 +20,7 @@ const ROUTE_OVERRIDE_KEYS = new Set([
   'crawl',
   'storageState',
   'hydration',
+  'framework',
 ]);
 
 /**
@@ -33,11 +45,16 @@ export function validateRouteOverrides(overrides) {
         throw new TypeError('routeOverrides.timeout must be a positive number of milliseconds');
       }
     }
-    for (const key of ['waitFor', 'readySelector', 'readyFlag', 'storageState']) {
+    for (const key of ['waitFor', 'readySelector', 'readyFlag', 'storageState', 'framework']) {
       const value = override[key];
       if (value !== undefined && typeof value !== 'string') {
         throw new TypeError(`routeOverrides.${key} must be a string`);
       }
+    }
+    if (override.framework !== undefined && !ROUTE_FRAMEWORKS.includes(override.framework)) {
+      throw new TypeError(
+        `routeOverrides.framework must be one of: ${ROUTE_FRAMEWORKS.join(', ')}`,
+      );
     }
     if (override.crawl !== undefined && typeof override.crawl !== 'boolean') {
       throw new TypeError('routeOverrides.crawl must be a boolean');

@@ -6,7 +6,7 @@
 
 Render a single-page app to static HTML at build time. Point the tool at the build output; it renders each route in Chrome, writes one HTML file per route, and leaves the app unchanged. The output includes page content, titles, meta tags, canonical links and Open Graph tags.
 
-Recent releases add deterministic clock and randomness controls, locale and hreflang generation, cookie/localStorage SEO locale seeding, and a client-side head layer that replaces React Helmet or React Helmet Async for prerendered apps.
+Recent releases add deterministic clock and randomness controls, locale and hreflang generation, cookie/localStorage SEO locale seeding, a client-side head layer that replaces React Helmet or React Helmet Async, first-class verification for eight framework families, and content-drift baselines for build-to-build change reports.
 
 [![npm](https://img.shields.io/npm/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![npm downloads](https://img.shields.io/npm/dm/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
@@ -72,6 +72,7 @@ npx snappy-prerender dist --block-third-party --allowed-hosts cms.example.com
 npx snappy-prerender dist --metadata-site-url https://example.com --metadata-title-template '%s | Example'
 npx snappy-prerender dist --inline-css critical --minify-html --preload-manifest
 npx snappy-prerender dist --sitemap --verify-changed-only
+npx snappy-prerender dist --drift --baseline .snappy-baseline.json
 npx snappy-prerender dist --csp strict --inline-css critical
 ```
 
@@ -103,7 +104,8 @@ If you are moving over, [Migrating from react-snap](docs/react-snap-migration.md
 | --- | --- |
 | **Static HTML per route** | `route/index.html` (or `route.html` with `flatOutput`), plus `404.html`. Identical files are left untouched. |
 | **Head and metadata** | Per-route title, description, robots, canonical, Open Graph and Twitter tags, updated on client-side navigation. |
-| **Hydration report** | Each route is reloaded with the real bundle and reported as `hydrated`, `re-rendered`, `undetected` or `unknown`, with mismatch messages. |
+| **Hydration report** | Each route is reloaded with the real bundle and reported as `hydrated`, `re-rendered`, `undetected` or `unknown`, with mismatch messages. React, Vue, Preact, Svelte, Angular, Ember and Lit are detected automatically; Solid is selected explicitly. |
+| **Content drift** | A persisted baseline reports added, removed, moved, changed, HTML-only and status-changed routes on later builds. |
 | **Ready contract** | `window.__prerenderReady`, a selector, or network quiescence. |
 | **Output optimisation** | Critical CSS, HTML/CSS minification, preconnect hints, image preload, a preload manifest, script and style removal. |
 | **CSS-in-JS support** | CSSOM-only styles and constructable stylesheets are written back into the HTML. |
@@ -120,6 +122,7 @@ If you are moving over, [Migrating from react-snap](docs/react-snap-migration.md
 5. Serialises the DOM and post-processes it: removes freeze styles and `data-prerender-remove` elements, de-duplicates head styles, drops dead blob stylesheets, adds link hints, optionally inlines CSS, removes or marks scripts, optionally minifies, and records metadata issues.
 6. Writes `route/index.html` or a screenshot, leaving identical files untouched.
 7. Reloads each written file with the client bundle and reports hydration errors and boot mode.
+8. Optionally compares the written routes with a persisted content baseline and reports drift.
 
 ## Head and metadata
 
@@ -242,7 +245,27 @@ Findings are returned in `report.audit` and logged. They do not fail the run unl
 
 Routes can come from `include` and crawling, from a text/JSON `routesFile`, or from a local or remote sitemap via `routesFromSitemap`. Relative source paths resolve against the config file. Root-relative sitemap locations have `base` stripped, and a remote sitemap's off-origin locations are ignored. If either source is supplied and `include` is not set, the root is not seeded implicitly. With `maxRoutes` or `routePriority`, crawling runs in deterministic breadth-first waves sorted by priority then path. `truncated.droppedRoutes` lists routes that did not fit.
 
-`routeOverrides` applies `timeout`, `waitFor`, `readySelector`, `readyFlag`, `crawl`, `storageState` and `hydration` to matching routes; later entries win per key. `transformHtml` runs once per route after minification and before preload/CSP injection. It may be async and must return a string or nothing.
+`routeOverrides` applies `timeout`, `waitFor`, `readySelector`, `readyFlag`, `crawl`, `storageState`, `hydration` and `framework` to matching routes; later entries win per key. `transformHtml` runs once per route after minification and before preload/CSP injection. It may be async and must return a string or nothing.
+
+## Content drift
+
+Enable drift to keep a route baseline between builds:
+
+```js
+snappy({
+  drift: true,
+  baselinePath: '.snappy-baseline.json',
+  failOnDrift: ['removed', 'changed'],
+});
+```
+
+The first complete run writes the baseline; it is not reported as a set of additions. Later runs compare the written routes and report additions, removals, moves, content changes, HTML-only changes and status changes. A route record contains a `contentHash` over the visible text and SEO metadata, and an `htmlHash` over the final file. Asset filename changes therefore show up as HTML-only, not as content changes.
+
+The baseline is written only after a complete run with no route errors or route truncation, and a run that fails `failOnDrift` leaves the previous baseline untouched. Dry runs never write it. Keep it outside the output directory when using `cleanDestination`; the default is `.snappy-baseline.json` beside the project configuration (relative to the config file for the CLI, and to `process.cwd()` for the programmatic API). In CI, persist it as a cache or artifact, or commit it deliberately.
+
+`report.drift` contains the comparison, and each route record carries `driftStatus` and `driftReasons`. `failOnDrift: true` fails on removed, changed and status-changed routes; pass an array to choose `added`, `removed`, `moved`, `changed`, `html-only` or `status-changed`. The full schema is in [docs/report.md](docs/report.md).
+
+Use `freezeTime` with an explicit ISO time or `SOURCE_DATE_EPOCH`, and set `randomSeed` when the page renders random content; otherwise a timestamp or random value will look like content drift.
 
 `preloadLinks` injects `<link rel="modulepreload">` for runtime chunks, font preloads with their response content type, and the LCP image. It complements `preloadManifest`: the manifest is for hosts that send Early Hints, while the injected links work on any static host. Script hints are skipped when `removeScriptTags` is on.
 
@@ -252,9 +275,9 @@ Routes can come from `include` and crawling, from a text/JSON `routesFile`, or f
 
 After writing the output, each route is loaded again in a fresh browser context with the client bundle. By default the results are reported but do not fail the build; the static HTML is already written. Set `failOnHydrationError: true` (or pass `--fail-on-hydration-error`) to make hydration a build gate.
 
-**Hydration errors.** Mismatch messages for React, Vue, Svelte and Preact are reported with the route, framework and message. React text mismatches and minified production codes (`#418`, `#423`, `#425`) are recognised; Preact uses the React-compatible messages. A mismatch means the client re-renders the page instead of adopting the static markup. The crawler-visible HTML is unchanged.
+**Hydration errors.** Mismatch messages for React, Vue, Preact, Svelte, Angular, Ember and Lit are reported with the route, framework and message. React text mismatches and minified production codes (`#418`, `#423`, `#425`) are recognised; Preact uses the React-compatible messages. Solid uses explicit `framework: 'solid'` because its client render leaves no stable DOM marker. A mismatch means the client re-renders the page instead of adopting the static markup. The crawler-visible HTML is unchanged.
 
-The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`, and Svelte 5's `<!--[-->` hydration anchor); nothing is imported or executed. Set `framework` when a custom root defeats detection: an explicit framework is treated as mounted and selects the matching mismatch patterns without requiring a marker. Svelte 5 apps that only call `mount()` and emit no hydration anchor should set `framework: 'svelte'`. When a route has hydration errors or re-rendered, `firstMismatch` reports the first difference between the written HTML and the live container as `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
+The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`, Svelte 5's `<!--[-->` anchor, Angular's `ng-version`, Ember's application body/`ember-view`, and Lit's `_$litPart$`); nothing is imported or executed. Set `framework` when a custom root defeats detection: an explicit framework is treated as mounted and selects the matching mismatch patterns without requiring a marker. Svelte 5 apps that only call `mount()` and emit no hydration anchor should set `framework: 'svelte'`; Solid should set `framework: 'solid'`. Set `container` when the app root is outside `#root`, `#app` or `#__next`; it is resolved in the browser for both the live and written documents. When a route has hydration errors or re-rendered, `firstMismatch` reports the first difference between the written HTML and the live container as `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
 
 A probe installed before the app's scripts run records the container's first prerendered node and the first-element chain beneath it, then checks whether every captured wrapper survived:
 
@@ -263,9 +286,9 @@ A probe installed before the app's scripts run records the container's first pre
 | `hydrated` | The app kept the prerendered markup, including the wrappers beneath the container. |
 | `re-rendered` | The app discarded it and rendered from scratch, or kept only the outer wrapper while replacing everything inside it. |
 | `undetected` | No framework root was found on the container. |
-| `unknown` | The prerendered node was not seen, for example a container outside the usual ids. |
+| `unknown` | The prerendered node was not seen, for example a container outside the usual ids. Set `container` to the app root when this is a custom shell. |
 
-A verification navigation that returns HTTP 4xx/5xx, or a container with no content, is reported as failed with its `status` or `empty` flag. `undetected` and `unknown` are reported as counts; `failOnUndetected: true` fails the build for them. A verification pass that cannot run is listed in `verification.errors`; `failOnVerificationError: true` fails separately from hydration errors.
+A verification navigation that returns HTTP 4xx/5xx, or a container with no content, is reported as failed with its `status` or `empty` flag. A configured `container` that matches nothing fails the route instead of falling back to the body. `undetected` and `unknown` are reported as counts; `failOnUndetected: true` fails the build for them. A verification pass that cannot run is listed in `verification.errors`; `failOnVerificationError: true` fails separately from hydration errors.
 
 `re-rendered` usually means the app calls `createRoot` instead of `hydrateRoot`, or mounts a string-rendered shell over a prerendered page. Since `createRoot` does not emit a hydration error, the mode report is the only signal. It is reported per route as `verification.routes[].mode` and summarised in `verification.modes`. Set `failOnRerender: true` to fail the build.
 
@@ -442,7 +465,7 @@ react-snap called this `http2PushManifest`. Browsers removed HTTP/2 push (Chrome
 snappy({ sitemap: true, metadata: { siteUrl: 'https://example.com' } });
 ```
 
-The sitemap is generated from the written routes using the same page-path policy as canonical URLs. `noindex` pages and the not-found route are omitted. Above 50,000 URLs it is split behind a sitemap index. Entries have no `<lastmod>`; a build date would claim every page changed on every build.
+The sitemap is generated from the written routes using the same page-path policy as canonical URLs. `noindex` pages and the not-found route are omitted. Above 50,000 URLs it is split behind a sitemap index. Entries have no `<lastmod>` by default. Set `sitemapLastmod: true` (with `drift: true` and `sitemap: true`) to add dates from the baseline: a new or content-changed route gets the build time, while unchanged and HTML-only routes keep their previous date. This avoids claiming every page changed on every build. `lastmod` uses the real build start, not `freezeTime`, so a frozen content clock does not freeze deployment dates.
 
 When the output directory already has a `robots.txt`, a `Sitemap:` line is appended to it if it does not point anywhere yet; an existing directive is left alone. Without a `robots.txt`, the run logs the exact line to add instead of creating a file you did not ask for.
 
@@ -628,7 +651,7 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `routePriority` | `[]` | Patterns ranked first when crawling, strings or RegExp; setting it selects deterministic BFS |
 | `routesFile` | `null` | Text or JSON route seeds, one route per line or `{ "routes": [] }`; a relative path resolves against the config file |
 | `routesFromSitemap` | `null` | Local path or http(s) URL whose `<loc>` entries seed routes; sitemap indexes are followed one level, the public base is stripped from root-relative locs, and off-origin locs are ignored. Absolute locs in a local sitemap need `metadata.siteUrl` or a remote sitemap origin |
-| `routeOverrides` | `[]` | Per-route `{ match, timeout, waitFor, readySelector, readyFlag, crawl, storageState, hydration }`; later entries win |
+| `routeOverrides` | `[]` | Per-route `{ match, timeout, waitFor, readySelector, readyFlag, crawl, storageState, hydration, framework }`; later entries win |
 | `freezeTime` | `false` | `true`, an ISO string or epoch ms; fixes `Date`/`Date.now()` in render and verification. `true` uses `SOURCE_DATE_EPOCH` or the run start |
 | `timezone` | `null` | IANA timezone applied to render and verification contexts |
 | `randomSeed` | `null` | Deterministic `Math.random()` during render and verification; never for security |
@@ -690,8 +713,13 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `reportPath` | `null` | Write the versioned JSON run report to this file; URLs and the storage-state path are redacted |
 | `saveAs` | `html` | `html`, `png` or `jpeg`; identical screenshots are left untouched |
 | `metadata` | `null` | Defaults for the head component: `siteUrl` (origin only), `siteName`, `titleTemplate`, `defaultImage`, `trailingSlash`, `base` |
+| `container` | `null` | CSS selector for the app root; overrides `#root, #app, #__next` and fails when it matches nothing |
+| `drift` | `false` | Compare written routes against the persisted content baseline |
+| `baselinePath` | `.snappy-baseline.json` | Baseline path; relative to the config file for the CLI and to `process.cwd()` for the API. Keep it outside the output directory. |
+| `failOnDrift` | `false` | `true` fails removed, changed and status-changed routes; an array selects `added`, `removed`, `moved`, `changed`, `html-only` or `status-changed` |
+| `sitemapLastmod` | `false` | Add `<lastmod>` from the drift baseline; requires `drift` and `sitemap` |
 | `verify` | `true` | Run the hydration verification pass |
-| `framework` | `auto` | `auto`, `react`, `vue`, `svelte` or `preact`; `auto` detects from DOM markers, an explicit value is trusted and selects mismatch patterns |
+| `framework` | `auto` | `auto`, `react`, `vue`, `preact`, `svelte`, `angular`, `solid`, `lit` or `ember`; `auto` detects from DOM markers, an explicit value is trusted and selects mismatch patterns. Solid must be explicit. |
 | `retries` | `0` | Retry a retryable render failure this many times |
 | `retryDelay` | `500` | Wait between render attempts, in ms |
 | `traceOnError` | `false` | Write a Playwright trace for the final failed attempt under `snappy-traces/` |
@@ -730,7 +758,7 @@ if (!report.ok) {
 }
 ```
 
-The report exposes `routes`, `files` (with per-route `status` and `noindex`), `routeDetails` (the per-route records used by the JSON report), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `consoleErrors`, `failedRequests`, `emptyPages`, `duplicatePages`, `duplicateTitles` (routes shipping more than one title), `verification` (nullable; per-route `mode`, `framework`, `firstMismatch`, `status` and `empty` plus `modes` and `frameworks` summaries), `audit` (nullable; `errors`, `warnings`, `linksChecked`), `preloadManifest`, `sitemap`, `pruned`, `truncated`, `notFoundRoutes`, `cspSkipped`, `traces`, and `ok`. See [docs/report.md](docs/report.md) for the JSON schema.
+The report exposes `routes`, `files` (with per-route `status` and `noindex`), `routeDetails` (the per-route records used by the JSON report), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `consoleErrors`, `failedRequests`, `emptyPages`, `duplicatePages`, `duplicateTitles` (routes shipping more than one title), `verification` (nullable; per-route `mode`, `framework`, `firstMismatch`, `status` and `empty` plus `modes` and `frameworks` summaries), `drift` (nullable; baseline state, added/removed/moved/changed/html-only/status-changed routes, failures and summary), `audit` (nullable; `errors`, `warnings`, `linksChecked`), `preloadManifest`, `sitemap`, `pruned`, `truncated`, `notFoundRoutes`, `cspSkipped`, `traces`, and `ok`. See [docs/report.md](docs/report.md) for the JSON schema.
 
 `snappy-prerender` exports `DEFAULTS`, `prerender` and `resolveConfig`; the default export is the Vite plugin.
 

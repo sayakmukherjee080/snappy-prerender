@@ -29,6 +29,7 @@ export function buildSitemap({ files, config, maxUrls = SITEMAP_MAX_URLS }) {
       loc: file.localeUrl ?? `${siteUrl}${toPublicPath(path, config.base)}`,
       alternates: normaliseAlternates(file.alternates ?? [], siteUrl, config.base),
       images: config.imageSitemap ? normaliseImages(file.images ?? [], siteUrl, config.base) : [],
+      lastmod: config.sitemapLastmod ? (file.lastmod ?? null) : null,
     });
   }
   if (entries.length === 0) return null;
@@ -44,6 +45,7 @@ export function buildSitemap({ files, config, maxUrls = SITEMAP_MAX_URLS }) {
       files: [{ name: 'sitemap.xml', contents: urlSet(chunks[0]) }],
       routes: entries.length,
       locs: entries.map((entry) => entry.loc),
+      lastmod: entries.filter((entry) => entry.lastmod).length,
     };
   }
 
@@ -59,6 +61,7 @@ export function buildSitemap({ files, config, maxUrls = SITEMAP_MAX_URLS }) {
     ],
     routes: entries.length,
     locs: entries.map((entry) => entry.loc),
+    lastmod: entries.filter((entry) => entry.lastmod).length,
   };
 }
 
@@ -97,6 +100,7 @@ function urlSet(entries) {
   const urls = entries
     .map((entry) => {
       const lines = [`    <loc>${escapeXml(entry.loc)}</loc>`];
+      if (entry.lastmod) lines.push(`    <lastmod>${escapeXml(entry.lastmod)}</lastmod>`);
       for (const alternate of entry.alternates) {
         lines.push(
           `    <xhtml:link rel="alternate" hreflang="${escapeXml(alternate.hreflang)}" href="${escapeXml(alternate.href)}"/>`,

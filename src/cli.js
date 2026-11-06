@@ -88,13 +88,19 @@ Options:
       --routes-from-sitemap <path-or-url>  Seed routes from a local or remote sitemap
       --route-priority <patterns>  Patterns ranked first when crawling, comma separated
       --report <file>         Write a machine-readable run report (JSON)
+      --drift                 Compare routes against a persisted content baseline
+      --baseline <file>       Baseline path (default: .snappy-baseline.json)
+      --fail-on-drift         Fail on removed, changed or status-changed routes
+      --fail-on-drift-status <statuses>  Fail on selected drift statuses, comma separated
+      --sitemap-lastmod       Add lastmod from the drift baseline to sitemap entries
       --audit                 Check the written site for broken links and SEO issues (default: on)
       --no-audit              Skip the site audit
       --fail-on-audit-error   Fail when the audit finds an error
       --audit-ignore-links <patterns>  Link patterns excluded from the audit, comma separated
       --preload-links         Inject module, font and LCP image preload hints into each page
       --image-sitemap         List page images in the sitemap
-      --framework <name>      auto | react | vue | svelte | preact (default: auto)
+      --framework <name>      auto | react | vue | svelte | preact | angular | solid | lit | ember
+      --container <selector>  CSS selector for the app root (default: #root, #app, #__next)
       --retries <n>           Retry a failed render this many times (default: 0)
       --retry-delay <ms>      Wait between render attempts (default: 500)
       --trace-on-error        Write a Playwright trace for the final failed attempt
@@ -233,6 +239,12 @@ async function main() {
       'preload-links': { type: 'boolean' },
       'image-sitemap': { type: 'boolean' },
       framework: { type: 'string' },
+      container: { type: 'string' },
+      drift: { type: 'boolean' },
+      baseline: { type: 'string' },
+      'fail-on-drift': { type: 'boolean' },
+      'fail-on-drift-status': { type: 'string', multiple: true },
+      'sitemap-lastmod': { type: 'boolean' },
       retries: { type: 'string' },
       'retry-delay': { type: 'string' },
       'trace-on-error': { type: 'boolean' },
@@ -360,10 +372,11 @@ function resolveSourcePaths(options, dir) {
     if (/^https?:\/\//i.test(value) || path.isAbsolute(value)) return value;
     return path.resolve(dir, value);
   };
-  return {
+  const resolved = {
     ...options,
     routesFile: resolve(options.routesFile),
     routesFromSitemap: resolve(options.routesFromSitemap),
+    baselinePath: resolve(options.baselinePath ?? '.snappy-baseline.json'),
     ...(options.locales?.list
       ? {
           locales: {
@@ -376,6 +389,7 @@ function resolveSourcePaths(options, dir) {
         }
       : {}),
   };
+  return resolved;
 }
 
 // Reads the package version without importing JSON, keeping Node 20 compatible.

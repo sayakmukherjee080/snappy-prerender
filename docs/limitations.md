@@ -92,3 +92,12 @@
   stateless apps; authenticated routes can see cookies or storage from another route.
 - **Failure traces can contain request data.** `traceOnError` is opt-in and writes a
   Playwright archive under `snappy-traces/` in the output directory.
+- **Solid has no stable client-render marker.** Solid's `render()` does not leave a container property comparable to React's `__reactContainer`, Vue's `__vue_app__` or Lit's `_$litPart$`. Set `framework: 'solid'` explicitly; auto-detection will otherwise report `undetected`.
+- **Custom containers must be declared.** A root outside `#root`, `#app` or `#__next` needs `container`. The selector is resolved in the browser and a miss fails the route; it does not silently fall back to the body.
+- **Content drift depends on deterministic output.** A timestamp, random value, A/B bucket or personalized API response changes `contentHash` on every build. Use `freezeTime` with an explicit ISO time or `SOURCE_DATE_EPOCH`, set `randomSeed`, and exclude genuinely dynamic routes from the baseline when necessary.
+- **Asset-only changes are reported separately.** `htmlHash` changes when asset filenames, preload hints, minification or CSP hashes change. `contentHash` is the semantic page fingerprint, so those changes show as `html-only` rather than `changed`.
+- **Drift baselines are scoped to a route set.** Changing `include`, `exclude`, `maxRoutes`, the base path or locale routing can look like additions and removals. Use a separate `baselinePath` for preview or subset builds; the report includes `scopeChanged` when the route-affecting configuration differs.
+- **Keep the baseline outside the output directory.** `cleanDestination` deletes the destination at the start of a run, and a static host can serve files placed in the output. The default `.snappy-baseline.json` lives beside the project configuration.
+- **A failed or truncated run never updates the baseline.** This prevents a partial build from making every missing route look intentionally deleted, and a failed `failOnDrift` keeps the previous baseline so the gate stays repeatable. Dry runs compare but do not write.
+- **Drift is skipped for screenshots.** `saveAs: 'png'` or `'jpeg'` has no page HTML to fingerprint, so it neither reads nor writes a baseline.
+- **Sitemap lastmod needs a baseline.** `sitemapLastmod: true` requires `drift: true` and `sitemap: true`. A new route or a changed `contentHash` gets the build date; unchanged and HTML-only routes keep their previous date. An incomplete run preserves old dates rather than claiming a change.

@@ -4,12 +4,12 @@ import { blockThirdPartyRequests } from './blocking.js';
 import { installClock, installClockScripts } from './clock.js';
 import { DEFAULTS } from './config.js';
 import { frameworkFromMarkers, isHydrationError } from './frameworks.js';
-import { compareContainers } from './hydration-diff.js';
+import { compareContainerFragments } from './hydration-diff.js';
 import { isHydrationAllowed, resolveHydrationPolicy } from './hydration-policy.js';
 import { localeContextOptions, localeStorageState, seedLocaleContext } from './locale-context.js';
 import { activeLocale } from './locales.js';
 import { routeToFile } from './output.js';
-import { CONTAINER_SELECTOR, readBootState } from './page-content.js';
+import { readBootState } from './page-content.js';
 import { resolveRouteConfig } from './route-config.js';
 import { normaliseRoute, toServerUrl } from './routes.js';
 import { settlePage, trackNetwork } from './settle.js';
@@ -19,22 +19,36 @@ import { settlePage, trackNetwork } from './settle.js';
  * child of the app container, which is what lets the verifier tell hydration from a
  * client re-render: hydration adopts those nodes, createRoot discards them.
  */
-function bootProbe() {
+function bootProbe(containerSelector) {
   window.__snappyBoot = { prerenderedChild: null, prerenderedChain: [] };
 
-  // Records the container's first child and the first-element chain beneath it while the
-  // parser is still building the page. A framework that keeps only the outer wrapper but
-  // replaces everything inside it is a re-render, so checking the wrapper alone is not
-  // enough to call a route hydrated.
+  // Resolves the configured root, Ember's application body, or the common app roots.
+  const resolveContainer = (document) => {
+    if (containerSelector) return document.querySelector(containerSelector);
+    if (document.body?.classList?.contains('ember-application')) return document.body;
+    return document.querySelector('#root, #app, #__next') ?? document.body?.firstElementChild;
+  };
+  // Skips vendor scripts so Ember's first child is the app root, not its loader.
+  const firstContentChild = (container) => {
+    const child = [...(container?.children ?? [])].find(
+      (element) => element.tagName !== 'SCRIPT' && element.tagName !== 'STYLE',
+    );
+    if (child) return child;
+    return container?.firstChild?.nodeType === 3 ? container.firstChild : null;
+  };
+
+  // Records the container's first content child and the first-element chain beneath it
+  // while the parser is still building the page. A framework that keeps only the outer
+  // wrapper but replaces everything inside it is a re-render, so checking the wrapper
+  // alone is not enough to call a route hydrated.
   const capture = () => {
-    const container =
-      document.querySelector('#root, #app, #__next') ?? document.body?.firstElementChild;
+    const container = resolveContainer(document);
     if (!container) return;
     const boot = window.__snappyBoot;
-    if (!boot.prerenderedChild) {
-      boot.prerenderedChild = container.firstElementChild ?? container.firstChild ?? null;
-    }
-    let node = container.firstElementChild;
+    const child = firstContentChild(container);
+    if (!child) return;
+    if (!boot.prerenderedChild) boot.prerenderedChild = child;
+    let node = child;
     for (let depth = 0; node && depth < 6; depth += 1) {
       if (!boot.prerenderedChain[depth]) boot.prerenderedChain[depth] = node;
       node = node.firstElementChild;
@@ -191,14 +205,17 @@ async function verifyRoute({
       locale,
       phase: 'verify',
     });
-    await page.addInitScript(bootProbe);
+    await page.addInitScript(bootProbe, config.container ?? null);
     const response = await page.goto(toServerUrl(route, config.base, origin), {
       waitUntil: 'domcontentloaded',
       timeout: config.timeout,
     });
     const status = response?.status() ?? null;
     await settlePage(page, config, tracker);
-    const { empty, statusCode, markers, markupPreserved } = await readBootState(page);
+    const { empty, statusCode, containerMissing, markers, markupPreserved } = await readBootState(
+      page,
+      config.container ?? null,
+    );
     const notFoundRoute = config.notFoundRoute ? normaliseRoute(config.notFoundRoute) : null;
     const isNotFoundRoute = notFoundRoute !== null && normaliseRoute(route) === notFoundRoute;
     const notFound = statusCode === 404 || isNotFoundRoute;
@@ -217,19 +234,47 @@ async function verifyRoute({
       if (isHydrationError(message, detected.name ?? 'auto')) hydrationErrors.push(message);
       else pageErrors.push(message);
     }
+    if (containerMissing) {
+      pageErrors.push(`container selector "${config.container}" matched no element on ${route}`);
+    }
     const mode = classifyBoot({
       markupPreserved,
       frameworkMounted: detected.mounted,
     });
     let firstMismatch = null;
     if (outputDir && (hydrationErrors.length > 0 || mode === 're-rendered')) {
-      const liveHtml = await page.evaluate((selector) => {
-        const container = document.querySelector(selector) ?? document.body;
-        return container?.outerHTML ?? null;
-      }, CONTAINER_SELECTOR);
       const file = path.join(outputDir, routeToFile(route, config));
       const expectedHtml = await fs.readFile(file, 'utf8').catch(() => null);
-      if (liveHtml && expectedHtml) firstMismatch = compareContainers(expectedHtml, liveHtml);
+      if (expectedHtml) {
+        const fragments = await page.evaluate(
+          ({ selector, previousHtml }) => {
+            const resolveContainer = (document) => {
+              let container = selector
+                ? document.querySelector(selector)
+                : document.body?.classList?.contains('ember-application')
+                  ? document.body
+                  : (document.querySelector('#root, #app, #__next') ??
+                    document.body?.firstElementChild ??
+                    null);
+              if (container?.tagName === 'BODY') {
+                container =
+                  [...container.children].find(
+                    (element) => element.tagName !== 'SCRIPT' && element.tagName !== 'STYLE',
+                  ) ?? container;
+              }
+              return container;
+            };
+            const live = resolveContainer(document)?.outerHTML ?? null;
+            const parsed = new DOMParser().parseFromString(previousHtml, 'text/html');
+            const expected = resolveContainer(parsed)?.outerHTML ?? null;
+            return { live, expected };
+          },
+          { selector: config.container ?? null, previousHtml: expectedHtml },
+        );
+        if (fragments.live && fragments.expected) {
+          firstMismatch = compareContainerFragments(fragments.expected, fragments.live);
+        }
+      }
     }
     const hydrationPolicy = resolveHydrationPolicy(config, route);
     const allowed = isHydrationAllowed(hydrationPolicy, { mode, hydrationErrors });
@@ -251,7 +296,8 @@ async function verifyRoute({
       ok:
         effectiveHydrationErrors.length === 0 &&
         (status === null || status < 400 || (isNotFoundRoute && status === 404)) &&
-        !empty,
+        !empty &&
+        !containerMissing,
       mode,
       firstMismatch,
       markupPreserved,
