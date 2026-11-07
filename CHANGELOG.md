@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [2.11.4] - 2026-11-07
+
+### Changed
+
+- Expanded the README feature summary to cover the full 2.11 feature set: framework
+  support, prerendering and routing, Playwright rendering, hydration verification, SEO
+  and discovery, locales, incremental builds, output optimisation, vendor assets and
+  state capture, auditing, operations and interfaces. No runtime behaviour changed.
+
 ## [2.11.3] - 2026-11-07
 
 ### Added

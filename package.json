@@ -1,6 +1,6 @@
 {
   "name": "snappy-prerender",
-  "version": "2.11.3",
+  "version": "2.11.4",
   "description": "Install the maintained react-snap alternative: MIT drop-in static prerendering for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs, including Vite builds. Playwright, hydration checks and AI-crawler-friendly output.",
   "type": "module",
   "license": "MIT",
