@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/snappy-logo.png" width="150" alt="snappy-prerender logo">
+  <img src="https://raw.githubusercontent.com/sayakmukherjee080/snappy-prerender/main/assets/snappy-logo.png" width="150" alt="snappy-prerender logo">
 </p>
 
-# snappy-prerender
+# snappy-prerender — the maintained react-snap alternative
 
-Render a single-page app to static HTML at build time. Point the tool at the build output; it renders each route in Chrome, writes one HTML file per route, and leaves the app unchanged. The output includes page content, titles, meta tags, canonical links and Open Graph tags.
+snappy-prerender is the maintained, MIT-licensed react-snap alternative for existing React and Vite single-page apps. It prerenders your built SPA to static HTML at build time, verifies React hydration, and produces output that Google and AI crawlers can read — without a rewrite or a runtime service.
 
-2.11 adds Angular, Ember and Lit verification, explicit Solid support, a custom container selector, and a content baseline that reports route changes between builds. Earlier releases added deterministic clocks and random seeds, locale and hreflang generation, cookie/localStorage SEO locale seeding, and a head layer that replaces React Helmet or React Helmet Async.
+The 2.11 line adds Angular, Ember and Lit verification, explicit Solid support, a custom container selector, and a content baseline that reports route changes between builds. Earlier releases added deterministic clocks and random seeds, locale and hreflang generation, cookie/localStorage SEO locale seeding, and a head layer that replaces React Helmet or React Helmet Async.
 
 [![npm](https://img.shields.io/npm/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![npm downloads](https://img.shields.io/npm/dm/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
@@ -15,19 +15,17 @@ Render a single-page app to static HTML at build time. Point the tool at the bui
 
 <a href="https://www.producthunt.com/products/snappy-prerender?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-snappy-prerender" target="_blank" rel="noopener noreferrer"><img alt="snappy-prerender - Turn your existing SPA into static HTML | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1297695&amp;theme=neutral&amp;t=1793431121819"></a>
 
-Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). Install with `npm install --save-dev snappy-prerender`. Release notes are in [CHANGELOG.md](CHANGELOG.md).
+Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). Install with `npm install --save-dev snappy-prerender`. Release notes are in [CHANGELOG.md](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/CHANGELOG.md).
 
 - No SSR entry, framework migration or app changes. If the app builds to a directory, it can be prerendered.
-- React 16.8, 17, 18 and 19, Vite 6/7/8, or any static build.
+- Validated with React 16.8.0, 16.14.0, 17.0.2, 18.3.1 and 19.2.0, Vite 6.0.0, 7.3.7 and 8.3.5, or any static build. The [testcase matrix](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/testcase/README.md#validation-status) separates prerender-validated from hydration-validated versions.
 - Based on the react-snap approach, reimplemented for current toolchains with Playwright and a hydration check.
 
-## Who this is for
-
-Use it for client-rendered apps that need crawler-visible HTML: Create React App, Vite + React, other SPAs, CMS-backed sites and client-routed marketing pages.
-
-Do not use it for apps that already render HTML on the server, such as Next.js, Remix or Astro.
-
 ## Quick start
+
+```sh
+npm install --save-dev snappy-prerender
+```
 
 ### Vite
 
@@ -47,7 +45,6 @@ export default defineConfig({
 ### Init wizard
 
 ```sh
-npm install --save-dev snappy-prerender
 npx snappy-prerender init
 ```
 
@@ -64,8 +61,6 @@ npx snappy-prerender init --metadata-site-url https://example.com   # flags answ
 For any static output directory, Vite or not:
 
 ```sh
-npm install --save-dev snappy-prerender
-
 npx snappy-prerender dist
 npx snappy-prerender dist --include /,/pricing,/blog/* --exclude /blog/drafts/*
 npx snappy-prerender dist --block-third-party --allowed-hosts cms.example.com
@@ -90,13 +85,147 @@ if (!report.ok) {
 }
 ```
 
-## Based on react-snap
+## Why replace react-snap?
 
-[react-snap](https://github.com/stereobooster/react-snap) showed that a browser and a build step can produce crawler-readable HTML without a server renderer. It has been unmaintained since 2019.
+[react-snap](https://github.com/stereobooster/react-snap) proved that a browser and a build step can produce crawler-readable HTML without a server renderer. The idea still works, but the project has not kept up with current toolchains:
 
-snappy-prerender reimplements that approach; no react-snap code is reused. It uses Playwright, resolves an installed Chrome or Edge, supports Vite, ships a head layer, and verifies hydration.
+- The last npm release was 1.23.0 in December 2018.
+- The last source commit was in October 2019; the README was last updated in 2022.
+- The React 18 compatibility issue has been open since April 2023.
 
-If you are moving over, [Migrating from react-snap](docs/react-snap-migration.md) maps the options.
+If you need a react-snap replacement that still runs on current React and Vite, the comparison below is the short version.
+
+snappy-prerender reimplements the approach for current toolchains. It uses Playwright with an installed Chrome or Edge, verifies hydration per route, writes per-route metadata and sitemap output, and supports React 16.8 through 19, Vite 6/7/8, Create React App and any static build. No react-snap code is reused, and the package stays MIT.
+
+## react-snap vs snappy-prerender
+
+| | react-snap | snappy-prerender |
+| --- | --- | --- |
+| Last release | 2018 (1.23.0) | 2026 (2.11.x) |
+| Browser | Puppeteer-era Chrome | Playwright + current Chrome/Edge |
+| React 18/19 | Compatibility issue open since 2023 | Supported |
+| Hydration check | No | Yes, per route |
+| Head/meta layer | Manual, through Helmet or app code | Built-in `Head` |
+| Sitemap | No | Yes |
+| AI-crawler output | Static HTML | Static HTML |
+| License | MIT | MIT |
+| Migration | — | Reads the `reactSnap` block |
+
+## Prerender a React SPA without SSR
+
+A client-rendered React app ships a small HTML shell and a JavaScript bundle; the browser builds the page after the bundle runs. That is fine for users, but the first HTML response contains no page content, title or links for a crawler that does not execute JavaScript.
+
+snappy-prerender runs after your normal build. It serves the built output on a loopback port, opens each route in a real browser, waits for the app to settle, and writes the rendered DOM back to `route/index.html`. The app keeps its client-side router and hydration; there is no SSR entry, no server renderer and no framework migration. That is static prerendering for React, and SPA prerendering for any other app that builds to a directory.
+
+Use it to prerender React apps and other SPAs that need crawler-visible HTML: Create React App, Vite + React, CMS-backed sites and client-routed marketing pages. For React SEO without SSR, this is the build-time alternative to a server renderer.
+
+Do not use it for apps that already render HTML on the server, such as Next.js, Remix or Astro.
+
+## Prerender a Vite + React app
+
+Add the plugin to `vite.config.js`:
+
+```js
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import snappy from 'snappy-prerender';
+
+export default defineConfig({
+  plugins: [react(), snappy()],
+});
+```
+
+`vite build` now prerenders the output directory. Rendering failures fail the build; hydration is reported unless you opt into enforcement.
+
+For an existing Vite app that already builds to `dist`, the CLI is the smallest way to prerender Vite output without touching the config:
+
+```sh
+npx snappy-prerender dist
+```
+
+The `init` wizard detects Vite and offers `dist` as the build directory. It writes `snappy.config.js` with the routes, site URL and metadata you choose.
+
+## Prerender a Create React App
+
+Create React App builds to `build`. To prerender Create React App output, install the package and add a `postbuild` script so every production build writes prerendered HTML:
+
+```sh
+npm install --save-dev snappy-prerender
+```
+
+```json
+{
+  "scripts": {
+    "build": "react-scripts build",
+    "postbuild": "snappy-prerender build"
+  }
+}
+```
+
+`npm run build` runs `react-scripts build`, then the prerenderer. The `init` wizard detects a Create React App and offers `build` as the source directory. For a one-off run, use `npx snappy-prerender build`.
+
+CRA's client-side router still owns navigation after hydration. The prerenderer only changes what the first response contains.
+
+## Migrating from react-snap
+
+`snappy-prerender init` reads the existing `reactSnap` block from `package.json` and uses it as the wizard's defaults, so an existing project can move without retyping its settings. The wizard maps the options and prints any ignored or unknown keys.
+
+| react-snap | snappy-prerender |
+| --- | --- |
+| `source` | `sourceDir` |
+| `puppeteerArgs` | `browserArgs` |
+| `puppeteerIgnoreHTTPSErrors` | `ignoreHTTPSErrors` |
+| `skipThirdPartyRequests` | `blockThirdParty` |
+| `fixInsertRule` | `captureRuntimeStyles` |
+| `fixFormFields` | `captureFormState` |
+| `http2PushManifest` | `preloadManifest` |
+
+These keep their name: `include`, `exclude`, `crawl`, `concurrency`, `timeout`, `waitFor`, `inlineCss`, `minifyHtml`, `minifyCss`, `cacheAjaxRequests`, `preconnectThirdParty`, `preloadImages`, `removeBlobs`, `removeStyleTags`, `removeScriptTags`, `asyncScriptTags`, `userAgent`, `viewport`, `saveAs`, `destination`.
+
+Ignored, with a printed explanation: `port` (the prerenderer serves the build itself on an ephemeral loopback port) and `sourceMaps` (declared by react-snap but never read). The full mapping, including dropped webpack-era workarounds, is in [docs/react-snap-migration.md](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/react-snap-migration.md).
+
+## What AI crawlers see
+
+AI crawlers and answer engines read the HTML a server returns. Most of them do not run the app's JavaScript, and none of them guarantee a full browser render. If the first response is an empty `<div id="root"></div>`, there is no content to quote.
+
+A prerendered route puts the page content, title, description, canonical URL and Open Graph tags in the initial HTML. `Head` can also emit JSON-LD:
+
+```jsx
+<Head structuredData={{ '@context': 'https://schema.org', '@type': 'WebPage', name: 'Awards' }} />
+```
+
+- **GPTBot** fetches HTML; it does not promise a browser render.
+- **ClaudeBot** fetches HTML for Anthropic's crawler.
+- **PerplexityBot** fetches pages for Perplexity's index.
+- **Googlebot** can render JavaScript, but rendering is a second wave after the first fetch.
+
+The static HTML is what these clients can read immediately. The client bundle still hydrates normally for people and for crawlers that do render JavaScript.
+
+## Frequently asked questions
+
+### Is react-snap still maintained?
+
+No. The last npm release was 1.23.0 in December 2018, the last source commit was in October 2019, and the React 18 compatibility issue has been open since April 2023.
+
+### What is the best react-snap alternative?
+
+"Best" depends on the app. snappy-prerender is a maintained, MIT-licensed drop-in replacement for existing React and Vite SPAs. It keeps the build-time browser approach and adds current Chrome/Edge, per-route hydration verification, a head layer and sitemap output.
+
+### Can I prerender a React SPA without Next.js?
+
+Yes. snappy-prerender works on the built output of any static SPA, including Create React App and Vite. You do not need a server renderer or a framework migration.
+
+### Does it work with Vite?
+
+Yes. Add the plugin to `vite.config.js`, run `vite build`, and the output directory is prerendered.
+
+### Do AI crawlers render JavaScript?
+
+Most do not. GPTBot, ClaudeBot and PerplexityBot fetch HTML; none guarantees a full browser render. Googlebot can render JavaScript, but it queues that as a second wave. Prerendered HTML gives every one of them a readable page on the first request.
+
+### Is it a drop-in replacement?
+
+For the build configuration, yes. `snappy-prerender init` reads the existing `reactSnap` block and maps the options. The migration guide lists every kept, renamed and dropped option.
 
 ## What you get
 
@@ -123,6 +252,15 @@ If you are moving over, [Migrating from react-snap](docs/react-snap-migration.md
 6. Writes `route/index.html` or a screenshot, leaving identical files untouched.
 7. Reloads each written file with the client bundle and reports hydration errors and boot mode.
 8. Optionally compares the written routes with a persisted content baseline and reports drift.
+
+## Docs
+
+- [Migrating from react-snap](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/react-snap-migration.md)
+- [Limitations](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/limitations.md)
+- [Report schema and audit rules](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/report.md)
+- [Changelog](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/CHANGELOG.md)
+- [Options](#options) — every config option and CLI flag.
+- [Programmatic API](#programmatic-api)
 
 ## Head and metadata
 
@@ -239,7 +377,7 @@ The audit runs by default and reports:
 - duplicate or missing metadata, canonical mismatches, heading counts, sitemap disagreement and orphan pages;
 - CSP violations reported by the browser.
 
-Findings are returned in `report.audit` and logged. They do not fail the run unless `failOnAuditError` is true. `auditIgnoreLinks` excludes dynamic links, and `--no-audit` skips the audit. See [docs/report.md](docs/report.md) for the rule list and JSON schema.
+Findings are returned in `report.audit` and logged. They do not fail the run unless `failOnAuditError` is true. `auditIgnoreLinks` excludes dynamic links, and `--no-audit` skips the audit. See [docs/report.md](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/report.md) for the rule list and JSON schema.
 
 `reportPath` (or `--report`) writes the report as versioned JSON. URLs are reduced to origin and path, and the storage-state path is redacted.
 
@@ -263,7 +401,7 @@ The first complete run writes the baseline. It does not report every route as ad
 
 The baseline is written only after a complete run with no route errors or truncation. A run that fails `failOnDrift` keeps the previous baseline. Dry runs never write it. Keep it outside the output directory when using `cleanDestination`; the default is `.snappy-baseline.json` beside the project configuration (relative to the config file for the CLI, and to `process.cwd()` for the programmatic API). In CI, persist it as a cache or artifact, or commit it deliberately.
 
-`report.drift` contains the comparison, and each route record carries `driftStatus` and `driftReasons`. `failOnDrift: true` fails on removed, changed and status-changed routes; pass an array to choose `added`, `removed`, `moved`, `changed`, `html-only` or `status-changed`. The full schema is in [docs/report.md](docs/report.md).
+`report.drift` contains the comparison, and each route record carries `driftStatus` and `driftReasons`. `failOnDrift: true` fails on removed, changed and status-changed routes; pass an array to choose `added`, `removed`, `moved`, `changed`, `html-only` or `status-changed`. The full schema is in [docs/report.md](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/report.md).
 
 Use `freezeTime` with an explicit ISO time or `SOURCE_DATE_EPOCH`, and set `randomSeed` when the page renders random content; otherwise a timestamp or random value will look like content drift.
 
@@ -277,7 +415,7 @@ After writing the output, each route is loaded again in a fresh browser context 
 
 **Hydration errors.** Mismatch messages for React, Vue, Preact, Svelte, Angular, Ember and Lit are reported with the route, framework and message. React text mismatches and minified production codes (`#418`, `#423`, `#425`) are recognised; Preact uses the React-compatible messages. Solid uses explicit `framework: 'solid'` because its client render leaves no stable DOM marker. A mismatch means the client re-renders the page instead of adopting the static markup. The crawler-visible HTML is unchanged.
 
-The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`, Svelte 5's `<!--[-->` anchor, Angular's `ng-version`, Ember's application body/`ember-view`, and Lit's `_$litPart$`); nothing is imported or executed. Set `framework` when a custom root defeats detection: an explicit framework is treated as mounted and selects the matching mismatch patterns without requiring a marker. Svelte 5 apps that only call `mount()` and emit no hydration anchor should set `framework: 'svelte'`; Solid should set `framework: 'solid'`. Set `container` when the app root is outside `#root`, `#app` or `#__next`; it is resolved in the browser for both the live and written documents. When a route has hydration errors or re-rendered, `firstMismatch` reports the first difference between the written HTML and the live container as `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
+The framework is detected from DOM markers only (`__reactContainer`, `__vue_app__`/`__vue__`, `__k`, `data-svelte-h`, Svelte 5's `<!--[-->` anchor, Angular's `ng-version`, Ember's application body/`ember-view`, and Lit's `_$litPart$`); nothing is imported or executed. Set `framework` when a custom root defeats detection: an explicit framework is treated as mounted and selects the matching mismatch patterns without requiring a marker. Svelte 5 apps that only call `mount()` and emit no hydration anchor, and Svelte 3 client mounts, should set `framework: 'svelte'`; Solid should set `framework: 'solid'`; Lit 1.x keeps its part map in a module-scoped WeakMap and leaves no DOM marker, so it should set `framework: 'lit'`. Set `container` when the app root is outside `#root`, `#app` or `#__next`; it is resolved in the browser for both the live and written documents. When a route has hydration errors or re-rendered, `firstMismatch` reports the first difference between the written HTML and the live container as `{ path, kind, expected, actual }`, bounded to 5,000 nodes and depth 20.
 
 A probe installed before the app's scripts run records the container's first prerendered node and the first-element chain beneath it, then checks whether every captured wrapper survived:
 
@@ -758,13 +896,9 @@ if (!report.ok) {
 }
 ```
 
-The report exposes `routes`, `files` (with per-route `status` and `noindex`), `routeDetails` (the per-route records used by the JSON report), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `consoleErrors`, `failedRequests`, `emptyPages`, `duplicatePages`, `duplicateTitles` (routes shipping more than one title), `verification` (nullable; per-route `mode`, `framework`, `firstMismatch`, `status` and `empty` plus `modes` and `frameworks` summaries), `drift` (nullable; baseline state, added/removed/moved/changed/html-only/status-changed routes, failures and summary), `audit` (nullable; `errors`, `warnings`, `linksChecked`), `preloadManifest`, `sitemap`, `pruned`, `truncated`, `notFoundRoutes`, `cspSkipped`, `traces`, and `ok`. See [docs/report.md](docs/report.md) for the JSON schema.
+The report exposes `routes`, `files` (with per-route `status` and `noindex`), `routeDetails` (the per-route records used by the JSON report), `errors`, `pageErrors` (uncaught browser errors seen while rendering), `consoleErrors`, `failedRequests`, `emptyPages`, `duplicatePages`, `duplicateTitles` (routes shipping more than one title), `verification` (nullable; per-route `mode`, `framework`, `firstMismatch`, `status` and `empty` plus `modes` and `frameworks` summaries), `drift` (nullable; baseline state, added/removed/moved/changed/html-only/status-changed routes, failures and summary), `audit` (nullable; `errors`, `warnings`, `linksChecked`), `preloadManifest`, `sitemap`, `pruned`, `truncated`, `notFoundRoutes`, `cspSkipped`, `traces`, and `ok`. See [docs/report.md](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/report.md) for the JSON schema.
 
 `snappy-prerender` exports `DEFAULTS`, `prerender` and `resolveConfig`; the default export is the Vite plugin.
-
-## Further reading
-
-[Limitations](docs/limitations.md), [report schema and audit rules](docs/report.md), [migrating from react-snap](docs/react-snap-migration.md).
 
 ## Requirements
 - Node.js >= 22.12
@@ -775,7 +909,7 @@ Browser resolution order: installed Chrome, installed Edge, a Playwright-managed
 
 ## Contributing
 
-Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). For security reports, follow [SECURITY.md](SECURITY.md).
+Issues and pull requests are welcome — see [CONTRIBUTING.md](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/CONTRIBUTING.md). For security reports, follow [SECURITY.md](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/SECURITY.md).
 
 ```sh
 npm install

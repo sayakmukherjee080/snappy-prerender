@@ -1,10 +1,13 @@
 {
   "name": "snappy-prerender",
-  "version": "2.11.1",
-  "description": "Drop-in prerendering for existing single-page apps. Renders your built app in a real browser, writes static HTML per route, reports React hydration mismatches, and optimises the output with critical CSS, link hints and cached AJAX state.",
+  "version": "2.11.2",
+  "description": "Install the maintained react-snap alternative: MIT drop-in replacement for existing React/Vite SPAs. Prerenders to static HTML with Playwright, hydration checks and AI-crawler-friendly output.",
   "type": "module",
   "license": "MIT",
-  "author": "sayakmukherjee080",
+  "author": {
+    "name": "sayakmukherjee080",
+    "url": "https://github.com/sayakmukherjee080"
+  },
   "homepage": "https://github.com/sayakmukherjee080/snappy-prerender#readme",
   "repository": {
     "type": "git",
@@ -14,16 +17,26 @@
     "url": "https://github.com/sayakmukherjee080/snappy-prerender/issues"
   },
   "keywords": [
+    "react-snap",
+    "react-snap-alternative",
+    "react-snap-replacement",
     "prerender",
     "prerendering",
-    "ssg",
-    "static-site",
     "spa",
+    "spa-prerender",
+    "react-prerender",
+    "vite-prerender",
+    "static-site",
     "react",
     "vite",
-    "hydration",
+    "create-react-app",
+    "cra",
     "seo",
-    "playwright"
+    "javascript-seo",
+    "hydration",
+    "playwright",
+    "ai-crawlers",
+    "llm-seo"
   ],
   "engines": {
     "node": ">=22.12.0"
