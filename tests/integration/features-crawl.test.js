@@ -61,6 +61,31 @@ describe('prerender integration: deterministic crawl', () => {
     assert.deepEqual(report.truncated.droppedRoutes, ['/a', '/c', '/deep']);
   });
 
+  it('reuses the accepted routes of a capped crawl', async () => {
+    const sourceDir = await graphSite();
+    const cacheDir = await makeStaticSite({});
+    const firstDestination = await makeStaticSite({});
+    const secondDestination = await makeStaticSite({});
+    const cachePath = path.join(cacheDir, 'cache.json');
+    const options = (destination) => ({
+      ...base,
+      sourceDir,
+      destination,
+      maxRoutes: 3,
+      routePriority: ['/b'],
+      incremental: { cachePath },
+    });
+    const first = await prerender(options(firstDestination));
+    const second = await prerender(options(secondDestination));
+    assert.deepEqual([...first.routes].sort(), ['/', '/a', '/b']);
+    assert.equal(
+      second.routeDetails.every((detail) => detail.status === 'cached'),
+      true,
+    );
+    assert.equal(second.incremental.rendered, 0);
+    assert.deepEqual(second.truncated, first.truncated);
+  });
+
   it('stops crawling at maxDepth', async () => {
     const report = await prerender({
       ...base,

@@ -1,0 +1,24 @@
+{
+  "name": "aether-solid-0.20.3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Aether Compute site implemented with Solid 0.20.3 and Vite 2.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "solid-js": "0.20.3"
+  },
+  "devDependencies": {
+    "@babel/core": "7.12.17",
+    "babel-preset-solid": "0.20.2",
+    "vite": "2.9.18"
+  }
+}

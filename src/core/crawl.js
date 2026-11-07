@@ -33,6 +33,7 @@ export async function renderAllRoutes({
   sourceSeeds = [],
   caches = null,
   localePlan = null,
+  incremental = null,
 }) {
   const visited = new Set();
   const scheduled = new Set();
@@ -112,20 +113,29 @@ export async function renderAllRoutes({
     visited.add(route);
     log.debug(`rendering ${route}${output ? '' : ' as a crawl seed'}`);
     const routeConfig = resolveRouteConfig(config, route);
-    const result = await renderWithRetries({
-      browser,
-      server,
-      route,
-      routeConfig,
-      config,
-      log,
-      report,
-      outputDir,
-      screenshot: config.saveAs !== 'html',
-      caches,
-      locale,
-    });
-    if (!result) return null;
+    const cachedRecord = incremental ? await incremental.tryReuse({ route, routeConfig }) : null;
+    let result;
+    if (cachedRecord) {
+      result = incremental.cachedResult(cachedRecord);
+      incremental.recordReused(route, cachedRecord);
+    } else {
+      await incremental?.recordSource(route);
+      result = await renderWithRetries({
+        browser,
+        server,
+        route,
+        routeConfig,
+        config,
+        log,
+        report,
+        outputDir,
+        screenshot: config.saveAs !== 'html',
+        caches,
+        locale,
+      });
+      if (!result) return null;
+      incremental?.recordRender(route, result);
+    }
     result.depth = depth;
     result.order = order;
     try {

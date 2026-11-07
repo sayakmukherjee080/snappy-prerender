@@ -5,6 +5,32 @@ const MAX_SUMMARY = 4000;
 const MAX_SITE = 120;
 const RETRY_ATTEMPTS = 2;
 const RETRY_DELAY_MS = 300;
+const API_BASE_COOKIE = 'snappy.news.api';
+
+/**
+ * Returns the news API base URL. The cookie override lets the validation harness point
+ * every testcase at a deterministic local API without changing the normal live source.
+ * @returns {string}
+ */
+function newsBaseUrl() {
+  if (typeof document !== 'undefined') {
+    const entry = document.cookie
+      .split('; ')
+      .find((value) => value.startsWith(`${API_BASE_COOKIE}=`));
+    if (entry) {
+      try {
+        const value = decodeURIComponent(entry.slice(API_BASE_COOKIE.length + 1));
+        const url = new URL(value);
+        if (url.protocol === 'http:' || url.protocol === 'https:') {
+          return url.href.replace(/\/$/, '');
+        }
+      } catch {
+        // Fall through to the public API when the override is malformed.
+      }
+    }
+  }
+  return API_SOURCE.baseUrl;
+}
 
 /**
  * Trims and collapses a third-party text field, returning an empty string for non-strings.
@@ -104,7 +130,7 @@ export async function fetchNewsArticles() {
 async function fetchNewsPage() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_SOURCE.timeoutMs);
-  const url = `${API_SOURCE.baseUrl}${API_SOURCE.articlesPath}?limit=${API_SOURCE.limit}&ordering=-published_at`;
+  const url = `${newsBaseUrl()}${API_SOURCE.articlesPath}?limit=${API_SOURCE.limit}&ordering=-published_at`;
 
   try {
     const response = await fetch(url, {

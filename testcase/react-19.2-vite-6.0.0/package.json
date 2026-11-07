@@ -1,0 +1,26 @@
+{
+  "name": "aether-react-19.2-vite-6.0.0",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Aether Compute site implemented with React 19.2.0 and Vite 6.0.0.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "lint": "biome check ."
+  },
+  "dependencies": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.0.0",
+    "@vitejs/plugin-react": "4.3.4",
+    "vite": "6.0.0"
+  }
+}

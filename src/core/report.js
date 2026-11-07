@@ -47,12 +47,15 @@ export function buildReport(report, config = null) {
     },
     routes: report.routeDetails,
     drift: report.drift ?? null,
+    incremental: report.incremental ?? null,
+    assets: report.assets ?? null,
     verification: report.verification
       ? {
           ok: report.verification.ok,
           modes: report.verification.modes,
           frameworks: report.verification.frameworks,
           skipped: report.verification.skipped ?? 0,
+          reused: report.verification.reused ?? 0,
           policySkipped: report.verification.policySkipped ?? 0,
           allowed: report.verification.allowed ?? 0,
           allowedRerender: report.verification.allowedRerender ?? 0,

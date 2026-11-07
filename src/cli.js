@@ -88,6 +88,19 @@ Options:
       --routes-from-sitemap <path-or-url>  Seed routes from a local or remote sitemap
       --route-priority <patterns>  Patterns ranked first when crawling, comma separated
       --report <file>         Write a machine-readable run report (JSON)
+      --incremental           Reuse unchanged routes and revalidate API/vendored data
+      --incremental-trust     Reuse unchanged routes without data revalidation
+      --incremental-cache <file>  Incremental cache path (default: .snappy-cache.json)
+      --incremental-max-age <duration>  Expire cached routes after 500ms, 30s, 12h, 7d...
+      --incremental-lock-timeout <duration>  Wait this long for another build's cache lock
+      --incremental-exclude <patterns>  Routes that always render, comma separated
+      --incremental-data-hosts <hosts>  Only revalidate API responses from these hosts
+      --incremental-data-max-bytes <n>  Largest API response eligible for revalidation
+      --vendor-assets <hosts>  Download and localize assets from these hosts
+      --vendor-asset-types <types>  css | font | image | script
+      --vendor-asset-max-bytes <n>  Largest vendored asset
+      --vendor-asset-on-error <mode>  warn | fail
+      --fail-on-external-assets  Fail when an allowlisted asset remains external
       --drift                 Compare routes against a persisted content baseline
       --baseline <file>       Baseline path (default: .snappy-baseline.json)
       --fail-on-drift         Fail on removed, changed or status-changed routes
@@ -240,6 +253,19 @@ async function main() {
       'image-sitemap': { type: 'boolean' },
       framework: { type: 'string' },
       container: { type: 'string' },
+      incremental: { type: 'boolean' },
+      'incremental-trust': { type: 'boolean' },
+      'incremental-cache': { type: 'string' },
+      'incremental-max-age': { type: 'string' },
+      'incremental-lock-timeout': { type: 'string' },
+      'incremental-exclude': { type: 'string', multiple: true },
+      'incremental-data-hosts': { type: 'string', multiple: true },
+      'incremental-data-max-bytes': { type: 'string' },
+      'vendor-assets': { type: 'string', multiple: true },
+      'vendor-asset-types': { type: 'string', multiple: true },
+      'vendor-asset-max-bytes': { type: 'string' },
+      'vendor-asset-on-error': { type: 'string' },
+      'fail-on-external-assets': { type: 'boolean' },
       drift: { type: 'boolean' },
       baseline: { type: 'string' },
       'fail-on-drift': { type: 'boolean' },
@@ -330,6 +356,24 @@ async function main() {
       },
     };
   }
+  if (cli.incremental) {
+    const base = fileConfig.incremental;
+    options.incremental =
+      typeof base === 'object' && base !== null && !Array.isArray(base)
+        ? {
+            ...base,
+            ...cli.incremental,
+            data: { ...(base.data ?? {}), ...(cli.incremental.data ?? {}) },
+          }
+        : cli.incremental;
+  }
+  if (cli.vendorAssets) {
+    const base = fileConfig.vendorAssets;
+    options.vendorAssets =
+      typeof base === 'object' && base !== null && !Array.isArray(base)
+        ? { ...base, ...cli.vendorAssets }
+        : cli.vendorAssets;
+  }
   if (!options.sourceDir) options.sourceDir = 'dist';
 
   const log = createLogger(options.logLevel ?? 'info');
@@ -377,6 +421,16 @@ function resolveSourcePaths(options, dir) {
     routesFile: resolve(options.routesFile),
     routesFromSitemap: resolve(options.routesFromSitemap),
     baselinePath: resolve(options.baselinePath ?? '.snappy-baseline.json'),
+    ...(options.incremental && typeof options.incremental === 'object'
+      ? {
+          incremental: {
+            ...options.incremental,
+            ...(options.incremental.cachePath !== undefined
+              ? { cachePath: resolve(options.incremental.cachePath) }
+              : {}),
+          },
+        }
+      : {}),
     ...(options.locales?.list
       ? {
           locales: {

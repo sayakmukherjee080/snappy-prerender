@@ -3,7 +3,7 @@ import { parse, serialize } from 'parse5';
 import { findBuildOriginUrls } from './build-origin.js';
 import { applyCspHashesToDocument } from './csp.js';
 import { resolveHydrationPolicy } from './hydration-policy.js';
-import { inlineCriticalCss } from './inline-css.js';
+import { inlineCriticalCss, inlineLocalVendorStylesheets } from './inline-css.js';
 import { applyLocaleMetadata, buildLocaleLinks, localePageUrl } from './locales.js';
 import { minifyHtml } from './minify.js';
 import { normaliseHtml } from './normalize.js';
@@ -46,6 +46,8 @@ export async function writeAllRoutes({
   state,
   manifestEntries,
   caches = null,
+  incremental = null,
+  vendor = null,
 }) {
   const sorted = [...report.routes].sort();
   const conflicted = reportOutputCollisions({ routes: sorted, config, log, report });
@@ -64,6 +66,21 @@ export async function writeAllRoutes({
       try {
         const routeConfig = resolveRouteConfig(config, route);
         const result = rendered.get(route);
+        if (result?.cached) {
+          try {
+            await incremental.restoreRoute(result.cached);
+          } catch (error) {
+            routeReport.errors.push({ route, message: `restore failed: ${error.message}` });
+            return { route, report: routeReport };
+          }
+          return {
+            route,
+            cached: true,
+            file: incremental.cachedFile(result.cached),
+            detail: incremental.cachedDetail(result.cached),
+            resources: incremental.cachedResources(result.cached),
+          };
+        }
         const { file, resources } = await writeRouteOutput({
           route,
           result,
@@ -77,6 +94,8 @@ export async function writeAllRoutes({
           baseRoute: routeLocales.get(route)?.baseRoute ?? route,
           localePlan,
           localeScripts,
+          cacheEnabled: Boolean(incremental),
+          vendor,
         });
         return {
           route,
@@ -96,6 +115,17 @@ export async function writeAllRoutes({
 
   for (const entry of results) {
     if (!entry) continue;
+    if (entry.cached) {
+      report.files.push(entry.file);
+      report.routeDetails.push(entry.detail);
+      if (entry.resources) manifestEntries.push({ route: entry.route, ...entry.resources });
+      if (entry.file.hash) {
+        const group = hashes.get(entry.file.hash) ?? [];
+        group.push(entry.route);
+        hashes.set(entry.file.hash, group);
+      }
+      continue;
+    }
     for (const error of entry.report.errors) report.errors.push(error);
     for (const route of entry.report.duplicateTitles) report.duplicateTitles.push(route);
     for (const route of entry.report.cspSkipped) report.cspSkipped.push(route);
@@ -136,6 +166,12 @@ export async function writeAllRoutes({
       firstMismatch: null,
       buildOriginUrls: file.buildOriginUrls ?? [],
     });
+    incremental?.recordWritten(
+      route,
+      report.routeDetails[report.routeDetails.length - 1],
+      resources,
+      result.vendorFailed === true,
+    );
     if (resources) manifestEntries.push({ route, ...resources });
     if (entry.hash) {
       const group = hashes.get(entry.hash) ?? [];
@@ -243,6 +279,8 @@ async function writeRouteOutput({
   baseRoute = route,
   localePlan = null,
   localeScripts = new Map(),
+  cacheEnabled = false,
+  vendor = null,
 }) {
   if (result.screenshot) {
     const file = routeToScreenshotFile(route, config);
@@ -267,8 +305,26 @@ async function writeRouteOutput({
 
   const needsString =
     config.inlineCss === 'critical' || Boolean(config.minifyHtml) || Boolean(config.transformHtml);
+  const localized = vendor
+    ? await vendor.localizeHtml({
+        html: result.html,
+        route,
+        pageUrl: result.finalUrl ?? null,
+      })
+    : null;
+  if (localized?.failed) result.vendorFailed = true;
+  const preconnectOrigins = config.preconnectThirdParty
+    ? [...result.collector.thirdPartyOrigins]
+        .filter((origin) => !vendor?.localizedOrigins.has(origin))
+        .sort()
+    : [];
+  const imageHints = config.preloadImages
+    ? [...new Set([...result.collector.images, ...(localized?.images ?? [])])]
+        .sort()
+        .map((image) => toPublicPath(image, config.base))
+    : [];
   const normalised = normaliseHtml(
-    result.html,
+    localized?.html ?? result.html,
     {
       removeStyleTags: config.removeStyleTags,
       removeScriptTags: config.removeScriptTags,
@@ -279,17 +335,21 @@ async function writeRouteOutput({
       noindex:
         config.notFoundRoute !== null &&
         normaliseRoute(route) === normaliseRoute(config.notFoundRoute),
-      preconnectOrigins: config.preconnectThirdParty
-        ? [...result.collector.thirdPartyOrigins].sort()
-        : [],
-      preloadImages: config.preloadImages
-        ? [...result.collector.images].sort().map((image) => toPublicPath(image, config.base))
-        : [],
+      preconnectOrigins,
+      preloadImages: imageHints,
     },
     { serialize: needsString },
   );
   const { stats } = normalised;
   let document = normalised.document;
+  if (config.inlineCss === 'inline' && vendor) {
+    await inlineLocalVendorStylesheets({
+      document,
+      outputDir,
+      base: config.base,
+      minifyCssOptions: config.minifyCss,
+    });
+  }
   let preTransformScripts = new Set();
   let transformedHtml = null;
   let localeChanged = false;
@@ -376,11 +436,16 @@ async function writeRouteOutput({
         return toPublicPath(appRelative, config.base);
       }),
     );
+    const documentResources = collectPageResourcesFromDocument(document, {
+      base: config.base,
+      route,
+    });
+    const fonts = new Map([...result.collector.fonts, ...(localized?.fonts ?? [])]);
     preloadAdded = injectPreloadLinksInto(document, {
-      scripts: config.removeScriptTags ? [] : [...result.collector.scripts].sort(),
-      fonts: new Map(
-        [...result.collector.fonts].sort(([left], [right]) => left.localeCompare(right)),
-      ),
+      scripts: config.removeScriptTags
+        ? []
+        : [...new Set([...documentResources.scripts, ...result.collector.scripts])].sort(),
+      fonts,
       lcpImage: result.lcpImage,
       base: config.base,
       ignoreForPreload: config.ignoreForPreload,
@@ -424,8 +489,9 @@ async function writeRouteOutput({
       log.error(`  ${route}: ${message}`);
     }
   }
-  const fingerprint = config.drift ? fingerprintDocument(document) : null;
-  const htmlHash = config.drift ? createHash('sha256').update(output).digest('hex') : null;
+  const fingerprint = config.drift || cacheEnabled ? fingerprintDocument(document) : null;
+  const htmlHash =
+    config.drift || cacheEnabled ? createHash('sha256').update(output).digest('hex') : null;
   const file = await writeRouteHtml({ dir: outputDir, route, html: output, config });
   const resources = config.preloadManifest
     ? collectPageResourcesFromDocument(document, { base: config.base, route })

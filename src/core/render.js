@@ -94,6 +94,8 @@ export async function renderRoute({
     blockThirdParty: config.blockThirdParty,
     collectJson: config.cacheAjaxRequests,
     maxCachedBytes: config.maxCachedBytes,
+    recordData: config.incremental?.enabled === true,
+    dataMaxBytes: config.incremental?.data?.maxBytes,
   });
   await collector.install(page);
   await page.addInitScript(() => {
@@ -187,6 +189,8 @@ export async function renderRoute({
         consoleErrors,
         failedRequests,
         collector,
+        dataRequests: collector.dataRequests,
+        dataUnverifiable: collector.dataRequests.some((entry) => entry.unverifiable),
         inlineCssSkipped,
         stateScript,
         screenshot: buffer,
@@ -207,6 +211,8 @@ export async function renderRoute({
       consoleErrors,
       failedRequests,
       collector,
+      dataRequests: collector.dataRequests,
+      dataUnverifiable: collector.dataRequests.some((entry) => entry.unverifiable),
       inlineCssSkipped,
       stateScript,
       empty,

@@ -110,6 +110,50 @@ export function cliOptions({ values, positionals }) {
   if (values['image-sitemap']) options.imageSitemap = true;
   if (values.framework !== undefined) options.framework = values.framework;
   if (values.container !== undefined) options.container = values.container;
+  const incremental = {};
+  if (values.incremental) incremental.enabled = true;
+  if (values['incremental-trust']) {
+    incremental.enabled = true;
+    incremental.mode = 'trust';
+  }
+  if (values['incremental-cache'] !== undefined) {
+    incremental.cachePath = values['incremental-cache'];
+  }
+  if (values['incremental-max-age'] !== undefined) {
+    incremental.maxAge = values['incremental-max-age'];
+  }
+  if (values['incremental-lock-timeout'] !== undefined) {
+    incremental.lockTimeout = values['incremental-lock-timeout'];
+  }
+  if (values['incremental-exclude'] !== undefined) {
+    incremental.exclude = splitList(values['incremental-exclude']);
+  }
+  const incrementalData = {};
+  if (values['incremental-data-hosts'] !== undefined) {
+    incrementalData.hosts = splitList(values['incremental-data-hosts']);
+  }
+  if (values['incremental-data-max-bytes'] !== undefined) {
+    incrementalData.maxBytes = Number(values['incremental-data-max-bytes']);
+  }
+  if (Object.keys(incrementalData).length > 0) incremental.data = incrementalData;
+  if (Object.keys(incremental).length > 0) options.incremental = incremental;
+
+  const vendorAssets = {};
+  if (values['vendor-assets'] !== undefined) {
+    vendorAssets.hosts = splitList(values['vendor-assets']);
+  }
+  if (values['vendor-asset-types'] !== undefined) {
+    vendorAssets.types = splitList(values['vendor-asset-types']);
+  }
+  if (values['vendor-asset-max-bytes'] !== undefined) {
+    vendorAssets.maxBytes = Number(values['vendor-asset-max-bytes']);
+  }
+  if (values['vendor-asset-on-error'] !== undefined) {
+    vendorAssets.onError = values['vendor-asset-on-error'];
+  }
+  if (values['fail-on-external-assets']) vendorAssets.failOnExternalAssets = true;
+  if (Object.keys(vendorAssets).length > 0) options.vendorAssets = vendorAssets;
+
   if (values.drift) options.drift = true;
   if (values.baseline !== undefined) options.baselinePath = values.baseline;
   if (values['fail-on-drift-status'] !== undefined) {

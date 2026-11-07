@@ -1,0 +1,23 @@
+{
+  "name": "aether-react-16.8.0",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Aether Compute site implemented with React 16.8.0 and Vite 2.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "react": "16.8.0",
+    "react-dom": "16.8.0"
+  },
+  "devDependencies": {
+    "vite": "2.9.18"
+  }
+}

@@ -16,6 +16,7 @@ import {
   skippedDrift,
   warnBaselineLocation,
 } from './drift-runtime.js';
+import { createIncrementalRun } from './incremental.js';
 import { buildLocalePlan } from './locales.js';
 import { createLogger } from './log.js';
 import { routeToFile } from './output.js';
@@ -24,6 +25,7 @@ import { writeReport } from './report.js';
 import { loadRouteSeeds } from './route-sources.js';
 import { normaliseRoute } from './routes.js';
 import { startCommandServer, startStaticServer } from './server.js';
+import { createAssetVendor } from './vendor-assets.js';
 import { verifyRoutes } from './verify.js';
 import { writeAllRoutes } from './write.js';
 
@@ -54,6 +56,15 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   ]);
   const previousManifest =
     config.pruneStaleRoutes && !config.dryRun ? await readPruneManifest(outputDir) : null;
+  const incrementalCacheFile = path.resolve(config.incremental.cachePath);
+  assertCacheLocation(incrementalCacheFile, sourceDir, outputDir, config);
+  const incremental = await createIncrementalRun({
+    config,
+    sourceDir,
+    outputDir,
+    cachePath: incrementalCacheFile,
+    log,
+  });
   if (driftBaselineFile) warnBaselineLocation(driftBaselineFile, outputDir, log);
   for (const source of routeSources.sources) {
     const skipped = source.skipped > 0 ? `, ${source.skipped} skipped` : '';
@@ -77,8 +88,10 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       : await startStaticServer({ dir: outputDir, base: config.base });
   } catch (error) {
     browserPromise.then(({ browser }) => browser.close()).catch(() => {});
+    await incremental?.close();
     throw error;
   }
+  incremental?.setOrigin(server.origin);
 
   const report = {
     routes: [],
@@ -108,6 +121,8 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     cspSkipped: [],
     traces: [],
     drift: null,
+    incremental: null,
+    assets: null,
     verification: null,
     audit: null,
     preloadManifest: null,
@@ -122,6 +137,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
   const state = { warnedBuildOriginMetadata: false, warnedCriticalCssSkipped: false };
   let browser = null;
   let driftResult = null;
+  const vendor = await createAssetVendor({ config, outputDir, report, log });
 
   try {
     const launched = await browserPromise;
@@ -140,6 +156,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       sourceSeeds: routeSources.routes,
       caches: renderCaches,
       localePlan,
+      incremental,
     });
     report.timings.render = Date.now() - phaseStartedAt;
     const { rendered: renderedRoutes, routeLocales } = rendered;
@@ -177,8 +194,50 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       state,
       manifestEntries,
       caches: renderCaches,
+      incremental,
+      vendor,
     });
     report.timings.write = Date.now() - phaseStartedAt;
+    if (vendor) {
+      try {
+        const allCached = report.routeDetails.every((detail) => detail.status === 'cached');
+        report.assets = allCached
+          ? (incremental?.cachedAssets() ?? vendor.summary())
+          : await vendor.finish();
+        const external = vendor.externalError();
+        if (external) {
+          report.errors.push(external);
+          log.error(external.message);
+        }
+      } catch (error) {
+        report.errors.push({ route: null, message: `vendor asset write failed: ${error.message}` });
+        log.error(`vendor asset write failed: ${error.message}`);
+      }
+    }
+    if (incremental && report.routeDetails.some((detail) => detail.status === 'cached')) {
+      try {
+        await incremental.restoreGenerated(report);
+      } catch (error) {
+        report.errors.push({
+          route: null,
+          message: `incremental generated file restore failed: ${error.message}`,
+        });
+        log.error(`incremental generated file restore failed: ${error.message}`);
+      }
+      for (const entry of incremental.cachedVendorFiles()) {
+        if (!report.files.some((file) => file.file === entry.file)) {
+          report.files.push({ route: null, ...entry, status: 'cached' });
+        }
+      }
+    }
+    if (incremental) {
+      const reused = report.routeDetails.filter((detail) => detail.status === 'cached').length;
+      if (reused > 0) {
+        log.info(
+          `Incremental reused ${reused} route(s) from ${path.relative(process.cwd(), incrementalCacheFile) || incrementalCacheFile}`,
+        );
+      }
+    }
     const localeScripts = report.files
       .filter((file) => file.file?.startsWith('snappy-seo-locale-'))
       .map((file) => file.file);
@@ -276,6 +335,27 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     if (canVerify && !config.serveCmd && skipped > 0) {
       log.info(`Verification skipped for ${skipped} unchanged route(s), as verifyChangedOnly asks`);
     }
+    if (canVerify && !config.serveCmd && toVerify.length === 0 && incremental) {
+      const cachedCount = report.routeDetails.filter((detail) => detail.status === 'cached').length;
+      if (cachedCount > 0) {
+        report.verification = {
+          ok: true,
+          modes: { hydrated: 0, 're-rendered': 0, undetected: 0, unknown: 0 },
+          frameworks: {},
+          skipped: 0,
+          reused: cachedCount,
+          policySkipped: 0,
+          allowed: 0,
+          allowedRerender: 0,
+          errors: [],
+          routes: [],
+          skippedRoutes: [],
+        };
+        log.info(
+          `Verification skipped for ${cachedCount} cached route(s); they were verified previously`,
+        );
+      }
+    }
     if (canVerify && !config.serveCmd && toVerify.length > 0) {
       phaseStartedAt = Date.now();
       report.verification = await verifyRoutes({
@@ -288,9 +368,36 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       });
       report.timings.verify = Date.now() - phaseStartedAt;
       report.verification.skipped = skipped;
+      report.verification.reused = report.routeDetails.filter(
+        (detail) => detail.status === 'cached',
+      ).length;
       report.verification.policySkipped = report.verification.skippedRoutes.length;
+      for (const entry of report.verification.routes) {
+        incremental?.recordVerified(
+          entry.route,
+          entry.ok === true && (entry.hydrationErrors ?? []).length === 0,
+        );
+      }
+      for (const route of report.verification.skippedRoutes) {
+        incremental?.recordVerified(route, true);
+      }
       logVerification(report.verification, config, log);
       mergeVerification(report);
+    }
+
+    if (incremental) {
+      try {
+        report.incremental = await incremental.finalize({
+          report,
+          dryRun: config.dryRun,
+        });
+      } catch (error) {
+        report.errors.push({
+          route: null,
+          message: `incremental cache write failed: ${error.message}`,
+        });
+        log.error(`incremental cache write failed: ${error.message}`);
+      }
     }
 
     if (
@@ -319,6 +426,8 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     }
   } finally {
     if (browser) await browser.close();
+    if (incremental) await incremental.close();
+    if (vendor) await vendor.close();
     const stopped = await server.close();
     if (stopped === false) {
       log.warn('serveCmd process did not exit after SIGKILL and may still be running');
@@ -386,6 +495,22 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     if (config.failOnError) report.ok = false;
   }
   return report;
+}
+
+// Refuses a cache file inside the source or output tree, where a clean build can
+// delete it or the build can treat it as an asset.
+function assertCacheLocation(cacheFile, sourceDir, outputDir, config) {
+  if (!config.incremental.enabled || config.serveCmd || config.saveAs !== 'html') return;
+  const cache = path.resolve(cacheFile);
+  for (const [name, dir] of [
+    ['sourceDir', sourceDir],
+    ['destination', outputDir],
+  ]) {
+    const root = path.resolve(dir);
+    if (cache === root || cache.startsWith(`${root}${path.sep}`)) {
+      throw new Error(`incremental.cachePath must be outside ${name}: ${cache} is inside ${root}`);
+    }
+  }
 }
 
 /**

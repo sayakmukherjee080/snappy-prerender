@@ -123,6 +123,41 @@ export function addConfigWarnings(config, userOptions, defaults) {
       'reuseVerificationContext is ignored when locales or seoLocale change the browser context between routes',
     );
   }
+  if (config.incremental.enabled && config.serveCmd) {
+    warn('incremental is disabled with serveCmd because source assets cannot be fingerprinted');
+  }
+  if (config.incremental.enabled && config.saveAs !== 'html') {
+    warn(`incremental is disabled when saveAs is '${config.saveAs}'`);
+  }
+  if (config.incremental.enabled && config.incremental.mode === 'trust') {
+    warn(
+      'incremental mode "trust" reuses routes without revalidating API or vendored asset changes; cached data may be stale',
+    );
+  }
+  if (config.incremental.enabled && !config.freezeTime) {
+    warn(
+      'incremental assumes unchanged inputs produce unchanged HTML; pages that render the wall clock or Math.random should set freezeTime/randomSeed or opt out',
+    );
+  }
+  if (config.vendorAssets.enabled && config.blockThirdParty) {
+    warn(
+      'vendorAssets with blockThirdParty may miss assets injected by scripts that were blocked during render',
+    );
+  }
+  if (config.vendorAssets.enabled && config.vendorAssets.types.includes('script')) {
+    warn(
+      'vendorAssets with types "script" localizes third-party scripts; origin assumptions, relative dynamic imports and cookies can break',
+    );
+  }
+  if (
+    config.vendorAssets.enabled &&
+    config.vendorAssets.onError === 'warn' &&
+    config.vendorAssets.failOnExternalAssets
+  ) {
+    warn(
+      'vendorAssets.onError is "warn" while failOnExternalAssets is true; a failed download will still fail the self-contained check',
+    );
+  }
   if (config.locales?.mode === 'path' && config.seoLocale?.code) {
     warn('seoLocale.code is ignored in path mode; each locale supplies its own code');
   }

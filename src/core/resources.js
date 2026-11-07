@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { blockThirdPartyRequests } from './blocking.js';
+import { dataRequestKey } from './revalidate.js';
 
 /**
  * Watches one page's network traffic. Records every third-party origin for the
@@ -13,6 +15,8 @@ export function createResourceCollector({
   blockThirdParty = false,
   collectJson = false,
   maxCachedBytes = Number.POSITIVE_INFINITY,
+  recordData = false,
+  dataMaxBytes = 5 * 1024 * 1024,
 }) {
   const thirdPartyOrigins = new Set();
   const images = new Set();
@@ -20,7 +24,10 @@ export function createResourceCollector({
   const styles = new Set();
   const fonts = new Map();
   const json = new Map();
+  const dataRequests = [];
+  const dataByRequest = new WeakMap();
   const pending = [];
+  const dataPending = [];
 
   return {
     thirdPartyOrigins,
@@ -29,15 +36,46 @@ export function createResourceCollector({
     styles,
     fonts,
     json,
-    // Waits for in-flight JSON body reads so the cache is complete before injection.
+    dataRequests,
+    // Waits for in-flight JSON and data body reads so the cache is complete.
     async settled() {
-      await Promise.allSettled(pending);
+      await Promise.allSettled([...pending, ...dataPending]);
     },
     async install(page) {
       page.on('request', (request) => {
         const parsed = parseUrl(request.url());
         if (!parsed) return;
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+        if (recordData && isDataRequest(request)) {
+          const headers = request.headers();
+          const record = {
+            method: request.method(),
+            url: request.url(),
+            sameOrigin: parsed.origin === origin,
+            accept: headers.accept ?? '',
+            requestContentType: headers['content-type'] ?? '',
+            status: null,
+            etag: null,
+            lastModified: null,
+            bodyHash: null,
+            bytes: 0,
+            unverifiable: false,
+            reason: null,
+          };
+          record.key = dataRequestKey(record);
+          if (record.method !== 'GET' && record.method !== 'HEAD') {
+            record.unverifiable = true;
+            record.reason = `${record.method} requests are not replayed`;
+          } else if (headers.authorization) {
+            record.unverifiable = true;
+            record.reason = 'the request used an Authorization header';
+          } else if (record.method === 'HEAD') {
+            record.unverifiable = true;
+            record.reason = 'HEAD responses do not expose a body hash';
+          }
+          dataByRequest.set(request, record);
+          dataRequests.push(record);
+        }
         if (parsed.origin === origin) return;
         thirdPartyOrigins.add(parsed.origin);
       });
@@ -46,8 +84,17 @@ export function createResourceCollector({
         await blockThirdPartyRequests(page, origin, allowedHosts);
       }
 
+      page.on('requestfailed', (request) => {
+        const record = dataByRequest.get(request);
+        if (!record) return;
+        record.unverifiable = true;
+        record.reason = `request failed: ${request.failure()?.errorText ?? 'unknown error'}`;
+      });
+
       page.on('response', (response) => {
         const request = response.request();
+        const dataRecord = dataByRequest.get(request);
+        if (dataRecord) recordDataResponse(response, dataRecord, dataPending, dataMaxBytes);
         const url = request.url();
         const parsed = parseUrl(url);
         if (!parsed || parsed.origin !== origin) return;
@@ -110,6 +157,49 @@ function parseUrl(url) {
   } catch {
     return null;
   }
+}
+
+// Reports whether a request carries application data rather than an asset.
+function isDataRequest(request) {
+  const type = request.resourceType();
+  return type === 'xhr' || type === 'fetch';
+}
+
+// Records a data response's status and body hash, or marks it unverifiable when the
+// body cannot be replayed. The body is never stored in the cache.
+function recordDataResponse(response, record, pending, maxBytes) {
+  record.status = response.status();
+  const headers = response.headers();
+  record.etag = headers.etag ?? null;
+  record.lastModified = headers['last-modified'] ?? null;
+  if (record.status >= 400) {
+    record.unverifiable = true;
+    record.reason = `response returned HTTP ${record.status}`;
+    return;
+  }
+  if (record.method === 'HEAD') return;
+  const length = Number(headers['content-length'] ?? Number.NaN);
+  if (Number.isFinite(length) && length > maxBytes) {
+    record.unverifiable = true;
+    record.reason = `response is larger than the revalidation limit (${length} bytes)`;
+    return;
+  }
+  const capture = response
+    .body()
+    .then((body) => {
+      if (body.length > maxBytes) {
+        record.unverifiable = true;
+        record.reason = `response is larger than the revalidation limit (${body.length} bytes)`;
+        return;
+      }
+      record.bodyHash = createHash('sha256').update(body).digest('hex');
+      record.bytes = body.length;
+    })
+    .catch((error) => {
+      record.unverifiable = true;
+      record.reason = `body read failed: ${error.message}`;
+    });
+  pending.push(capture);
 }
 
 function isJson(response) {

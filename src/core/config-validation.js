@@ -21,6 +21,7 @@ const ROUTE_OVERRIDE_KEYS = new Set([
   'storageState',
   'hydration',
   'framework',
+  'incremental',
 ]);
 
 /**
@@ -58,6 +59,9 @@ export function validateRouteOverrides(overrides) {
     }
     if (override.crawl !== undefined && typeof override.crawl !== 'boolean') {
       throw new TypeError('routeOverrides.crawl must be a boolean');
+    }
+    if (override.incremental !== undefined && typeof override.incremental !== 'boolean') {
+      throw new TypeError('routeOverrides.incremental must be a boolean');
     }
     if (
       override.hydration !== undefined &&

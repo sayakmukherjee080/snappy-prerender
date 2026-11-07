@@ -1,0 +1,15 @@
+{
+  "cookies": [
+    {
+      "name": "aether.hidden.v1",
+      "value": "1",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

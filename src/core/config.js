@@ -154,6 +154,8 @@ export const DEFAULTS = Object.freeze({
   verify: true,
   verifyChangedOnly: false,
   reuseVerificationContext: false,
+  incremental: false,
+  vendorAssets: false,
   freezeTime: false,
   timezone: null,
   randomSeed: null,
@@ -189,6 +191,8 @@ const MULTI_TYPE_KEYS = new Set([
   'minifyCss',
   'freezeTime',
   'failOnDrift',
+  'incremental',
+  'vendorAssets',
 ]);
 
 // Freeze the nested list defaults as well, so a consumer cannot mutate the defaults
@@ -251,6 +255,8 @@ export function resolveConfig(userOptions = {}) {
   }
   config.warnings = [];
   config.failOnDrift = normaliseFailOnDrift(config.failOnDrift);
+  config.incremental = normaliseIncremental(config.incremental);
+  config.vendorAssets = normaliseVendorAssets(config.vendorAssets);
   normaliseLocales(config);
   normaliseSeoLocale(config);
   validateConfig(config);
@@ -265,6 +271,187 @@ export function resolveConfig(userOptions = {}) {
  */
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const INCREMENTAL_DATA_MAX_BYTES = 5 * 1024 * 1024;
+const VENDOR_ASSET_MAX_BYTES = 10 * 1024 * 1024;
+const VENDOR_ASSET_TYPES = ['css', 'font', 'image', 'script'];
+const VENDOR_ASSET_ON_ERROR = ['warn', 'fail'];
+
+/**
+ * Normalises incremental settings into one complete object. `true` selects the safe
+ * data-aware mode; `'trust'` skips API and vendored-asset revalidation.
+ * @param {unknown} value
+ * @returns {object}
+ */
+export function normaliseIncremental(value) {
+  const base = {
+    enabled: false,
+    mode: null,
+    cachePath: '.snappy-cache.json',
+    maxAge: null,
+    lockTimeout: 0,
+    exclude: [],
+    data: {
+      hosts: [],
+      maxBytes: INCREMENTAL_DATA_MAX_BYTES,
+    },
+  };
+  if (value === false || value === null || value === undefined) return base;
+  if (value === true) return { ...base, enabled: true, mode: 'revalidate' };
+  if (value === 'revalidate' || value === 'trust') {
+    return { ...base, enabled: true, mode: value };
+  }
+  if (!isPlainObject(value)) {
+    throw new TypeError("incremental must be false, true, 'revalidate', 'trust' or an object");
+  }
+  for (const key of Object.keys(value)) {
+    if (
+      !['enabled', 'mode', 'cachePath', 'maxAge', 'lockTimeout', 'exclude', 'data'].includes(key)
+    ) {
+      throw new TypeError(`incremental.${key} is not a recognised option`);
+    }
+  }
+  if (value.mode !== undefined && !['revalidate', 'trust'].includes(value.mode)) {
+    throw new TypeError("incremental.mode must be 'revalidate' or 'trust'");
+  }
+  if (value.enabled !== undefined && typeof value.enabled !== 'boolean') {
+    throw new TypeError('incremental.enabled must be a boolean');
+  }
+  if (
+    value.cachePath !== undefined &&
+    (typeof value.cachePath !== 'string' || value.cachePath.length === 0)
+  ) {
+    throw new TypeError('incremental.cachePath must be a non-empty path');
+  }
+  const data = value.data === undefined ? {} : value.data;
+  if (!isPlainObject(data)) throw new TypeError('incremental.data must be an object');
+  for (const key of Object.keys(data)) {
+    if (!['hosts', 'maxBytes'].includes(key)) {
+      throw new TypeError(`incremental.data.${key} is not a recognised option`);
+    }
+  }
+  if (data.hosts !== undefined && !Array.isArray(data.hosts)) {
+    throw new TypeError('incremental.data.hosts must be an array of host names');
+  }
+  for (const host of data.hosts ?? []) {
+    if (typeof host !== 'string' || host.length === 0) {
+      throw new TypeError('incremental.data.hosts entries must be non-empty strings');
+    }
+  }
+  if (data.maxBytes !== undefined && (!Number.isFinite(data.maxBytes) || data.maxBytes <= 0)) {
+    throw new TypeError('incremental.data.maxBytes must be a positive number of bytes');
+  }
+  return {
+    enabled: value.enabled ?? true,
+    mode: value.mode ?? 'revalidate',
+    cachePath: value.cachePath ?? base.cachePath,
+    maxAge:
+      value.maxAge === undefined
+        ? base.maxAge
+        : normaliseDuration(value.maxAge, 'incremental.maxAge'),
+    lockTimeout:
+      value.lockTimeout === undefined || value.lockTimeout === null
+        ? base.lockTimeout
+        : (normaliseDuration(value.lockTimeout, 'incremental.lockTimeout') ?? 0),
+    exclude: toArray(value.exclude ?? []),
+    data: {
+      hosts: [...(data.hosts ?? [])],
+      maxBytes: data.maxBytes ?? base.data.maxBytes,
+    },
+  };
+}
+
+/**
+ * Normalises asset-vendoring settings. A bare array is treated as the host allowlist.
+ * @param {unknown} value
+ * @returns {object}
+ */
+export function normaliseVendorAssets(value) {
+  const base = {
+    enabled: false,
+    hosts: [],
+    types: ['css', 'font', 'image'],
+    maxBytes: VENDOR_ASSET_MAX_BYTES,
+    onError: 'warn',
+    failOnExternalAssets: false,
+  };
+  if (value === false || value === null || value === undefined) return base;
+  const input = Array.isArray(value) ? { hosts: value } : value;
+  if (!isPlainObject(input)) {
+    throw new TypeError('vendorAssets must be false, an array of hosts or an options object');
+  }
+  for (const key of Object.keys(input)) {
+    if (!['hosts', 'types', 'maxBytes', 'onError', 'failOnExternalAssets'].includes(key)) {
+      throw new TypeError(`vendorAssets.${key} is not a recognised option`);
+    }
+  }
+  if (!Array.isArray(input.hosts) || input.hosts.length === 0) {
+    throw new TypeError('vendorAssets.hosts must be a non-empty array of host names');
+  }
+  for (const host of input.hosts) {
+    if (typeof host !== 'string' || host.length === 0) {
+      throw new TypeError('vendorAssets.hosts entries must be non-empty strings');
+    }
+  }
+  const types = input.types ?? base.types;
+  if (!Array.isArray(types) || types.length === 0) {
+    throw new TypeError('vendorAssets.types must be a non-empty array');
+  }
+  for (const type of types) {
+    if (!VENDOR_ASSET_TYPES.includes(type)) {
+      throw new TypeError(`vendorAssets.types must be one of: ${VENDOR_ASSET_TYPES.join(', ')}`);
+    }
+  }
+  if (input.maxBytes !== undefined && (!Number.isFinite(input.maxBytes) || input.maxBytes <= 0)) {
+    throw new TypeError('vendorAssets.maxBytes must be a positive number of bytes');
+  }
+  if (input.onError !== undefined && !VENDOR_ASSET_ON_ERROR.includes(input.onError)) {
+    throw new TypeError("vendorAssets.onError must be 'warn' or 'fail'");
+  }
+  if (input.failOnExternalAssets !== undefined && typeof input.failOnExternalAssets !== 'boolean') {
+    throw new TypeError('vendorAssets.failOnExternalAssets must be a boolean');
+  }
+  return {
+    enabled: true,
+    hosts: [...input.hosts],
+    types: [...types],
+    maxBytes: input.maxBytes ?? base.maxBytes,
+    onError: input.onError ?? base.onError,
+    failOnExternalAssets: input.failOnExternalAssets ?? false,
+  };
+}
+
+/**
+ * Parses a non-negative duration in milliseconds. Strings accept ms, s, m, h, d and w.
+ * @param {unknown} value
+ * @param {string} name
+ * @returns {number | null}
+ */
+export function normaliseDuration(value, name) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new TypeError(`${name} must be a non-negative duration`);
+    }
+    return value;
+  }
+  if (typeof value !== 'string') {
+    throw new TypeError(`${name} must be a number of milliseconds or a duration string`);
+  }
+  const match = /^(\d+(?:\.\d+)?)(ms|s|m|h|d|w)$/i.exec(value.trim());
+  if (!match) {
+    throw new TypeError(`${name} must look like 500ms, 30s, 15m, 12h, 7d or 2w`);
+  }
+  const factors = {
+    ms: 1,
+    s: 1000,
+    m: 60 * 1000,
+    h: 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000,
+    w: 7 * 24 * 60 * 60 * 1000,
+  };
+  return Number(match[1]) * factors[match[2].toLowerCase()];
 }
 
 /**
@@ -434,6 +621,7 @@ export function validateConfig(config) {
   patternList(config.removeAttributes, 'removeAttributes');
   patternList(config.auditIgnoreLinks, 'auditIgnoreLinks');
   patternList(config.routePriority, 'routePriority');
+  patternList(config.incremental.exclude, 'incremental.exclude');
   for (const key of [
     'readyFlag',
     'readySelector',
