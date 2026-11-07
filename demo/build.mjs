@@ -263,14 +263,14 @@ async function writeReleasesPage() {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>snappy-prerender releases: the maintained react-snap alternative</title>
-    <meta name="description" content="Release notes for snappy-prerender, the maintained react-snap alternative for React and Vite single-page apps." />
+    <title>snappy-prerender releases: the framework-agnostic react-snap alternative</title>
+    <meta name="description" content="Release notes for snappy-prerender, the maintained react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla single-page apps." />
     <meta name="robots" content="index,follow" />
     <link rel="canonical" href="${origin}/releases/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="snappy-prerender" />
-    <meta property="og:title" content="snappy-prerender releases: react-snap alternative" />
-    <meta property="og:description" content="Release notes for snappy-prerender, the maintained react-snap alternative for React and Vite single-page apps." />
+    <meta property="og:title" content="snappy-prerender releases: react-snap alternative for every SPA" />
+    <meta property="og:description" content="Release notes for snappy-prerender, the maintained react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla single-page apps." />
     <meta property="og:url" content="${origin}/releases/" />
     <meta property="og:image" content="${origin}/og-card.png" />
     <meta property="og:image:width" content="1200" />
@@ -278,7 +278,7 @@ async function writeReleasesPage() {
     <meta property="og:image:alt" content="snappy-prerender releases" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="snappy-prerender releases" />
-    <meta name="twitter:description" content="Release notes for the maintained react-snap alternative." />
+    <meta name="twitter:description" content="Release notes for the framework-agnostic react-snap alternative." />
     <meta name="twitter:image" content="${origin}/og-card.png" />
     <meta name="twitter:image:alt" content="snappy-prerender releases" />
     <link rel="icon" href="/logo.png" />
@@ -342,7 +342,7 @@ async function writeReleasesPage() {
         <section class="hero">
           <p class="eyebrow">Changelog</p>
           <h1>Release notes.</h1>
-          <p class="lede">Every release of the maintained react-snap alternative, generated from the repository's CHANGELOG.md.</p>
+          <p class="lede">Every release of the framework-agnostic react-snap alternative. The build generates this page from the repository's CHANGELOG.md.</p>
         </section>
         <div class="release-layout">
           <nav class="version-nav" aria-label="Versions">${versionNav}</nav>
@@ -526,7 +526,7 @@ async function createOgImage(file) {
       .accent { color: #d7ff64; }
     </style></head><body><div class="card">
       <div class="brand"><span class="mark">S</span> snappy-prerender</div>
-      <div><h1>The page is in<br />the HTML.</h1><p>The maintained react-snap alternative for React and Vite SPAs. Each route is static HTML at build time, so crawlers read it before the app script runs.</p></div>
+      <div><h1>The page content<br />is in the HTML.</h1><p>The framework-agnostic react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs. Each route is static HTML at build time, so crawlers read it before the app script runs.</p></div>
       <div class="foot"><span>react-snap alternative</span><span>MIT · snappy-prerender</span></div>
     </div></body></html>`);
     await page.screenshot({ path: file, type: 'png' });

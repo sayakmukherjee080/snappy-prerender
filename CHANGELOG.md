@@ -10,11 +10,14 @@ the release tags; see the Git history for those changes.
 
 ### Changed
 
-- README now leads with the maintained react-snap alternative positioning, adds a
-  react-snap comparison, Vite and Create React App quick starts, AI-crawler guidance and
-  an FAQ.
-- npm description and keywords now name react-snap and the migration queries, and the
-  author field points at the GitHub profile.
+- README now leads with the framework-agnostic react-snap alternative positioning for
+  React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript, adds a
+  react-snap comparison, framework quick starts, a validated-version table, AI-crawler
+  guidance and an FAQ.
+- npm description and keywords now name react-snap, every supported framework and the
+  migration queries, and the author field points at the GitHub profile.
+- The demo landing page and app copy carry the same framework coverage and a validated
+  framework table.
 - Package and documentation links in the README are absolute so they work on both GitHub
   and npm. No runtime behaviour changed.
 

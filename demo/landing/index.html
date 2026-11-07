@@ -3,19 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>snappy-prerender demo: the maintained react-snap alternative</title>
+    <title>snappy-prerender demo: the framework-agnostic react-snap alternative</title>
     <meta
       name="description"
-      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React and Vite apps."
+      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla apps."
     />
     <meta name="robots" content="index,follow" />
     <link rel="canonical" href="__DEMO_ORIGIN__/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="snappy-prerender" />
-    <meta property="og:title" content="snappy-prerender demo: react-snap alternative for React and Vite" />
+    <meta property="og:title" content="snappy-prerender demo: react-snap alternative for React, Vue, Svelte and more" />
     <meta
       property="og:description"
-      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React and Vite apps."
+      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla apps."
     />
     <meta property="og:url" content="__DEMO_ORIGIN__/" />
     <meta property="og:image" content="__DEMO_ORIGIN__/og-card.png" />
@@ -26,10 +26,10 @@
       content="snappy-prerender demo: an SPA before and after prerendering"
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="snappy-prerender demo: react-snap alternative" />
+    <meta name="twitter:title" content="snappy-prerender demo: react-snap alternative for every SPA" />
     <meta
       name="twitter:description"
-      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React and Vite apps."
+      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla apps."
     />
     <meta name="twitter:image" content="__DEMO_ORIGIN__/og-card.png" />
     <meta name="twitter:image:alt" content="snappy-prerender demo: an SPA before and after prerendering" />
@@ -38,7 +38,7 @@
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "snappy-prerender demo",
-        "description": "Before-and-after demo of snappy-prerender, the maintained react-snap alternative for React and Vite single-page apps.",
+        "description": "Before-and-after demo of snappy-prerender, the framework-agnostic react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla single-page apps.",
         "url": "__DEMO_ORIGIN__/",
         "mainEntity": {
           "@type": "SoftwareApplication",
@@ -46,13 +46,13 @@
           "alternateName": "snappy",
           "applicationCategory": "DeveloperApplication",
           "operatingSystem": "Node.js",
-          "description": "MIT-licensed react-snap alternative that prerenders React and Vite SPAs to static HTML at build time with Playwright and hydration checks.",
+          "description": "MIT-licensed react-snap alternative that prerenders React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs to static HTML at build time with Playwright and hydration checks.",
           "url": "https://github.com/sayakmukherjee080/snappy-prerender",
           "sameAs": [
             "https://www.npmjs.com/package/snappy-prerender",
             "https://github.com/sayakmukherjee080/snappy-prerender"
           ],
-          "keywords": "react-snap alternative, react-snap replacement, SPA prerendering, prerender React, prerender Vite, static HTML",
+          "keywords": "react-snap alternative, react-snap replacement, SPA prerendering, prerender React, prerender Vue, prerender Svelte, prerender Preact, prerender Angular, prerender Solid, prerender Lit, prerender Ember, static HTML",
           "offers": {
             "@type": "Offer",
             "price": "0",
@@ -415,6 +415,16 @@
       .seo-card p { margin: 0; color: var(--muted); font-size: 0.9rem; }
       .seo-section a { color: var(--accent); }
       .seo-section > .seo-footer { margin-top: 1.2rem; }
+      .framework-heading { margin: 1.5rem 0 0.35rem; font-size: 1.15rem; letter-spacing: -0.02em; }
+      .framework-note { max-width: 72ch; margin: 0.35rem 0 0.75rem; color: var(--muted); font-size: 0.84rem; }
+      .framework-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 0.9rem; background: var(--panel); }
+      .framework-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 0.84rem; }
+      .framework-table caption { padding: 0.85rem 1rem 0.35rem; color: var(--muted); font-size: 0.76rem; text-align: left; }
+      .framework-table th, .framework-table td { padding: 0.6rem 0.8rem; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+      .framework-table thead th { border-top: 0; color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
+      .framework-table tbody td { color: var(--muted); }
+      .framework-table tbody td:first-child { color: var(--text); white-space: nowrap; }
+      .framework-table code { font-size: 0.8em; }
 
       code { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.88em; }
 
@@ -471,10 +481,11 @@
           <h1>One SPA, two HTML files.</h1>
           <p class="lede">
             This is SPA prerendering before and after. The first build is a client-rendered SPA
-            with an empty <code>#root</code>. The second is the same app after snappy-prerender,
-            the maintained react-snap alternative, writes every route to static HTML at build time.
-            Both panes replay captured frames. The SPA fills in over time; the prerendered page is
-            readable at t=0 and hydrates later.
+            with an empty <code>#root</code>. The second is the same app after snappy-prerender has
+            written every route to static HTML at build time. snappy-prerender is the maintained
+            react-snap alternative. The same process works for React, Vue, Svelte, Preact, Angular,
+            Solid, Lit, Ember and vanilla JavaScript. Both panes replay captured frames. The SPA
+            fills in over time; the prerendered page is readable at t=0 and hydrates later.
           </p>
 
           <div class="timeline-controls">
@@ -631,12 +642,12 @@
 
         <section class="seo-section" aria-label="About snappy-prerender">
           <p class="eyebrow">Why this matters</p>
-          <h2>Prerender a React SPA without SSR.</h2>
-          <p>A client-rendered SPA ships an empty root and a JavaScript bundle. snappy-prerender runs after the build, opens every route in a real browser, and writes the settled DOM to static HTML. That is SPA prerendering without a server renderer, a framework migration or a runtime service.</p>
+          <h2>Prerender a React SPA without SSR, or any other SPA.</h2>
+          <p>A client-rendered SPA ships an empty root and a JavaScript bundle. snappy-prerender runs after the build, opens every route in a real browser, and writes the settled DOM to static HTML. That is SPA prerendering without a server renderer, a framework migration or a runtime service. The same build works for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript.</p>
           <div class="seo-grid">
             <article class="seo-card">
-              <h3>React, Vite and Create React App</h3>
-              <p>Use the Vite plugin, the CLI or the init wizard. The same build works for React 16.8 through 19, Vite 6/7/8, Create React App and any static output directory.</p>
+              <h3>Every major SPA framework</h3>
+              <p>Use the Vite plugin, the CLI or the init wizard to prerender Vite output, Create React App output or any static directory. The testcase matrix builds React 16.8 through 19, Vue 3.x, Svelte 3/5, Preact 10/11, Angular 10/22, Solid 0.20/1.9, Lit 1/3, Ember 3.22/7.3 and vanilla JavaScript.</p>
             </article>
             <article class="seo-card">
               <h3>What AI crawlers see</h3>
@@ -644,20 +655,42 @@
             </article>
             <article class="seo-card">
               <h3>A maintained react-snap replacement</h3>
-              <p>react-snap's last npm release was 2018 and its React 18 compatibility issue has been open since 2023. snappy-prerender keeps the build-time browser approach with Playwright, per-route hydration verification and a built-in head layer.</p>
+              <p>react-snap's last npm release was 2018 and its React 18 compatibility issue has been open since 2023. snappy-prerender keeps the build-time browser approach for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript, with Playwright and per-route hydration verification.</p>
             </article>
             <article class="seo-card">
-              <h3>React SEO without SSR</h3>
-              <p>Prerendered HTML gives Google and AI crawlers a readable page on the first request. The client bundle still hydrates normally, so the app keeps its router and interactivity.</p>
+              <h3>SPA SEO without SSR</h3>
+              <p>Prerendered HTML gives Google and AI crawlers a readable page on the first request for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla apps. The client bundle still hydrates normally, so the app keeps its router and interactivity.</p>
             </article>
           </div>
+          <h3 class="framework-heading">Validated frameworks and versions</h3>
+          <p class="framework-note">Validated on 2026-11-06 with snappy-prerender 2.11.1. The testcase matrix builds the same 254-route site with every implementation.</p>
+          <div class="framework-table-wrap">
+            <table class="framework-table">
+              <caption>Acceptance-run versions and remarks.</caption>
+              <thead>
+                <tr><th>Framework</th><th>Version</th><th>Validation</th><th>Remarks</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>React</td><td>19.2.0 + Vite 6.0.0</td><td>Hydration validated</td><td>204 routes hydrated; 51 live API routes re-rendered and allowed.</td></tr>
+                <tr><td>React</td><td>16.8.0 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped.</td></tr>
+                <tr><td>Vue</td><td>3.0.0 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped.</td></tr>
+                <tr><td>Svelte</td><td>3.29.0 + Rollup</td><td>Prerender validated</td><td>Historical host; hydration skipped; explicit <code>framework: 'svelte'</code>.</td></tr>
+                <tr><td>Preact</td><td>10.5.4 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped.</td></tr>
+                <tr><td>Angular</td><td>10.1.6 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped.</td></tr>
+                <tr><td>Solid</td><td>0.20.3 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped; explicit <code>framework: 'solid'</code>.</td></tr>
+                <tr><td>Lit</td><td>lit-html 1.3.0 + lit-element 2.4.0 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped; explicit <code>framework: 'lit'</code>.</td></tr>
+                <tr><td>Ember</td><td>3.22.0 + Ember CLI</td><td>Prerender validated</td><td>Historical host; hydration skipped; development-mode build.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="framework-note">The matrix also builds React 19.2.0, Vue 3.5.44, Svelte 5.57.3, Preact 11.1.1, Angular 22.2.4, Solid 1.9.18, Lit 3.3.3, Ember 7.3.0 and vanilla JavaScript.</p>
           <p class="seo-footer">Read the <a href="https://github.com/sayakmukherjee080/snappy-prerender#readme">README</a>, the <a href="https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/react-snap-migration.md">react-snap migration guide</a>, or install with <code>npm install --save-dev snappy-prerender</code>.</p>
         </section>
 
       </main>
 
       <footer>
-        <span>snappy-prerender — the maintained react-snap alternative</span>
+        <span>snappy-prerender: the framework-agnostic react-snap alternative</span>
         <span>MIT · © smoldev</span>
       </footer>
     </div>

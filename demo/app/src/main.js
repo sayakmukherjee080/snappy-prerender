@@ -12,10 +12,10 @@ const pages = {
   '/': {
     title: 'SPA prerendering demo',
     description:
-      'See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React and Vite apps.',
+      'See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla apps.',
     eyebrow: '01 / Home',
     heading: 'This page has two builds.',
-    lede: 'The SPA build renders this page with JavaScript. The prerendered build has the same markup in the HTML file before the app script runs — static HTML for crawlers and link previews.',
+    lede: 'The SPA build renders this page with JavaScript. The prerendered build has the same markup in the HTML file before the app script runs. The output is static HTML for crawlers and link previews. The same approach works for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript.',
     cards: [
       [
         'HTML source',
@@ -34,7 +34,7 @@ const pages = {
       'The demo pricing page. snappy-prerender is a free, MIT-licensed react-snap alternative with no plans or paid tiers.',
     eyebrow: '02 / Pricing',
     heading: 'The react-snap alternative is free.',
-    lede: 'snappy-prerender is MIT-licensed. There are no plans, seats or paid tiers. The package is a free react-snap replacement for React and Vite SPAs; this route exists so the demo has a second page to prerender.',
+    lede: 'snappy-prerender is MIT-licensed. There are no plans, seats or paid tiers. The package is a free react-snap replacement for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs. This route exists so the demo has a second page to prerender.',
     cards: [
       ['MIT license', 'Use, modify and redistribute the package under the MIT license.'],
       ['Install from npm', 'Add the package to a project and run it against the built output.'],
@@ -50,7 +50,7 @@ const pages = {
       'How the demo builds an SPA, prerenders every route to static HTML, and verifies the output.',
     eyebrow: '03 / Docs',
     heading: 'One source, two builds.',
-    lede: 'Vite builds the SPA. The prerendered build starts from that output, then snappy-prerender opens every route in a browser and writes the settled DOM back to disk as static HTML.',
+    lede: 'Vite builds the SPA. The prerendered build starts from that output, then snappy-prerender opens every route in a browser and writes the settled DOM back to disk as static HTML. The same process works for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript.',
     cards: [
       ['1. Build', 'Vite emits the app with an empty #root and a module script.'],
       [
