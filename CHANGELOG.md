@@ -6,6 +6,71 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [2.11.3] - 2026-11-07
+
+### Added
+
+- Incremental prerendering with `incremental: true` (revalidate), `incremental: 'trust'`
+  and `incremental: false`. Unchanged routes are restored from a persistent cache instead
+  of being rendered again.
+- Per-route dependency fingerprints for source HTML, referenced JS/CSS, local asset
+  existence, output configuration and the written page hash. Cached HTML lives outside
+  `dist`, so a normal Vite, CRA or static build can replace the output directory without
+  losing reusable pages.
+- API response revalidation for recorded `GET`/`HEAD` requests. Shared endpoints are
+  deduplicated, `ETag`/`Last-Modified` conditional requests are used when available, and
+  a changed body hash renders only the routes that depend on it. Requests with
+  `Authorization`, non-GET methods, oversized bodies, streaming, or failed responses are
+  never replayed and always render.
+- `incremental.cachePath`, `incremental.maxAge`, `incremental.lockTimeout`,
+  `incremental.exclude`, `incremental.data.hosts`, `incremental.data.maxBytes` and
+  `routeOverrides[].incremental`.
+- A cache lock beside the cache file stops two builds from writing or pruning the same
+  cache at once. The default fails fast with the owning pid; `incremental.lockTimeout`
+  waits for a bounded time, and a lock left by a dead process is reclaimed.
+- Cache maintenance now prunes unreferenced root HTML pages, generated state and SEO
+  scripts, and vendored assets and manifests, so removed routes and changed assets do
+  not accumulate in the cache directory.
+- A capped crawl (`maxRoutes`) writes the accepted routes to the incremental cache
+  instead of discarding the whole cache entry, so route priority and cache reuse work
+  together.
+- Asset localization with `vendorAssets`: download allowlisted CSS, fonts, images and
+  optionally scripts into content-hashed `snappy-assets/` files and rewrite HTML, CSS
+  `@import`, `url()`, `srcset`, style attributes and inline `<style>` references.
+- `vendorAssets.hosts`, `vendorAssets.types`, `vendorAssets.maxBytes`,
+  `vendorAssets.onError` (`warn`/`fail`) and `vendorAssets.failOnExternalAssets`.
+- Vendored asset source hashes participate in incremental revalidation. Local vendor
+  files, generated state scripts and SEO locale scripts are cached and restored.
+- CLI flags for incremental caching, data revalidation limits, asset localization and
+  the self-contained asset gate.
+
+### Changed
+
+- `preloadLinks` now reads script hints from the final document and merges them with
+  runtime-loaded chunks, so localized and dynamically imported scripts both get hints.
+- Verification skips cached routes and records whether a route was verified; intentionally
+  skipped hydration routes remain reusable.
+
+### Fixed
+
+- Routes whose vendor download failed under `vendorAssets.onError: 'warn'` are not written
+  to the incremental cache, so the next build retries the download instead of reusing a
+  page with an external asset.
+- `inlineCss: 'inline'` no longer fetches cross-origin stylesheets during the render pass,
+  which previously made the route uncacheable and left the localized CSS as a link. Local
+  `snappy-assets/` stylesheets, including localized `@import` rules, are inlined after
+  asset localization.
+- Concurrent routes that reference the same vendored asset now share one in-flight write
+  instead of racing on the same temporary file.
+
+### Security
+
+- Vendor downloads enforce the host allowlist, redirect re-checks, private-host rejection
+  unless explicitly allowlisted, TLS validation, per-asset byte limits and content-type
+  checks. A response whose content type does not match the requested CSS, script, font or
+  image kind is refused instead of being written as a local asset. API response bodies and
+  credentials are never written to the cache.
+
 ## [2.11.2] - 2026-11-07
 
 ### Changed
