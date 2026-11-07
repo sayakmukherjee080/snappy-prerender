@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [2.11.2] - 2026-11-07
+
+### Changed
+
+- README now leads with the maintained react-snap alternative positioning, adds a
+  react-snap comparison, Vite and Create React App quick starts, AI-crawler guidance and
+  an FAQ.
+- npm description and keywords now name react-snap and the migration queries, and the
+  author field points at the GitHub profile.
+- Package and documentation links in the README are absolute so they work on both GitHub
+  and npm. No runtime behaviour changed.
+
 ## [2.11.1] - 2026-11-06
 
 ### Added
