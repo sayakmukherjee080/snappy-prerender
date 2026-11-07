@@ -6,7 +6,17 @@
 
 snappy-prerender is the maintained, MIT-licensed react-snap alternative for existing single-page apps built with React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember or vanilla JavaScript. It prerenders your built SPA to static HTML at build time, verifies hydration, and produces output that Google and AI crawlers can read. No rewrite or runtime service is needed.
 
-The 2.11 line adds Angular, Ember and Lit verification, explicit Solid support, a custom container selector, and a content baseline that reports route changes between builds. Earlier releases added deterministic clocks and random seeds, locale and hreflang generation, cookie/localStorage SEO locale seeding, and a head layer that replaces React Helmet or React Helmet Async.
+- **Frameworks:** React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript, including React 16.8 through 19, Vite 6/7/8 and Create React App; any app that builds to a static directory works.
+- **Prerendering:** static HTML per route, directory or flat output, `404.html`, route includes/excludes, crawl depth and route caps, route priority, route files, sitemap-seeded routes, per-route overrides, ready flag/selector/network settle, retries, traces and screenshots.
+- **Rendering:** Playwright with installed Chrome or Edge, hash-verified Chrome for Testing fallback, third-party blocking with host allowlists, authenticated storage state, custom viewport/user agent/HTTPS/launch arguments, scroll-to-load and animation freezing.
+- **Hydration:** per-route hydration verification, framework detection, strict/re-render/skip policies, changed-only verification, verification-context reuse and per-route failure gates.
+- **SEO and discovery:** per-route title, description, robots and canonical tags, Open Graph, Twitter cards, JSON-LD, a built-in `Head` layer that replaces React Helmet, client-side head reconciliation, sitemap and image sitemap output, sitemap lastmod, robots directives and AI-crawler-readable HTML.
+- **Locales:** path and single-locale modes, hreflang and x-default, canonical and `og:locale`, per-locale routes, cookies/localStorage/storage state, and cookie/localStorage SEO-locale seeding.
+- **Incremental builds:** persistent route cache, API and vendor-asset revalidation, trust/maxAge/exclude modes, per-route opt-out, cache locking with stale-lock recovery and cache pruning for HTML, generated scripts and vendored assets.
+- **Output optimisation:** inline or critical CSS, HTML/CSS minification, preconnect hints, font/image/module preload hints, preload manifest, strict/hash CSP, async and external scripts, tag/attribute surgery, build-origin metadata stripping and stale-route pruning.
+- **Assets and state:** vendor localization for CSS, fonts, images and scripts with content hashing, SRI checks, byte/type limits and redirect/private-host rejection; CSS-in-JS and constructable stylesheet capture; form-state capture; Ajax replay through `window.snapStore`; self-contained asset gate.
+- **Auditing and operations:** broken-link, SEO, sitemap and CSP audit; duplicate-content/title detection; empty-page and failed-request gates; content drift baselines; deterministic time/timezone/random seed; JSON reports; dry runs, destinations, base paths, `serveCmd` and bounded concurrency.
+- **Interfaces:** Vite plugin, CLI, interactive `init` wizard, react-snap config migration and programmatic API.
 
 [![npm](https://img.shields.io/npm/v/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
 [![npm downloads](https://img.shields.io/npm/dm/snappy-prerender.svg)](https://www.npmjs.com/package/snappy-prerender)
@@ -15,7 +25,7 @@ The 2.11 line adds Angular, Ember and Lit verification, explicit Solid support, 
 
 <a href="https://www.producthunt.com/products/snappy-prerender?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-snappy-prerender" target="_blank" rel="noopener noreferrer"><img alt="snappy-prerender - Turn your existing SPA into static HTML | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1297695&amp;theme=neutral&amp;t=1793431121819"></a>
 
-Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). Install with `npm install --save-dev snappy-prerender`. Release notes are in [CHANGELOG.md](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/CHANGELOG.md).
+Package page: [npmjs.com/package/snappy-prerender](https://www.npmjs.com/package/snappy-prerender). GitHub: [sayakmukherjee080/snappy-prerender](https://github.com/sayakmukherjee080/snappy-prerender). Install with `npm install --save-dev snappy-prerender`. Release notes are in [CHANGELOG.md](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/CHANGELOG.md).
 
 - No SSR entry, framework migration or app changes. If the app builds to a directory, it can be prerendered.
 - CI covers React 16.8.0, 16.14.0, 17.0.2, 18.3.1 and 19.2.0, and Vite 6.0.0, 7.3.7 and 8.3.5. The [testcase matrix](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/testcase/README.md#validation-status) adds Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript; see [Validated frameworks and versions](#validated-frameworks-and-versions).
