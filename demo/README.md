@@ -1,9 +1,11 @@
 # Before/after demo
 
-A small vanilla Vite app built twice:
+A live demo of snappy-prerender, the maintained react-snap alternative: the same vanilla Vite
+SPA built twice.
 
 - `/before/` — the normal SPA output: an empty `#root` until the module script runs.
-- `/after/` — the same output after `snappy-prerender` has written the settled DOM per route.
+- `/after/` — the same output after `snappy-prerender` has written the settled DOM per route as
+  static HTML.
 
 The landing page compares the two with a captured four-stage playback and crawler-visible
 HTML metrics. The SPA pane starts with the raw empty `#root`, then shows the header, hero, and
@@ -21,11 +23,21 @@ From the repository root:
 node demo/build.mjs
 ```
 
-Set the public origin used by canonical and sitemap URLs when building for a real host:
+Set the public origin used by canonical, Open Graph, sitemap and robots.txt URLs when building
+for a real host:
 
 ```sh
 DEMO_ORIGIN=https://demo.example.com node demo/build.mjs
 ```
+
+The build writes a root `sitemap.xml` and `robots.txt` for the landing page, releases page and
+prerendered routes, in addition to the prerendered build's own sitemap.
+
+## Discovery
+
+The landing page and releases page carry canonical, Open Graph and Twitter Card metadata. The
+landing page also emits `WebPage` and `SoftwareApplication` JSON-LD. The root `robots.txt` keeps
+the intentionally empty `/before/` build and the `/playback/` snapshots out of search results.
 
 ## Serve
 

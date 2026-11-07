@@ -263,9 +263,24 @@ async function writeReleasesPage() {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Releases | snappy-prerender</title>
-    <meta name="description" content="Release notes for snappy-prerender, generated from the repository changelog." />
+    <title>snappy-prerender releases: the maintained react-snap alternative</title>
+    <meta name="description" content="Release notes for snappy-prerender, the maintained react-snap alternative for React and Vite single-page apps." />
+    <meta name="robots" content="index,follow" />
     <link rel="canonical" href="${origin}/releases/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="snappy-prerender" />
+    <meta property="og:title" content="snappy-prerender releases: react-snap alternative" />
+    <meta property="og:description" content="Release notes for snappy-prerender, the maintained react-snap alternative for React and Vite single-page apps." />
+    <meta property="og:url" content="${origin}/releases/" />
+    <meta property="og:image" content="${origin}/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="snappy-prerender releases" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="snappy-prerender releases" />
+    <meta name="twitter:description" content="Release notes for the maintained react-snap alternative." />
+    <meta name="twitter:image" content="${origin}/og-card.png" />
+    <meta name="twitter:image:alt" content="snappy-prerender releases" />
     <link rel="icon" href="/logo.png" />
     <style>
       :root { color-scheme: dark; --bg:#0d1210; --panel:#151c19; --panel-2:#1b2521; --text:#f2f0e8; --muted:#a4b0a9; --line:#2c3a34; --accent:#d7ff64; --accent-ink:#11170f; }
@@ -327,7 +342,7 @@ async function writeReleasesPage() {
         <section class="hero">
           <p class="eyebrow">Changelog</p>
           <h1>Release notes.</h1>
-          <p class="lede">Every release, generated from the repository's CHANGELOG.md.</p>
+          <p class="lede">Every release of the maintained react-snap alternative, generated from the repository's CHANGELOG.md.</p>
         </section>
         <div class="release-layout">
           <nav class="version-nav" aria-label="Versions">${versionNav}</nav>
@@ -341,6 +356,21 @@ async function writeReleasesPage() {
 
   await fs.mkdir(path.join(site, 'releases'), { recursive: true });
   await fs.writeFile(path.join(site, 'releases', 'index.html'), page);
+}
+
+/**
+ * Writes a root sitemap and robots.txt for the demo's crawlable pages.
+ * @param {string} origin
+ */
+async function writeDiscoveryFiles(origin) {
+  const routes = ['/', '/releases/', '/after/', '/after/pricing/', '/after/docs/'];
+  const urls = routes
+    .map((route) => `  <url><loc>${new URL(route, origin).href}</loc></url>`)
+    .join('\n');
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+  await fs.writeFile(path.join(site, 'sitemap.xml'), sitemap);
+  const robots = `User-agent: *\nAllow: /\nDisallow: /before/\nDisallow: /playback/\n\nSitemap: ${origin}/sitemap.xml\n`;
+  await fs.writeFile(path.join(site, 'robots.txt'), robots);
 }
 
 /**
@@ -496,8 +526,8 @@ async function createOgImage(file) {
       .accent { color: #d7ff64; }
     </style></head><body><div class="card">
       <div class="brand"><span class="mark">S</span> snappy-prerender</div>
-      <div><h1>The page is in<br />the HTML.</h1><p>snappy-prerender writes each route to a static HTML file. Crawlers and link previews read it before the app script runs.</p></div>
-      <div class="foot"><span>snappy-prerender</span><span>© smoldev</span></div>
+      <div><h1>The page is in<br />the HTML.</h1><p>The maintained react-snap alternative for React and Vite SPAs. Each route is static HTML at build time, so crawlers read it before the app script runs.</p></div>
+      <div class="foot"><span>react-snap alternative</span><span>MIT · snappy-prerender</span></div>
     </div></body></html>`);
     await page.screenshot({ path: file, type: 'png' });
   } finally {
@@ -540,6 +570,7 @@ await writeRawFrame('raw-before.html', 'Without snappy-prerender: raw HTML', bef
 await writeRawFrame('raw-after.html', 'With snappy-prerender: raw HTML', afterHtml);
 await fs.copyFile(path.join(repo, 'assets', 'snappy-logo.png'), path.join(site, 'logo.png'));
 await writeReleasesPage();
+await writeDiscoveryFiles(origin);
 
 const social = {
   before: {
@@ -561,7 +592,8 @@ await fs.writeFile(
   path.join(site, 'comparison.json'),
   `${JSON.stringify({ before, after, social, origin }, null, 2)}\n`,
 );
-await fs.copyFile(path.join(here, 'landing', 'index.html'), path.join(site, 'index.html'));
+const landing = await fs.readFile(path.join(here, 'landing', 'index.html'), 'utf8');
+await fs.writeFile(path.join(site, 'index.html'), landing.replaceAll('__DEMO_ORIGIN__', origin));
 
 console.log('Built before, after, playback, raw source, releases, OG card and comparison page.');
 console.log(`Before: h1=${before.h1}, text=${before.textLength}, bytes=${before.htmlBytes}`);

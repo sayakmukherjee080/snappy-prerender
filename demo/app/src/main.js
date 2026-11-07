@@ -10,16 +10,16 @@ let playbackStarted = false;
 
 const pages = {
   '/': {
-    title: 'Home',
+    title: 'SPA prerendering demo',
     description:
-      'A demo app built twice: a client-rendered SPA and the same route prerendered with snappy-prerender.',
+      'See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React and Vite apps.',
     eyebrow: '01 / Home',
     heading: 'This page has two builds.',
-    lede: 'The SPA build renders this page with JavaScript. The prerendered build has the same markup in the HTML file before the app script runs.',
+    lede: 'The SPA build renders this page with JavaScript. The prerendered build has the same markup in the HTML file before the app script runs — static HTML for crawlers and link previews.',
     cards: [
       [
         'HTML source',
-        'The prerendered build includes the heading, paragraphs and links in the document.',
+        'The prerendered build includes the heading, paragraphs and links in the document, so a crawler that does not run JavaScript can read them.',
       ],
       [
         'JavaScript off',
@@ -29,11 +29,12 @@ const pages = {
     ],
   },
   '/pricing': {
-    title: 'Pricing',
-    description: 'The demo pricing page. snappy-prerender is MIT-licensed and free to use.',
+    title: 'Free MIT react-snap alternative',
+    description:
+      'The demo pricing page. snappy-prerender is a free, MIT-licensed react-snap alternative with no plans or paid tiers.',
     eyebrow: '02 / Pricing',
-    heading: 'The package is free.',
-    lede: 'snappy-prerender is MIT-licensed. There are no plans or paid tiers. This route exists so the demo has a second page to prerender.',
+    heading: 'The react-snap alternative is free.',
+    lede: 'snappy-prerender is MIT-licensed. There are no plans, seats or paid tiers. The package is a free react-snap replacement for React and Vite SPAs; this route exists so the demo has a second page to prerender.',
     cards: [
       ['MIT license', 'Use, modify and redistribute the package under the MIT license.'],
       ['Install from npm', 'Add the package to a project and run it against the built output.'],
@@ -44,11 +45,12 @@ const pages = {
     ],
   },
   '/docs': {
-    title: 'Docs',
-    description: 'How the demo is built, prerendered and served.',
+    title: 'How SPA prerendering works',
+    description:
+      'How the demo builds an SPA, prerenders every route to static HTML, and verifies the output.',
     eyebrow: '03 / Docs',
     heading: 'One source, two builds.',
-    lede: 'Vite builds the SPA. The prerendered build starts from that output, then snappy-prerender opens every route in a browser and writes the settled DOM back to disk.',
+    lede: 'Vite builds the SPA. The prerendered build starts from that output, then snappy-prerender opens every route in a browser and writes the settled DOM back to disk as static HTML.',
     cards: [
       ['1. Build', 'Vite emits the app with an empty #root and a module script.'],
       [
@@ -62,8 +64,9 @@ const pages = {
     ],
   },
   '/404': {
-    title: 'Not found',
-    description: 'The requested demo route does not exist.',
+    title: 'Page not found',
+    description:
+      'The requested demo route does not exist. The demo has three pages: home, pricing and docs.',
     eyebrow: '404 / Not found',
     heading: 'This page does not exist.',
     lede: 'The demo has three pages: home, pricing and docs. This URL is not one of them.',
@@ -160,12 +163,17 @@ function setSocialMeta(page, path) {
   setMeta(
     'property',
     'og:image:alt',
-    'snappy-prerender demo: the same page with and without prerendering',
+    'snappy-prerender demo: an SPA before and after prerendering',
   );
   setMeta('name', 'twitter:card', 'summary_large_image');
   setMeta('name', 'twitter:title', title);
   setMeta('name', 'twitter:description', page.description);
   setMeta('name', 'twitter:image', image);
+  setMeta(
+    'name',
+    'twitter:image:alt',
+    'snappy-prerender demo: an SPA before and after prerendering',
+  );
 }
 
 /**

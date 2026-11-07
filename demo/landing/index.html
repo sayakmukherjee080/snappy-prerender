@@ -3,11 +3,66 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>snappy-prerender demo: SPA vs prerendered HTML</title>
+    <title>snappy-prerender demo: the maintained react-snap alternative</title>
     <meta
       name="description"
-      content="A demo app built twice: a client-rendered SPA and the same routes with prerendered HTML. Compare the source, loading sequence and link previews."
+      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React and Vite apps."
     />
+    <meta name="robots" content="index,follow" />
+    <link rel="canonical" href="__DEMO_ORIGIN__/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="snappy-prerender" />
+    <meta property="og:title" content="snappy-prerender demo: react-snap alternative for React and Vite" />
+    <meta
+      property="og:description"
+      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React and Vite apps."
+    />
+    <meta property="og:url" content="__DEMO_ORIGIN__/" />
+    <meta property="og:image" content="__DEMO_ORIGIN__/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="snappy-prerender demo: an SPA before and after prerendering"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="snappy-prerender demo: react-snap alternative" />
+    <meta
+      name="twitter:description"
+      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React and Vite apps."
+    />
+    <meta name="twitter:image" content="__DEMO_ORIGIN__/og-card.png" />
+    <meta name="twitter:image:alt" content="snappy-prerender demo: an SPA before and after prerendering" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "snappy-prerender demo",
+        "description": "Before-and-after demo of snappy-prerender, the maintained react-snap alternative for React and Vite single-page apps.",
+        "url": "__DEMO_ORIGIN__/",
+        "mainEntity": {
+          "@type": "SoftwareApplication",
+          "name": "snappy-prerender",
+          "alternateName": "snappy",
+          "applicationCategory": "DeveloperApplication",
+          "operatingSystem": "Node.js",
+          "description": "MIT-licensed react-snap alternative that prerenders React and Vite SPAs to static HTML at build time with Playwright and hydration checks.",
+          "url": "https://github.com/sayakmukherjee080/snappy-prerender",
+          "sameAs": [
+            "https://www.npmjs.com/package/snappy-prerender",
+            "https://github.com/sayakmukherjee080/snappy-prerender"
+          ],
+          "keywords": "react-snap alternative, react-snap replacement, SPA prerendering, prerender React, prerender Vite, static HTML",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "license": "https://opensource.org/licenses/MIT",
+          "isAccessibleForFree": true
+        }
+      }
+    </script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔎</text></svg>" />
     <style>
       :root {
@@ -347,6 +402,20 @@
       .social-time { display: block; margin-top: 0.5rem; color: var(--muted); font-size: 0.65rem; text-align: right; }
       .social-empty-note { display: block; margin-top: 0.5rem; color: var(--orange); font-family: ui-monospace, monospace; font-size: 0.65rem; }
 
+      .raw-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.75rem; font-size: 0.82rem; }
+      .raw-links a { color: var(--accent); text-decoration: none; }
+      .raw-links a:hover { text-decoration: underline; }
+
+      .seo-section { padding: 1.5rem 0 3rem; border-top: 1px solid var(--line); }
+      .seo-section h2 { max-width: 24ch; margin: 0.25rem 0 0; font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -0.04em; }
+      .seo-section > p { max-width: 72ch; margin: 0.75rem 0 0; color: var(--muted); font-size: 0.95rem; }
+      .seo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem; margin-top: 1.4rem; }
+      .seo-card { padding: 1.1rem; border: 1px solid var(--line); border-radius: 0.9rem; background: var(--panel); }
+      .seo-card h3 { margin: 0 0 0.55rem; font-size: 1.02rem; letter-spacing: -0.02em; }
+      .seo-card p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+      .seo-section a { color: var(--accent); }
+      .seo-section > .seo-footer { margin-top: 1.2rem; }
+
       code { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.88em; }
 
       footer {
@@ -360,7 +429,7 @@
       }
 
       @media (max-width: 900px) {
-        .compare, .social-grid, .raw-grid { grid-template-columns: 1fr; }
+        .compare, .social-grid, .raw-grid, .seo-grid { grid-template-columns: 1fr; }
         .metrics { grid-template-columns: 1fr 1fr; }
         iframe { height: 480px; }
         .raw-frame { height: 300px; }
@@ -398,13 +467,14 @@
 
       <main>
         <section class="hero">
-          <p class="eyebrow">Crawler comparison</p>
-          <h1>One page, two HTML files.</h1>
+          <p class="eyebrow">SPA prerendering demo</p>
+          <h1>One SPA, two HTML files.</h1>
           <p class="lede">
-            The demo app is built twice. The first build is a client-rendered SPA. The second is
-            the same app after snappy-prerender writes each route to HTML. Both panes replay
-            captured frames from those builds. The SPA starts with an empty <code>#root</code>;
-            the prerendered page is readable at t=0 and hydrates later.
+            This is SPA prerendering before and after. The first build is a client-rendered SPA
+            with an empty <code>#root</code>. The second is the same app after snappy-prerender,
+            the maintained react-snap alternative, writes every route to static HTML at build time.
+            Both panes replay captured frames. The SPA fills in over time; the prerendered page is
+            readable at t=0 and hydrates later.
           </p>
 
           <div class="timeline-controls">
@@ -453,8 +523,8 @@
 
         <section class="raw-section" aria-label="Raw crawler HTML">
           <p class="eyebrow">Raw HTML</p>
-          <h2 class="raw-heading">The file each build returns.</h2>
-          <p class="raw-lede">These iframes show the raw HTML served for the home page, before a browser renders anything. The left file is the SPA build; the right file is the same route after prerendering.</p>
+          <h2 class="raw-heading">The HTML a crawler receives.</h2>
+          <p class="raw-lede">These iframes show the raw HTML for the home page before a browser renders anything. The left file is the SPA build with an empty root. The right file is the same route after prerendering, with the content, title and metadata in the document.</p>
           <div class="raw-grid">
             <article class="raw-pane">
               <div class="raw-head"><strong>Without snappy-prerender</strong><a href="/playback/raw-before.html" target="_blank" rel="noreferrer">open raw file ↗</a></div>
@@ -465,6 +535,10 @@
               <iframe class="raw-frame" title="Raw prerendered HTML with page content" src="/playback/raw-after.html" sandbox="allow-same-origin"></iframe>
             </article>
           </div>
+          <p class="raw-links">
+            <a href="/before/">Open the live SPA build ↗</a>
+            <a href="/after/">Open the live prerendered build ↗</a>
+          </p>
         </section>
 
         <section class="metrics" aria-label="Crawler-visible metrics">
@@ -491,7 +565,7 @@
             <div>
               <p class="eyebrow">Link previews</p>
               <h2>The same URL in three apps.</h2>
-              <p>WhatsApp, X and Facebook read the HTML for the title, description and image. The SPA build has no Open Graph tags. The prerendered build does.</p>
+              <p>WhatsApp, X and Facebook read the HTML for the title, description and image. AI crawlers read the same file. The SPA build has no Open Graph tags; the prerendered build does.</p>
             </div>
           </div>
           <div class="social-controls">
@@ -555,12 +629,36 @@
           </div>
         </section>
 
+        <section class="seo-section" aria-label="About snappy-prerender">
+          <p class="eyebrow">Why this matters</p>
+          <h2>Prerender a React SPA without SSR.</h2>
+          <p>A client-rendered SPA ships an empty root and a JavaScript bundle. snappy-prerender runs after the build, opens every route in a real browser, and writes the settled DOM to static HTML. That is SPA prerendering without a server renderer, a framework migration or a runtime service.</p>
+          <div class="seo-grid">
+            <article class="seo-card">
+              <h3>React, Vite and Create React App</h3>
+              <p>Use the Vite plugin, the CLI or the init wizard. The same build works for React 16.8 through 19, Vite 6/7/8, Create React App and any static output directory.</p>
+            </article>
+            <article class="seo-card">
+              <h3>What AI crawlers see</h3>
+              <p>GPTBot, ClaudeBot and PerplexityBot fetch HTML without waiting for a browser render. The prerendered page gives them the content, title, description, canonical and Open Graph tags in the first response.</p>
+            </article>
+            <article class="seo-card">
+              <h3>A maintained react-snap replacement</h3>
+              <p>react-snap's last npm release was 2018 and its React 18 compatibility issue has been open since 2023. snappy-prerender keeps the build-time browser approach with Playwright, per-route hydration verification and a built-in head layer.</p>
+            </article>
+            <article class="seo-card">
+              <h3>React SEO without SSR</h3>
+              <p>Prerendered HTML gives Google and AI crawlers a readable page on the first request. The client bundle still hydrates normally, so the app keeps its router and interactivity.</p>
+            </article>
+          </div>
+          <p class="seo-footer">Read the <a href="https://github.com/sayakmukherjee080/snappy-prerender#readme">README</a>, the <a href="https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/react-snap-migration.md">react-snap migration guide</a>, or install with <code>npm install --save-dev snappy-prerender</code>.</p>
+        </section>
 
       </main>
 
       <footer>
-        <span>snappy-prerender</span>
-        <span>© smoldev</span>
+        <span>snappy-prerender — the maintained react-snap alternative</span>
+        <span>MIT · © smoldev</span>
       </footer>
     </div>
 
