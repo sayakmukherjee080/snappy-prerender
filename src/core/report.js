@@ -64,6 +64,7 @@ export function buildReport(report, config = null) {
       : null,
     audit,
     sitemap: report.sitemap,
+    llmsTxt: report.llmsTxt ?? null,
     preloadManifest: report.preloadManifest,
     truncated: report.truncated,
     notFoundRoutes: report.notFoundRoutes,

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { writePreloadManifest, writeSitemap } from './artifacts.js';
+import { writeLlmsTxt, writePreloadManifest, writeSitemap } from './artifacts.js';
 import { auditRun } from './audit/index.js';
 import { launchBrowser } from './browser.js';
 import { resolveFixedTime } from './clock.js';
@@ -127,6 +127,7 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
     audit: null,
     preloadManifest: null,
     sitemap: null,
+    llmsTxt: null,
     pruned: [],
     truncated: null,
     ok: false,
@@ -286,6 +287,15 @@ export async function prerender(userOptions = {}, { log: injectedLog } = {}) {
       } catch (error) {
         report.errors.push({ route: null, message: `sitemap write failed: ${error.message}` });
         log.error(`sitemap write failed: ${error.message}`);
+      }
+    }
+
+    if (config.llmsTxt.enabled) {
+      try {
+        report.llmsTxt = await writeLlmsTxt({ outputDir, config, log, report });
+      } catch (error) {
+        report.errors.push({ route: null, message: `llms.txt write failed: ${error.message}` });
+        log.error(`llms.txt write failed: ${error.message}`);
       }
     }
 

@@ -461,10 +461,12 @@ describe('resolveConfig 2.7 options', () => {
       saveAs: 'png',
       imageSitemap: true,
       sitemap: false,
+      llmsTxt: true,
       traceOnError: true,
       dryRun: true,
     });
     const warnings = config.warnings.join('\n');
+    assert.match(warnings, /llmsTxt is skipped/);
     assert.match(warnings, /failOnAuditError has no effect/);
     assert.match(warnings, /auditIgnoreLinks has no effect/);
     assert.match(warnings, /framework has no effect/);

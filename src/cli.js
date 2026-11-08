@@ -137,6 +137,9 @@ Options:
       --preload-images        Add preload hints for images on the page
       --preload-manifest      Write preload-manifest.json with Link header hints
       --sitemap               Write sitemap.xml from the rendered routes (needs metadata.siteUrl)
+      --llms-txt              Write llms.txt with the rendered routes
+      --llms-txt-file <file>  llms.txt output path (default: llms.txt)
+      --llms-txt-max-routes <n>  Largest number of routes listed in llms.txt
       --ignore-for-preload <names>  File names excluded from the manifest, comma separated
       --cache-ajax-requests   Expose captured JSON responses as window.snapStore
       --max-cached-bytes <n>  Largest JSON response cached per request (default: 5242880)
@@ -295,6 +298,9 @@ async function main() {
       'preload-images': { type: 'boolean' },
       'preload-manifest': { type: 'boolean' },
       sitemap: { type: 'boolean' },
+      'llms-txt': { type: 'boolean' },
+      'llms-txt-file': { type: 'string' },
+      'llms-txt-max-routes': { type: 'string' },
       'ignore-for-preload': { type: 'string', multiple: true },
       'cache-ajax-requests': { type: 'boolean' },
       'remove-scripts': { type: 'boolean' },
@@ -373,6 +379,13 @@ async function main() {
       typeof base === 'object' && base !== null && !Array.isArray(base)
         ? { ...base, ...cli.vendorAssets }
         : cli.vendorAssets;
+  }
+  if (cli.llmsTxt) {
+    const base = fileConfig.llmsTxt;
+    options.llmsTxt =
+      typeof base === 'object' && base !== null && !Array.isArray(base)
+        ? { ...base, ...cli.llmsTxt }
+        : cli.llmsTxt;
   }
   if (!options.sourceDir) options.sourceDir = 'dist';
 

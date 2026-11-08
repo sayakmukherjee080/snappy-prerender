@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { buildLlmsTxt } from './llms-txt.js';
 import { writeFileIfChanged } from './output.js';
 import { buildPreloadManifest } from './preload-manifest.js';
 import { toPublicPath } from './routes.js';
@@ -111,4 +112,50 @@ export async function writeSitemap({ outputDir, config, log, report }) {
     report.files.push({ route: null, ...written });
     log.info('Added the sitemap location to robots.txt');
   }
+}
+
+/**
+ * Writes the optional llms.txt route index from the pages the run produced. The file
+ * is rebuilt on every run, including all-cached incremental runs, so it never needs a
+ * separate cache entry.
+ */
+export async function writeLlmsTxt({ outputDir, config, log, report }) {
+  if (config.saveAs !== 'html') {
+    log.warn(`llmsTxt is skipped when saveAs writes ${config.saveAs} files`);
+    return null;
+  }
+  const llms = buildLlmsTxt({ files: report.files, config });
+  if (!llms) {
+    log.warn('llmsTxt is skipped: no pages were written');
+    return null;
+  }
+  const file = config.llmsTxt.file;
+  if (config.dryRun) {
+    report.files.push({
+      route: null,
+      file,
+      status: 'dry-run',
+      bytes: Buffer.byteLength(llms.contents),
+    });
+    log.info(`Dry run: would write ${file} listing ${llms.routes} route(s)`);
+    return {
+      file,
+      routes: llms.routes,
+      sections: llms.sections,
+      urls: llms.urls,
+      status: 'dry-run',
+    };
+  }
+  const written = await writeFileIfChanged({ dir: outputDir, file, contents: llms.contents });
+  report.files.push({ route: null, ...written });
+  log.info(
+    `${written.status === 'unchanged' ? 'Unchanged' : 'Wrote'} ${file} listing ${llms.routes} route(s)`,
+  );
+  return {
+    file,
+    routes: llms.routes,
+    sections: llms.sections,
+    urls: llms.urls,
+    status: written.status,
+  };
 }

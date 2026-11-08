@@ -104,6 +104,9 @@ export function addConfigWarnings(config, userOptions, defaults) {
   if (config.sitemap && config.saveAs !== 'html') {
     warn(`sitemap has no effect when saveAs is '${config.saveAs}'`);
   }
+  if (config.llmsTxt.enabled && config.saveAs !== 'html') {
+    warn(`llmsTxt is skipped when saveAs is '${config.saveAs}'`);
+  }
   if (config.drift && config.saveAs !== 'html') {
     warn(`drift is skipped when saveAs is '${config.saveAs}'`);
   }

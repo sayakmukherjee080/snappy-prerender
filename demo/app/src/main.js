@@ -1,4 +1,5 @@
 import './styles.css';
+import { FEATURES } from './features.js';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const PUBLIC_ORIGIN = __DEMO_ORIGIN__;
@@ -226,6 +227,23 @@ function renderStage(path, stage) {
             )
             .join('')}
         </div>
+        ${
+          path === '/404'
+            ? ''
+            : `<section class="feature-section">
+          <p class="eyebrow">Features</p>
+          <h2>What snappy-prerender does.</h2>
+          <div class="cards">
+            ${FEATURES.map(
+              ([title, copy]) => `
+                <article class="card">
+                  <h2>${title}</h2>
+                  <p>${copy}</p>
+                </article>`,
+            ).join('')}
+          </div>
+        </section>`
+        }
         <section class="proof">
           <p class="eyebrow">Current build</p>
           <h2>${VARIANT} at ${window.location.pathname}</h2>

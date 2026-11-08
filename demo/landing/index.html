@@ -46,13 +46,13 @@
           "alternateName": "snappy",
           "applicationCategory": "DeveloperApplication",
           "operatingSystem": "Node.js",
-          "description": "MIT-licensed react-snap alternative that prerenders React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs to static HTML at build time with Playwright and hydration checks.",
+          "description": "MIT-licensed react-snap alternative that prerenders React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs to static HTML at build time with Playwright, hydration checks, per-route metadata and sitemap output.",
           "url": "https://github.com/sayakmukherjee080/snappy-prerender",
           "sameAs": [
             "https://www.npmjs.com/package/snappy-prerender",
             "https://github.com/sayakmukherjee080/snappy-prerender"
           ],
-          "keywords": "react-snap alternative, react-snap replacement, SPA prerendering, prerender React, prerender Vue, prerender Svelte, prerender Preact, prerender Angular, prerender Solid, prerender Lit, prerender Ember, static HTML",
+          "keywords": "react-snap alternative, react-snap replacement, SPA prerendering, prerender React, prerender Vue, prerender Svelte, prerender Preact, prerender Angular, prerender Solid, prerender Lit, prerender Ember, static HTML, hydration verification, per-route metadata, sitemap, critical CSS, preload hints, locales, hreflang, AI crawler",
           "offers": {
             "@type": "Offer",
             "price": "0",
@@ -63,32 +63,50 @@
         }
       }
     </script>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔎</text></svg>" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2212%22 fill=%22%23000%22/><text x=%2250%22 y=%2262%22 font-family=%22monospace%22 font-size=%2238%22 font-weight=%22700%22 fill=%22%23fff%22 text-anchor=%22middle%22>%3E_</text></svg>" />
+    <script>
+      try {
+        const savedTheme = localStorage.getItem('snappy-demo-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+          document.documentElement.dataset.theme = savedTheme;
+        }
+      } catch {}
+    </script>
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0d1210;
-        --panel: #151c19;
-        --panel-2: #1b2521;
-        --text: #f2f0e8;
-        --muted: #a4b0a9;
-        --line: #2c3a34;
-        --accent: #d7ff64;
-        --accent-ink: #11170f;
-        --orange: #ff9f7a;
+        --bg: #000000;
+        --panel: #0a0a0a;
+        --panel-2: #121212;
+        --text: #ffffff;
+        --muted: #a3a3a3;
+        --line: #2a2a2a;
+        --accent: #ffffff;
+        --accent-ink: #000000;
+        --orange: #bdbdbd;
+      }
+
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #ffffff;
+        --panel: #f7f7f7;
+        --panel-2: #ededed;
+        --text: #000000;
+        --muted: #525252;
+        --line: #d4d4d4;
+        --accent: #000000;
+        --accent-ink: #ffffff;
+        --orange: #666666;
       }
 
       * { box-sizing: border-box; }
 
       body {
         margin: 0;
-        background:
-          radial-gradient(circle at 12% 0%, rgba(215, 255, 100, 0.1), transparent 34rem),
-          radial-gradient(circle at 92% 18%, rgba(94, 234, 212, 0.06), transparent 28rem),
-          var(--bg);
+        background: var(--bg);
         color: var(--text);
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-        line-height: 1.55;
+        font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+        line-height: 1.6;
       }
 
       a { color: inherit; }
@@ -127,18 +145,21 @@
       }
 
       .header-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-      .header-actions a {
+      .header-actions a, .header-actions button {
         display: inline-flex;
         align-items: center;
         gap: 0.4rem;
         padding: 0.45rem 0.7rem;
         border: 1px solid var(--line);
         border-radius: 999px;
+        background: transparent;
         color: var(--muted);
+        cursor: pointer;
+        font: inherit;
         font-size: 0.82rem;
         text-decoration: none;
       }
-      .header-actions a:hover { border-color: var(--accent); color: var(--text); }
+      .header-actions a:hover, .header-actions button:hover { border-color: var(--accent); color: var(--text); }
       .header-actions svg { width: 0.95rem; height: 0.95rem; fill: currentColor; }
       .npm-mark, .ph-mark {
         display: grid;
@@ -150,10 +171,10 @@
         font-size: 0.58rem;
         font-weight: 800;
       }
-      .npm-mark { padding: 0 0.15rem; background: #cb3837; color: white; }
-      .ph-mark { background: #da552f; color: white; }
+      .npm-mark { padding: 0 0.15rem; background: var(--panel-2); color: var(--text); }
+      .ph-mark { background: var(--panel-2); color: var(--text); }
 
-      .hero { padding: clamp(3rem, 7vw, 6rem) 0 2.5rem; }
+      .hero { padding: clamp(1.5rem, 3vw, 2.5rem) 0 2rem; }
       .eyebrow {
         margin: 0 0 0.9rem;
         color: var(--accent);
@@ -164,7 +185,7 @@
       }
 
       h1 {
-        max-width: 18ch;
+        max-width: none;
         margin: 0;
         font-size: clamp(2.7rem, 7vw, 5.8rem);
         font-weight: 650;
@@ -172,8 +193,16 @@
         line-height: 0.95;
       }
 
+      .hero-tagline {
+        margin: 0.8rem 0 0;
+        color: var(--accent);
+        font-size: clamp(1.1rem, 1.8vw, 1.45rem);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
       .lede {
-        max-width: 68ch;
+        max-width: none;
         margin: 1.5rem 0 0;
         color: var(--muted);
         font-size: clamp(1rem, 2vw, 1.2rem);
@@ -284,16 +313,21 @@
         color: var(--muted);
         font-size: 0.64rem;
       }
-      .state-chip.is-empty { border-color: rgba(255, 159, 122, 0.4); background: rgba(255, 159, 122, 0.1); color: var(--orange); }
-      .state-chip.is-partial { border-color: rgba(215, 255, 100, 0.3); background: rgba(215, 255, 100, 0.08); color: var(--accent); }
-      .state-chip.is-ready { border-color: rgba(94, 234, 212, 0.35); background: rgba(94, 234, 212, 0.08); color: #8ef0dc; }
+      .state-chip.is-empty { border-color: var(--line); background: var(--panel-2); color: var(--orange); }
+      .state-chip.is-partial { border-color: var(--line); background: var(--panel-2); color: var(--accent); }
+      .state-chip.is-ready { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 
       iframe {
         display: block;
         width: 100%;
         height: 590px;
         border: 0;
-        background: #0d1210;
+        background: var(--bg);
+      }
+
+      :root[data-theme="light"] iframe,
+      :root[data-theme="light"] .social-image {
+        filter: invert(1);
       }
 
       .playback-frame { pointer-events: none; }
@@ -327,7 +361,7 @@
       .raw-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--line); }
       .raw-head strong { font-size: 0.9rem; }
       .raw-head a { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.66rem; text-decoration: none; }
-      .raw-frame { display: block; width: 100%; height: 340px; border: 0; background: #0b100e; }
+      .raw-frame { display: block; width: 100%; height: 340px; border: 0; background: var(--bg); }
       .metrics {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -383,18 +417,16 @@
       .social-app-head { display: flex; align-items: center; gap: 0.55rem; padding: 0.75rem 0.85rem; border-bottom: 1px solid var(--line); }
       .social-app-head strong { font-size: 0.85rem; }
       .social-app-head small { margin-left: auto; color: var(--muted); font-size: 0.7rem; }
-      .app-icon { display: grid; width: 1.55rem; height: 1.55rem; place-items: center; border-radius: 50%; background: var(--panel-2); color: var(--text); font-size: 0.8rem; font-weight: 800; }
+      .app-icon { display: grid; width: 1.55rem; height: 1.55rem; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--panel-2); color: var(--text); font-size: 0.8rem; font-weight: 800; }
       .app-icon svg { width: 1rem; height: 1rem; fill: currentColor; }
-      .app-icon--wa { background: #1f9d63; color: white; }
-      .app-icon--x { background: #f2f0e8; color: #0d1210; }
-      .app-icon--fb { background: #1877f2; color: white; }
+      .app-icon--wa, .app-icon--x, .app-icon--fb { background: var(--panel-2); color: var(--text); }
 
       .social-body { padding: 0.85rem; }
       .social-body > p { margin: 0 0 0.65rem; font-size: 0.82rem; color: var(--text); }
       .link-card { overflow: hidden; border: 1px solid var(--line); border-radius: 0.7rem; background: var(--panel-2); }
       .social-image, .social-image-empty { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; }
       .social-image[hidden], .social-image-empty[hidden] { display: none; }
-      .social-image-empty { display: grid; place-items: center; background: repeating-linear-gradient(135deg, #202b25 0 8px, #1a231e 8px 16px); color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.68rem; }
+      .social-image-empty { display: grid; place-items: center; border: 1px dashed var(--line); background: var(--panel-2); color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.68rem; }
       .link-copy { padding: 0.6rem 0.7rem 0.7rem; }
       .link-site { display: block; margin-bottom: 0.25rem; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.62rem; letter-spacing: 0.03em; text-transform: uppercase; }
       .link-title { display: block; font-size: 0.82rem; line-height: 1.3; }
@@ -447,7 +479,7 @@
 
       @media (max-width: 480px) {
         .metrics { grid-template-columns: 1fr; }
-        .header-actions { display: none; }
+        .header-actions a { display: none; }
         .stage-labels { grid-template-columns: 1fr 1fr; }
       }
     </style>
@@ -472,37 +504,82 @@
             <span class="ph-mark" aria-hidden="true">P</span>
             Product Hunt
           </a>
+          <button type="button" id="theme-toggle" aria-label="Switch to light theme">dark</button>
         </div>
       </header>
 
       <main>
         <section class="hero">
-          <p class="eyebrow">SPA prerendering demo</p>
-          <h1>One SPA, two HTML files.</h1>
-          <p class="lede">
-            This is SPA prerendering before and after. The first build is a client-rendered SPA
-            with an empty <code>#root</code>. The second is the same app after snappy-prerender has
-            written every route to static HTML at build time. snappy-prerender is the maintained
-            react-snap alternative. The same process works for React, Vue, Svelte, Preact, Angular,
-            Solid, Lit, Ember and vanilla JavaScript. Both panes replay captured frames. The SPA
-            fills in over time; the prerendered page is readable at t=0 and hydrates later.
-          </p>
+          <h1>snappy-prerender</h1>
+          <h3 class="hero-tagline">the framework-agnostic react-snap alternative</h3>
+          <p class="lede">snappy-prerender is the maintained, MIT-licensed react-snap alternative for existing single-page apps built with React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember or vanilla JavaScript. It prerenders your built SPA to static HTML at build time, verifies hydration, and produces output that Google and AI crawlers can read. No rewrite or runtime service is needed.</p>
+        </section>
 
-          <div class="timeline-controls">
-            <button type="button" class="play-button" id="play" aria-pressed="false">
-              <span class="play-icon" aria-hidden="true">▶</span>
-              <span id="play-label">Play loading sequence</span>
-            </button>
-            <input id="timeline" type="range" min="0" max="3" step="1" value="0" aria-label="Loading stage" />
-            <span class="mode-note" id="mode-note">t=0 ms · empty #root / HTML content</span>
-          </div>
-          <div class="stage-labels" id="stage-labels" aria-hidden="true">
-            <span data-stage-label="0" aria-current="true">0 ms · empty #root</span>
-            <span data-stage-label="1">500 ms · header</span>
-            <span data-stage-label="2">1,100 ms · hero</span>
-            <span data-stage-label="3">1,800 ms · full page</span>
+        <section class="seo-section" aria-label="snappy-prerender features">
+          <p class="eyebrow">Features</p>
+          <h2>What snappy-prerender does.</h2>
+          <div class="seo-grid">
+            <article class="seo-card">
+              <h3>Frameworks</h3>
+              <p>React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript, including React 16.8 through 19, Vite 6/7/8 and Create React App; any app that builds to a static directory works.</p>
+            </article>
+            <article class="seo-card">
+              <h3>SEO and discovery</h3>
+              <p>Per-route title, description, robots and canonical tags, Open Graph, Twitter cards, JSON-LD, a built-in Head layer that replaces React Helmet, client-side head reconciliation, sitemap and image sitemap output, sitemap lastmod, robots directives and AI-crawler-readable HTML.</p>
+            </article>
+            <article class="seo-card">
+              <h3>Prerendering</h3>
+              <p>Static HTML per route, directory or flat output, 404.html, route includes/excludes, crawl depth and route caps, route priority, route files, sitemap-seeded routes, per-route overrides, ready flag/selector/network settle, retries, traces and screenshots.</p>
+            </article>
+            <article class="seo-card">
+              <h3>Hydration</h3>
+              <p>Per-route hydration verification, framework detection, strict/re-render/skip policies, changed-only verification, verification-context reuse and per-route failure gates.</p>
+            </article>
+            <article class="seo-card">
+              <h3>Rendering</h3>
+              <p>Playwright with installed Chrome or Edge, hash-verified Chrome for Testing fallback, third-party blocking with host allowlists, authenticated storage state, custom viewport/user agent/HTTPS/launch arguments, scroll-to-load and animation freezing.</p>
+            </article>
+            <article class="seo-card">
+              <h3>Incremental builds</h3>
+              <p>Persistent route cache, API and vendor-asset revalidation, trust/maxAge/exclude modes, per-route opt-out, cache locking with stale-lock recovery and cache pruning for HTML, generated scripts and vendored assets.</p>
+            </article>
+            <article class="seo-card">
+              <h3>Locales</h3>
+              <p>Path and single-locale modes, hreflang and x-default, canonical and og:locale, per-locale routes, cookies/localStorage/storage state, and cookie/localStorage SEO-locale seeding.</p>
+            </article>
+            <article class="seo-card">
+              <h3>Output optimisation</h3>
+              <p>Inline or critical CSS, HTML/CSS minification, preconnect hints, font/image/module preload hints, preload manifest, strict/hash CSP, async and external scripts, tag/attribute surgery, build-origin metadata stripping and stale-route pruning.</p>
+            </article>
+            <article class="seo-card">
+              <h3>Assets and state</h3>
+              <p>Vendor localization for CSS, fonts, images and scripts with content hashing, SRI checks, byte/type limits and redirect/private-host rejection; CSS-in-JS and constructable stylesheet capture; form-state capture; Ajax replay through window.snapStore; self-contained asset gate.</p>
+            </article>
+            <article class="seo-card">
+              <h3>Auditing and operations</h3>
+              <p>Broken-link, SEO, sitemap and CSP audit; duplicate-content/title detection; empty-page and failed-request gates; content drift baselines; deterministic time/timezone/random seed; JSON reports; dry runs, destinations, base paths, serveCmd and bounded concurrency.</p>
+            </article>
+            <article class="seo-card">
+              <h3>Interfaces</h3>
+              <p>Vite plugin, CLI, interactive init wizard, react-snap config migration and programmatic API.</p>
+            </article>
           </div>
         </section>
+
+        <div class="timeline-controls">
+          <button type="button" class="play-button" id="play" aria-pressed="false">
+            <span class="play-icon" aria-hidden="true">▶</span>
+            <span id="play-label">Play loading sequence</span>
+          </button>
+          <input id="timeline" type="range" min="0" max="3" step="1" value="0" aria-label="Loading stage" />
+          <span class="mode-note" id="mode-note">t=0 ms · empty #root / HTML content</span>
+        </div>
+        <div class="stage-labels" id="stage-labels" aria-hidden="true">
+          <span data-stage-label="0" aria-current="true">0 ms · empty #root</span>
+          <span data-stage-label="1">500 ms · header</span>
+          <span data-stage-label="2">1,100 ms · hero</span>
+          <span data-stage-label="3">1,800 ms · full page</span>
+        </div>
 
         <section class="compare" aria-label="Captured SPA and prerendered loading frames">
           <article class="pane">
@@ -640,6 +717,8 @@
           </div>
         </section>
 
+        
+
         <section class="seo-section" aria-label="About snappy-prerender">
           <p class="eyebrow">Why this matters</p>
           <h2>Prerender a React SPA without SSR, or any other SPA.</h2>
@@ -663,27 +742,35 @@
             </article>
           </div>
           <h3 class="framework-heading">Validated frameworks and versions</h3>
-          <p class="framework-note">Validated on 2026-11-06 with snappy-prerender 2.11.1. The testcase matrix builds the same 254-route site with every implementation.</p>
+          <p class="framework-note">Validated on 2026-11-07 with snappy-prerender 2.11.4. The matrix builds the same 255-route site (254 public routes plus /404) with every implementation.</p>
           <div class="framework-table-wrap">
             <table class="framework-table">
-              <caption>Acceptance-run versions and remarks.</caption>
+              <caption>Acceptance-run versions and validation tiers.</caption>
               <thead>
-                <tr><th>Framework</th><th>Version</th><th>Validation</th><th>Remarks</th></tr>
+                <tr><th>Framework</th><th>Version</th><th>Validation</th></tr>
               </thead>
               <tbody>
-                <tr><td>React</td><td>19.2.0 + Vite 6.0.0</td><td>Hydration validated</td><td>204 routes hydrated; 51 live API routes re-rendered and allowed.</td></tr>
-                <tr><td>React</td><td>16.8.0 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped.</td></tr>
-                <tr><td>Vue</td><td>3.0.0 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped.</td></tr>
-                <tr><td>Svelte</td><td>3.29.0 + Rollup</td><td>Prerender validated</td><td>Historical host; hydration skipped; explicit <code>framework: 'svelte'</code>.</td></tr>
-                <tr><td>Preact</td><td>10.5.4 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped.</td></tr>
-                <tr><td>Angular</td><td>10.1.6 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped.</td></tr>
-                <tr><td>Solid</td><td>0.20.3 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped; explicit <code>framework: 'solid'</code>.</td></tr>
-                <tr><td>Lit</td><td>lit-html 1.3.0 + lit-element 2.4.0 + Vite 2</td><td>Prerender validated</td><td>Historical host; hydration skipped; explicit <code>framework: 'lit'</code>.</td></tr>
-                <tr><td>Ember</td><td>3.22.0 + Ember CLI</td><td>Prerender validated</td><td>Historical host; hydration skipped; development-mode build.</td></tr>
+                <tr><td>React</td><td>19.2.0</td><td>hydrated</td></tr>
+                <tr><td>Vue</td><td>3.5.44</td><td>boot verified / re-render allowed</td></tr>
+                <tr><td>Svelte</td><td>5.57.3</td><td>prerender-only</td></tr>
+                <tr><td>Preact</td><td>11.1.1</td><td>boot verified / re-render allowed</td></tr>
+                <tr><td>Angular</td><td>22.2.4</td><td>prerender-only</td></tr>
+                <tr><td>Solid</td><td>1.9.18</td><td>prerender-only</td></tr>
+                <tr><td>Lit</td><td>3.3.3</td><td>prerender-only</td></tr>
+                <tr><td>Ember</td><td>7.3.0</td><td>prerender-only</td></tr>
+                <tr><td>Vanilla</td><td>n/a</td><td>prerender-only</td></tr>
+                <tr><td>React</td><td>16.8.0</td><td>prerender-only</td></tr>
+                <tr><td>Vue</td><td>3.0.0</td><td>prerender-only</td></tr>
+                <tr><td>Preact</td><td>10.5.4</td><td>prerender-only</td></tr>
+                <tr><td>Svelte</td><td>3.29.0</td><td>prerender-only</td></tr>
+                <tr><td>Angular</td><td>10.1.6</td><td>prerender-only</td></tr>
+                <tr><td>Ember</td><td>3.22.0</td><td>prerender-only</td></tr>
+                <tr><td>Lit</td><td>1.3.0</td><td>prerender-only</td></tr>
+                <tr><td>Solid</td><td>0.20.3</td><td>prerender-only</td></tr>
+                <tr><td>React + Vite</td><td>19.2.0 + 6.0.0</td><td>hydrated</td></tr>
               </tbody>
             </table>
           </div>
-          <p class="framework-note">The matrix also builds React 19.2.0, Vue 3.5.44, Svelte 5.57.3, Preact 11.1.1, Angular 22.2.4, Solid 1.9.18, Lit 3.3.3, Ember 7.3.0 and vanilla JavaScript.</p>
           <p class="seo-footer">Read the <a href="https://github.com/sayakmukherjee080/snappy-prerender#readme">README</a>, the <a href="https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/react-snap-migration.md">react-snap migration guide</a>, or install with <code>npm install --save-dev snappy-prerender</code>.</p>
         </section>
 
@@ -696,6 +783,20 @@
     </div>
 
     <script>
+      const themeToggle = document.getElementById('theme-toggle');
+      const savedTheme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+      themeToggle.textContent = savedTheme;
+      themeToggle.setAttribute('aria-label', `Switch to ${savedTheme === 'dark' ? 'light' : 'dark'} theme`);
+      themeToggle.addEventListener('click', () => {
+        const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = next;
+        try {
+          localStorage.setItem('snappy-demo-theme', next);
+        } catch {}
+        themeToggle.textContent = next;
+        themeToggle.setAttribute('aria-label', `Switch to ${next === 'dark' ? 'light' : 'dark'} theme`);
+      });
+
       const beforeFrame = document.getElementById('before-frame');
       const afterFrame = document.getElementById('after-frame');
       const beforeTime = document.getElementById('before-time');
@@ -711,6 +812,7 @@
       let stages = [
         {
           time: 0,
+          afterTime: 0,
           before: '/playback/before-0.html',
           after: '/playback/after-0.html',
           beforeState: 'empty #root',
@@ -718,6 +820,7 @@
         },
         {
           time: 500,
+          afterTime: 0,
           before: '/playback/before-1.html',
           after: '/playback/after-0.html',
           beforeState: 'header rendered',
@@ -725,6 +828,7 @@
         },
         {
           time: 1100,
+          afterTime: 1100,
           before: '/playback/before-2.html',
           after: '/playback/after-1.html',
           beforeState: 'hero rendered',
@@ -732,6 +836,7 @@
         },
         {
           time: 1800,
+          afterTime: 1100,
           before: '/playback/before-3.html',
           after: '/playback/after-1.html',
           beforeState: 'full content',
@@ -756,8 +861,9 @@
         else beforeFrame.src = stage.before;
         if (stage.afterHtml) afterFrame.srcdoc = stage.afterHtml;
         else afterFrame.src = stage.after;
+        const afterStageTime = stage.afterTime ?? stage.time;
         beforeTime.textContent = `t=${stage.time.toLocaleString()} ms`;
-        afterTime.textContent = `t=${stage.time.toLocaleString()} ms`;
+        afterTime.textContent = `t=${afterStageTime.toLocaleString()} ms`;
         beforeState.textContent = stage.beforeState;
         afterState.textContent = stage.afterState;
         beforeState.className = `state-chip ${
@@ -766,7 +872,9 @@
         afterState.className = 'state-chip is-ready';
         modeNote.textContent = `t=${stage.time.toLocaleString()} ms · ${
           stage.beforeState
-        } / ${stage.afterState}`;
+        } / ${stage.afterState}${
+          afterStageTime === stage.time ? '' : ` at ${afterStageTime.toLocaleString()} ms`
+        }`;
         timeline.value = String(index);
         for (const label of stageLabels) {
           const active = Number(label.dataset.stageLabel) === index;

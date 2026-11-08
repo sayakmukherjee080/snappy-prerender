@@ -114,6 +114,7 @@ is skipped in `--dry-run`.
   ],
   "audit": { "errors": [], "warnings": [], "linksChecked": 0 },
   "sitemap": null,
+  "llmsTxt": null,
   "preloadManifest": null,
   "truncated": null,
   "notFoundRoutes": [],
@@ -191,7 +192,8 @@ that fails `failOnDrift` keeps the previous baseline so the gate remains repeata
 Canonical URLs are still reduced to origin and path when the JSON report is written.
 
 `report.sitemap.lastmod` counts entries that received a `<lastmod>` when
-`sitemapLastmod: true`.
+`sitemapLastmod: true`. `report.llmsTxt` records the written file, route count, sections
+and listed URLs when `llmsTxt` is enabled.
 
 ## Audit rules
 

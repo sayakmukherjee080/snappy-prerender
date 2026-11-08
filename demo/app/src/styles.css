@@ -1,13 +1,25 @@
 :root {
   color-scheme: dark;
-  --bg: #0d1210;
-  --panel: #151c19;
-  --panel-2: #1b2521;
-  --text: #f2f0e8;
-  --muted: #a4b0a9;
-  --line: #2c3a34;
-  --accent: #d7ff64;
-  --accent-ink: #11170f;
+  --bg: #000000;
+  --panel: #0a0a0a;
+  --panel-2: #121212;
+  --text: #ffffff;
+  --muted: #a3a3a3;
+  --line: #2a2a2a;
+  --accent: #ffffff;
+  --accent-ink: #000000;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --panel: #f7f7f7;
+  --panel-2: #ededed;
+  --text: #000000;
+  --muted: #525252;
+  --line: #d4d4d4;
+  --accent: #000000;
+  --accent-ink: #ffffff;
 }
 
 * {
@@ -21,11 +33,11 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at 15% 0%, rgba(215, 255, 100, 0.09), transparent 34rem),
-    radial-gradient(circle at 90% 20%, rgba(94, 234, 212, 0.06), transparent 28rem), var(--bg);
+  background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.55;
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas,
+    monospace;
+  line-height: 1.6;
 }
 
 a {
@@ -150,7 +162,7 @@ h1 {
   padding: 1.3rem;
   border: 1px solid var(--line);
   border-radius: 1rem;
-  background: linear-gradient(160deg, var(--panel-2), var(--panel));
+  background: var(--panel);
 }
 
 .card h2 {
@@ -165,12 +177,25 @@ h1 {
   font-size: 0.92rem;
 }
 
+.feature-section {
+  margin-top: 1rem;
+}
+
+.feature-section h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.15rem;
+}
+
+.feature-section .cards {
+  margin-top: 1.2rem;
+}
+
 .proof {
   margin-top: 1rem;
   padding: 1.5rem;
-  border: 1px solid rgba(215, 255, 100, 0.28);
+  border: 1px solid var(--line);
   border-radius: 1rem;
-  background: rgba(215, 255, 100, 0.045);
+  background: var(--panel);
 }
 
 .proof h2 {

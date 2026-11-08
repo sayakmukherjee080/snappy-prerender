@@ -6,6 +6,7 @@ import { build } from 'vite';
 import { launchBrowser } from '../src/core/browser.js';
 import { resolveConfig } from '../src/core/config.js';
 import { startStaticServer } from '../src/core/server.js';
+import { FEATURES } from './app/src/features.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..');
@@ -282,10 +283,19 @@ async function writeReleasesPage() {
     <meta name="twitter:image" content="${origin}/og-card.png" />
     <meta name="twitter:image:alt" content="snappy-prerender releases" />
     <link rel="icon" href="/logo.png" />
+    <script>
+      try {
+        const savedTheme = localStorage.getItem('snappy-demo-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+          document.documentElement.dataset.theme = savedTheme;
+        }
+      } catch {}
+    </script>
     <style>
-      :root { color-scheme: dark; --bg:#0d1210; --panel:#151c19; --panel-2:#1b2521; --text:#f2f0e8; --muted:#a4b0a9; --line:#2c3a34; --accent:#d7ff64; --accent-ink:#11170f; }
+      :root { color-scheme: dark; --bg:#000000; --panel:#0a0a0a; --panel-2:#121212; --text:#ffffff; --muted:#a3a3a3; --line:#2a2a2a; --accent:#ffffff; --accent-ink:#000000; --body:#d4d4d4; }
+      :root[data-theme="light"] { color-scheme: light; --bg:#ffffff; --panel:#f7f7f7; --panel-2:#ededed; --text:#000000; --muted:#525252; --line:#d4d4d4; --accent:#000000; --accent-ink:#ffffff; --body:#333333; }
       * { box-sizing:border-box; }
-      body { margin:0; background:radial-gradient(circle at 12% 0%,rgba(215,255,100,.1),transparent 34rem),radial-gradient(circle at 92% 18%,rgba(94,234,212,.06),transparent 28rem),var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.55; }
+      body { margin:0; background:var(--bg); color:var(--text); font-family:ui-monospace,"SFMono-Regular","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace; line-height:1.6; }
       a { color:inherit; }
       .page { width:min(1180px,calc(100% - 2rem)); margin:0 auto; }
       header { display:flex; align-items:center; justify-content:space-between; gap:1.5rem; padding:1.25rem 0; border-bottom:1px solid var(--line); }
@@ -293,20 +303,24 @@ async function writeReleasesPage() {
       .brand img { width:auto; height:2rem; border-radius:.4rem; }
       .brand strong { font-size:1.05rem; letter-spacing:-.03em; }
       .header-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
-      .header-actions a { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .7rem; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:.82rem; text-decoration:none; }
-      .header-actions a:hover { border-color:var(--accent); color:var(--text); }
+      .header-actions a, .header-actions button { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .7rem; border:1px solid var(--line); border-radius:999px; background:transparent; color:var(--muted); cursor:pointer; font:inherit; font-size:.82rem; text-decoration:none; }
+      .header-actions a:hover, .header-actions button:hover { border-color:var(--accent); color:var(--text); }
       .header-actions svg { width:.95rem; height:.95rem; fill:currentColor; }
       .npm-mark,.ph-mark { display:grid; height:1rem; min-width:1rem; place-items:center; border-radius:.25rem; font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.58rem; font-weight:800; }
-      .npm-mark { padding:0 .15rem; background:#cb3837; color:white; }
-      .ph-mark { background:#da552f; color:white; }
+      .npm-mark { padding:0 .15rem; background:var(--panel-2); color:var(--text); }
+      .ph-mark { background:var(--panel-2); color:var(--text); }
       .hero { padding:clamp(3rem,7vw,5.5rem) 0 2.5rem; }
       .eyebrow { margin:0 0 .9rem; color:var(--accent); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.75rem; letter-spacing:.12em; text-transform:uppercase; }
       h1 { max-width:16ch; margin:0; font-size:clamp(2.8rem,7vw,5.5rem); line-height:.95; letter-spacing:-.055em; }
       .lede { max-width:64ch; margin:1.4rem 0 0; color:var(--muted); font-size:clamp(1rem,2vw,1.15rem); }
+      .features { padding:1.5rem 0 1rem; border-top:1px solid var(--line); }
+      .features h2 { margin:.25rem 0 .7rem; font-size:1.4rem; letter-spacing:-.03em; }
+      .feature-list { display:grid; gap:.5rem; max-width:80ch; margin:0; padding-left:1.1rem; color:var(--body); font-size:.9rem; }
+      .feature-list strong { color:var(--accent); }
       .release-layout { display:grid; grid-template-columns:220px minmax(0,1fr); gap:2.5rem; padding-bottom:4rem; }
       .version-nav { position:sticky; top:1.5rem; align-self:start; display:flex; flex-direction:column; gap:.25rem; border-left:1px solid var(--line); padding-left:1rem; }
       .version-nav a { display:flex; justify-content:space-between; gap:.6rem; padding:.35rem 0; color:var(--muted); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.75rem; text-decoration:none; }
-      .version-nav a span { color:#637169; font-size:.65rem; }
+      .version-nav a span { color:var(--muted); font-size:.65rem; }
       .version-nav a:hover,.version-nav a.active { color:var(--accent); }
       .release { padding:1.5rem 0 1.8rem; border-top:1px solid var(--line); }
       .release:first-child { border-top:0; padding-top:0; }
@@ -318,13 +332,13 @@ async function writeReleasesPage() {
       .release header a:hover { color:var(--accent); }
       .release h3 { margin:1.35rem 0 .5rem; color:var(--accent); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; }
       .release ul { margin:.3rem 0 .9rem; padding-left:1.1rem; }
-      .release li { margin:.35rem 0; color:#cbd4ce; font-size:.9rem; }
-      .release p { max-width:78ch; margin:.5rem 0; color:#cbd4ce; font-size:.9rem; }
+      .release li { margin:.35rem 0; color:var(--body); font-size:.9rem; }
+      .release p { max-width:78ch; margin:.5rem 0; color:var(--body); font-size:.9rem; }
       .release code { padding:.1rem .28rem; border-radius:.25rem; background:var(--panel-2); color:var(--accent); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.85em; }
-      .release-note { padding:.8rem 1rem; border:1px solid rgba(215,255,100,.25); border-radius:.7rem; background:rgba(215,255,100,.045); color:var(--muted)!important; }
+      .release-note { padding:.8rem 1rem; border:1px solid var(--line); border-radius:.7rem; background:var(--panel-2); color:var(--muted)!important; }
       footer { display:flex; justify-content:space-between; gap:1rem; padding:1.25rem 0 2.5rem; border-top:1px solid var(--line); color:var(--muted); font-size:.8rem; }
       @media (max-width:800px) { .release-layout { grid-template-columns:1fr; gap:1.5rem; } .version-nav { position:static; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.35rem .9rem; border-left:0; border-bottom:1px solid var(--line); padding:0 0 .9rem; } .version-nav a { gap:.4rem; } }
-      @media (max-width:480px) { .header-actions { display:none; } .release header { flex-direction:column; } }
+      @media (max-width:480px) { .header-actions a { display:none; } .release header { flex-direction:column; } }
     </style>
   </head>
   <body>
@@ -336,6 +350,7 @@ async function writeReleasesPage() {
           <a href="https://github.com/sayakmukherjee080/snappy-prerender" target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.2.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.6 11.6 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.2c0 .4.2.7.8.6A11.5 11.5 0 0 0 12 .7Z"/></svg>GitHub</a>
           <a href="https://www.npmjs.com/package/snappy-prerender" target="_blank" rel="noreferrer" aria-label="npm package"><span class="npm-mark" aria-hidden="true">npm</span></a>
           <a href="https://www.producthunt.com/products/snappy-prerender" target="_blank" rel="noreferrer"><span class="ph-mark" aria-hidden="true">P</span>Product Hunt</a>
+          <button type="button" id="theme-toggle" aria-label="Switch to light theme">dark</button>
         </div>
       </header>
       <main>
@@ -344,6 +359,16 @@ async function writeReleasesPage() {
           <h1>Release notes.</h1>
           <p class="lede">Every release of the framework-agnostic react-snap alternative. The build generates this page from the repository's CHANGELOG.md.</p>
         </section>
+        <section class="features">
+          <p class="eyebrow">Features</p>
+          <h2>What snappy-prerender does.</h2>
+          <ul class="feature-list">
+            ${FEATURES.map(
+              ([title, copy]) =>
+                `<li><strong>${escapeHtml(title)}:</strong> ${escapeHtml(copy)}</li>`,
+            ).join('\n            ')}
+          </ul>
+        </section>
         <div class="release-layout">
           <nav class="version-nav" aria-label="Versions">${versionNav}</nav>
           <div>${releaseHtml}</div>
@@ -351,6 +376,19 @@ async function writeReleasesPage() {
       </main>
       <footer><span>snappy-prerender</span><span>© smoldev</span></footer>
     </div>
+    <script>
+      const themeToggle = document.getElementById('theme-toggle');
+      const savedTheme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+      themeToggle.textContent = savedTheme;
+      themeToggle.setAttribute('aria-label', 'Switch to ' + (savedTheme === 'dark' ? 'light' : 'dark') + ' theme');
+      themeToggle.addEventListener('click', () => {
+        const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = next;
+        try { localStorage.setItem('snappy-demo-theme', next); } catch {}
+        themeToggle.textContent = next;
+        themeToggle.setAttribute('aria-label', 'Switch to ' + (next === 'dark' ? 'light' : 'dark') + ' theme');
+      });
+    </script>
   </body>
 </html>`;
 
@@ -391,11 +429,11 @@ function escapeHtml(value) {
 async function writeRawFrame(name, title, source) {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title><style>
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; background: #0b100e; color: #d7e0da; }
-    body { padding: 16px; font: 12px/1.65 ui-monospace, "SFMono-Regular", Consolas, monospace; }
-    .meta { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #26312b; color: #8d9c94; font-size: 11px; }
+    html, body { margin: 0; min-height: 100%; background: #000000; color: #e5e5e5; }
+    body { padding: 16px; font: 12px/1.65 ui-monospace, "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #2a2a2a; color: #a3a3a3; font-size: 11px; }
     pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .tag { color: #d7ff64; }
+    .tag { color: #ffffff; }
   </style></head><body><div class="meta"><span>${title}</span><span>${Buffer.byteLength(source)} bytes</span></div><pre>${escapeHtml(source)}</pre></body></html>`;
   await fs.writeFile(path.join(site, 'playback', name), html);
 }
@@ -464,6 +502,7 @@ async function capturePlayback(beforeHtml, afterHtml) {
   const stages = [
     {
       time: 0,
+      afterTime: 0,
       before: '/playback/before-0.html',
       after: '/playback/after-0.html',
       beforeState: 'empty #root',
@@ -471,6 +510,7 @@ async function capturePlayback(beforeHtml, afterHtml) {
     },
     {
       time: 500,
+      afterTime: 0,
       before: '/playback/before-1.html',
       after: '/playback/after-0.html',
       beforeState: 'header rendered',
@@ -478,6 +518,7 @@ async function capturePlayback(beforeHtml, afterHtml) {
     },
     {
       time: 1100,
+      afterTime: 1100,
       before: '/playback/before-2.html',
       after: '/playback/after-1.html',
       beforeState: 'hero rendered',
@@ -485,6 +526,7 @@ async function capturePlayback(beforeHtml, afterHtml) {
     },
     {
       time: 1800,
+      afterTime: 1100,
       before: '/playback/before-3.html',
       after: '/playback/after-1.html',
       beforeState: 'full content',
@@ -513,17 +555,16 @@ async function createOgImage(file) {
       * { box-sizing: border-box; }
       body {
         width: 1200px; height: 630px; margin: 0; overflow: hidden;
-        background: radial-gradient(circle at 10% 0%, #263328, transparent 45%),
-          radial-gradient(circle at 95% 90%, #1d3a33, transparent 45%), #0d1210;
-        color: #f2f0e8; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: #000000;
+        color: #ffffff; font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
       }
       .card { display: flex; height: 100%; flex-direction: column; justify-content: space-between; padding: 64px; }
-      .brand { display: flex; align-items: center; gap: 16px; color: #d7ff64; font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
-      .mark { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 12px; background: #d7ff64; color: #11170f; }
+      .brand { display: flex; align-items: center; gap: 16px; color: #ffffff; font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+      .mark { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 12px; background: #ffffff; color: #000000; }
       h1 { max-width: 900px; margin: 0; font-size: 76px; line-height: 0.95; letter-spacing: -0.06em; }
-      p { max-width: 760px; margin: 20px 0 0; color: #a4b0a9; font-size: 28px; line-height: 1.35; }
-      .foot { display: flex; justify-content: space-between; color: #a4b0a9; font-family: ui-monospace, monospace; font-size: 18px; letter-spacing: 0.06em; text-transform: uppercase; }
-      .accent { color: #d7ff64; }
+      p { max-width: 760px; margin: 20px 0 0; color: #a3a3a3; font-size: 28px; line-height: 1.35; }
+      .foot { display: flex; justify-content: space-between; color: #a3a3a3; font-family: ui-monospace, monospace; font-size: 18px; letter-spacing: 0.06em; text-transform: uppercase; }
+      .accent { color: #ffffff; }
     </style></head><body><div class="card">
       <div class="brand"><span class="mark">S</span> snappy-prerender</div>
       <div><h1>The page content<br />is in the HTML.</h1><p>The framework-agnostic react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs. Each route is static HTML at build time, so crawlers read it before the app script runs.</p></div>

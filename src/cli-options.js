@@ -184,6 +184,17 @@ export function cliOptions({ values, positionals }) {
   if (values['preload-images']) options.preloadImages = true;
   if (values['preload-manifest']) options.preloadManifest = true;
   if (values.sitemap) options.sitemap = true;
+  const llmsTxt = {};
+  if (values['llms-txt']) llmsTxt.enabled = true;
+  if (values['llms-txt-file'] !== undefined) {
+    llmsTxt.enabled = true;
+    llmsTxt.file = values['llms-txt-file'];
+  }
+  if (values['llms-txt-max-routes'] !== undefined) {
+    llmsTxt.enabled = true;
+    llmsTxt.maxRoutes = Number(values['llms-txt-max-routes']);
+  }
+  if (Object.keys(llmsTxt).length > 0) options.llmsTxt = llmsTxt;
   if (values['ignore-for-preload'] !== undefined) {
     options.ignoreForPreload = splitList(values['ignore-for-preload']);
   }

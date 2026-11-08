@@ -126,6 +126,7 @@ export const DEFAULTS = Object.freeze({
   preloadImages: false,
   preloadManifest: false,
   sitemap: false,
+  llmsTxt: false,
   imageSitemap: false,
   ignoreForPreload: ['service-worker.js'],
   cacheAjaxRequests: false,
@@ -193,6 +194,7 @@ const MULTI_TYPE_KEYS = new Set([
   'failOnDrift',
   'incremental',
   'vendorAssets',
+  'llmsTxt',
 ]);
 
 // Freeze the nested list defaults as well, so a consumer cannot mutate the defaults
@@ -257,6 +259,7 @@ export function resolveConfig(userOptions = {}) {
   config.failOnDrift = normaliseFailOnDrift(config.failOnDrift);
   config.incremental = normaliseIncremental(config.incremental);
   config.vendorAssets = normaliseVendorAssets(config.vendorAssets);
+  config.llmsTxt = normaliseLlmsTxt(config.llmsTxt);
   normaliseLocales(config);
   normaliseSeoLocale(config);
   validateConfig(config);
@@ -420,6 +423,104 @@ export function normaliseVendorAssets(value) {
     onError: input.onError ?? base.onError,
     failOnExternalAssets: input.failOnExternalAssets ?? false,
   };
+}
+
+const LLMS_TXT_KEYS = [
+  'enabled',
+  'file',
+  'title',
+  'description',
+  'include',
+  'exclude',
+  'maxRoutes',
+];
+
+/**
+ * Normalises the optional llms.txt artifact. A boolean selects the default file and
+ * route set; the object form customises the file name, heading, description and the
+ * routes that appear in it.
+ * @param {unknown} value
+ * @returns {object}
+ */
+export function normaliseLlmsTxt(value) {
+  const base = {
+    enabled: false,
+    file: 'llms.txt',
+    title: null,
+    description: null,
+    include: [],
+    exclude: [],
+    maxRoutes: null,
+  };
+  if (value === false || value === null || value === undefined) return base;
+  if (value === true) return { ...base, enabled: true };
+  if (!isPlainObject(value)) {
+    throw new TypeError('llmsTxt must be false, true or an options object');
+  }
+  for (const key of Object.keys(value)) {
+    if (!LLMS_TXT_KEYS.includes(key)) {
+      throw new TypeError(`llmsTxt.${key} is not a recognised option`);
+    }
+  }
+  if (value.enabled !== undefined && typeof value.enabled !== 'boolean') {
+    throw new TypeError('llmsTxt.enabled must be a boolean');
+  }
+  if (value.maxRoutes !== undefined && value.maxRoutes !== null) {
+    if (!Number.isInteger(value.maxRoutes) || value.maxRoutes < 1) {
+      throw new TypeError('llmsTxt.maxRoutes must be null or a positive integer');
+    }
+  }
+  const include = toArray(value.include ?? []);
+  const exclude = toArray(value.exclude ?? []);
+  for (const [name, patterns] of [
+    ['llmsTxt.include', include],
+    ['llmsTxt.exclude', exclude],
+  ]) {
+    for (const pattern of patterns) {
+      if (typeof pattern !== 'string' && !(pattern instanceof RegExp)) {
+        throw new TypeError(`${name} entries must be strings or RegExp instances`);
+      }
+    }
+  }
+  return {
+    enabled: value.enabled ?? true,
+    file: normaliseLlmsFile(value.file ?? base.file),
+    title: normaliseLlmsText(value.title, 'llmsTxt.title'),
+    description: normaliseLlmsText(value.description, 'llmsTxt.description'),
+    include: [...include],
+    exclude: [...exclude],
+    maxRoutes: value.maxRoutes ?? null,
+  };
+}
+
+// Rejects an output path that could escape the build directory.
+function normaliseLlmsFile(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new TypeError('llmsTxt.file must be a non-empty relative path');
+  }
+  const file = value.trim().replaceAll('\\', '/');
+  if (file.startsWith('/') || /^[a-z]:/i.test(file)) {
+    throw new TypeError('llmsTxt.file must be relative to the output directory');
+  }
+  const segments = file.split('/');
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    throw new TypeError('llmsTxt.file must not contain empty, current or parent segments');
+  }
+  if (!file.toLowerCase().endsWith('.txt')) {
+    throw new TypeError('llmsTxt.file must end with .txt');
+  }
+  if (file.toLowerCase() === 'robots.txt') {
+    throw new TypeError('llmsTxt.file must not overwrite robots.txt');
+  }
+  return segments.join('/');
+}
+
+// Normalises an optional heading or summary to trimmed text.
+function normaliseLlmsText(value, name) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw new TypeError(`${name} must be a string or null`);
+  const text = value.trim();
+  return text.length > 0 ? text : null;
 }
 
 /**
@@ -622,6 +723,8 @@ export function validateConfig(config) {
   patternList(config.auditIgnoreLinks, 'auditIgnoreLinks');
   patternList(config.routePriority, 'routePriority');
   patternList(config.incremental.exclude, 'incremental.exclude');
+  patternList(config.llmsTxt.include, 'llmsTxt.include');
+  patternList(config.llmsTxt.exclude, 'llmsTxt.exclude');
   for (const key of [
     'readyFlag',
     'readySelector',

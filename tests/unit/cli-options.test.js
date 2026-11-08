@@ -35,6 +35,7 @@ describe('cliOptions drift and container flags', () => {
     assert.equal(Object.hasOwn(options, 'sitemapLastmod'), false);
     assert.equal(Object.hasOwn(options, 'incremental'), false);
     assert.equal(Object.hasOwn(options, 'vendorAssets'), false);
+    assert.equal(Object.hasOwn(options, 'llmsTxt'), false);
   });
 
   it('maps incremental and vendoring flags', () => {
@@ -66,6 +67,21 @@ describe('cliOptions drift and container flags', () => {
     assert.equal(options.vendorAssets.maxBytes, 2048);
     assert.equal(options.vendorAssets.onError, 'fail');
     assert.equal(options.vendorAssets.failOnExternalAssets, true);
+  });
+
+  it('maps llms.txt flags', () => {
+    const options = cliOptions({
+      values: {
+        'llms-txt-file': 'ai/llms.txt',
+        'llms-txt-max-routes': '25',
+      },
+      positionals: [],
+    });
+    assert.deepEqual(options.llmsTxt, {
+      enabled: true,
+      file: 'ai/llms.txt',
+      maxRoutes: 25,
+    });
   });
 
   it('maps --incremental-trust to trust mode', () => {

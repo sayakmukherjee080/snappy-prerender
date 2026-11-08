@@ -10,7 +10,7 @@ snappy-prerender is the maintained, MIT-licensed react-snap alternative for exis
 - **Prerendering:** static HTML per route, directory or flat output, `404.html`, route includes/excludes, crawl depth and route caps, route priority, route files, sitemap-seeded routes, per-route overrides, ready flag/selector/network settle, retries, traces and screenshots.
 - **Rendering:** Playwright with installed Chrome or Edge, hash-verified Chrome for Testing fallback, third-party blocking with host allowlists, authenticated storage state, custom viewport/user agent/HTTPS/launch arguments, scroll-to-load and animation freezing.
 - **Hydration:** per-route hydration verification, framework detection, strict/re-render/skip policies, changed-only verification, verification-context reuse and per-route failure gates.
-- **SEO and discovery:** per-route title, description, robots and canonical tags, Open Graph, Twitter cards, JSON-LD, a built-in `Head` layer that replaces React Helmet, client-side head reconciliation, sitemap and image sitemap output, sitemap lastmod, robots directives and AI-crawler-readable HTML.
+- **SEO and discovery:** per-route title, description, robots and canonical tags, Open Graph, Twitter cards, JSON-LD, a built-in `Head` layer that replaces React Helmet, client-side head reconciliation, sitemap and image sitemap output, sitemap lastmod, opt-in `llms.txt` route indexes, robots directives and AI-crawler-readable HTML.
 - **Locales:** path and single-locale modes, hreflang and x-default, canonical and `og:locale`, per-locale routes, cookies/localStorage/storage state, and cookie/localStorage SEO-locale seeding.
 - **Incremental builds:** persistent route cache, API and vendor-asset revalidation, trust/maxAge/exclude modes, per-route opt-out, cache locking with stale-lock recovery and cache pruning for HTML, generated scripts and vendored assets.
 - **Output optimisation:** inline or critical CSS, HTML/CSS minification, preconnect hints, font/image/module preload hints, preload manifest, strict/hash CSP, async and external scripts, tag/attribute surgery, build-origin metadata stripping and stale-route pruning.
@@ -77,6 +77,7 @@ npx snappy-prerender dist --block-third-party --allowed-hosts cms.example.com
 npx snappy-prerender dist --metadata-site-url https://example.com --metadata-title-template '%s | Example'
 npx snappy-prerender dist --inline-css critical --minify-html --preload-manifest
 npx snappy-prerender dist --sitemap --verify-changed-only
+npx snappy-prerender dist --llms-txt
 npx snappy-prerender dist --drift --baseline .snappy-baseline.json
 npx snappy-prerender dist --csp strict --inline-css critical
 ```
@@ -252,6 +253,7 @@ For the build configuration, yes. `snappy-prerender init` reads the existing `re
 | --- | --- |
 | **Static HTML per route** | `route/index.html` (or `route.html` with `flatOutput`), plus `404.html`. Identical files are left untouched. |
 | **Head and metadata** | Per-route title, description, robots, canonical, Open Graph and Twitter tags, updated on client-side navigation. |
+| **LLM discovery** | Opt-in `llms.txt` with sections, route titles, descriptions and absolute or relative links. |
 | **Hydration report** | Each route is reloaded with the real bundle and reported as `hydrated`, `re-rendered`, `undetected` or `unknown`, with mismatch messages. The package detects React, Vue, Svelte, Preact, Angular, Ember and Lit automatically; Solid is selected explicitly; vanilla JavaScript builds are supported with boot-mode reporting. |
 | **Content drift** | A baseline of route hashes and metadata reports added, removed, moved, changed, HTML-only and status-changed routes on later builds. |
 | **Ready contract** | `window.__prerenderReady`, a selector, or network quiescence. |
@@ -869,6 +871,7 @@ The function is awaited once per run, and whatever it returns must be a plain op
 | `ignoreForPreload` | `['service-worker.js']` | File names excluded from the manifest and injected hints |
 | `sitemap` | `false` | Write `sitemap.xml` (or a sitemap index above 50,000 URLs) from the routes that do not declare noindex, and point an existing `robots.txt` at it; needs `metadata.siteUrl` |
 | `imageSitemap` | `false` | List same-origin page images in the sitemap |
+| `llmsTxt` | `false` | Write `llms.txt` from the rendered routes; `true` uses the defaults, or pass `{ file, title, description, include, exclude, maxRoutes }` |
 | `cacheAjaxRequests` | `false` | Expose captured JSON responses as `window.snapStore` |
 | `maxCachedBytes` | `5242880` | Largest JSON response cached per request, measured on the serialised body |
 | `removeBlobs` | `true` | Drop stylesheet links pointing at dead `blob:` URLs |
