@@ -19,40 +19,21 @@ The header links to `/releases/`, which the build generates from the repository'
 ## Features
 
 - **Frameworks:** React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript,
-  including React 16.8 through 19, Vite 6/7/8 and Create React App; any app that builds to a
-  static directory works.
-- **Prerendering:** static HTML per route, directory or flat output, `404.html`, route
-  includes/excludes, crawl depth and route caps, route priority, route files, sitemap-seeded
-  routes, per-route overrides, ready flag/selector/network settle, retries, traces and
-  screenshots.
-- **Rendering:** Playwright with installed Chrome or Edge, hash-verified Chrome for Testing
-  fallback, third-party blocking with host allowlists, authenticated storage state, custom
-  viewport/user agent/HTTPS/launch arguments, scroll-to-load and animation freezing.
-- **Hydration:** per-route hydration verification, framework detection, strict/re-render/skip
-  policies, changed-only verification, verification-context reuse and per-route failure gates.
-- **SEO and discovery:** per-route title, description, robots and canonical tags, Open Graph,
-  Twitter cards, JSON-LD, a built-in `Head` layer that replaces React Helmet, client-side head
-  reconciliation, sitemap and image sitemap output, sitemap lastmod, opt-in `llms.txt` route
-  indexes, robots directives and AI-crawler-readable HTML.
-- **Locales:** path and single-locale modes, hreflang and x-default, canonical and `og:locale`,
-  per-locale routes, cookies/localStorage/storage state, and cookie/localStorage SEO-locale
-  seeding.
-- **Incremental builds:** persistent route cache, API and vendor-asset revalidation,
-  trust/maxAge/exclude modes, per-route opt-out, cache locking with stale-lock recovery and
-  cache pruning for HTML, generated scripts and vendored assets.
-- **Output optimisation:** inline or critical CSS, HTML/CSS minification, preconnect hints,
-  font/image/module preload hints, preload manifest, strict/hash CSP, async and external
-  scripts, tag/attribute surgery, build-origin metadata stripping and stale-route pruning.
-- **Assets and state:** vendor localization for CSS, fonts, images and scripts with content
-  hashing, SRI checks, byte/type limits and redirect/private-host rejection; CSS-in-JS and
-  constructable stylesheet capture; form-state capture; Ajax replay through `window.snapStore`;
-  self-contained asset gate.
-- **Auditing and operations:** broken-link, SEO, sitemap and CSP audit; duplicate-content/title
-  detection; empty-page and failed-request gates; content drift baselines; deterministic
-  time/timezone/random seed; JSON reports; dry runs, destinations, base paths, `serveCmd` and
-  bounded concurrency.
-- **Interfaces:** Vite plugin, CLI, interactive `init` wizard, react-snap config migration and
-  programmatic API.
+  including Vite and Create React App.
+- **Prerendering:** one static HTML file per route, with crawling, route lists, route priority,
+  404 pages, screenshots, base paths, dry runs and custom destinations.
+- **Hydration:** reloads each route with the real bundle and reports hydration mismatches, with
+  per-route policies.
+- **SEO:** per-route titles, descriptions, canonicals, Open Graph, Twitter cards, JSON-LD,
+  sitemap and robots.
+- **Locales and LLMs:** path or single-locale builds with hreflang, localized URLs, SEO locale
+  seeding and optional `llms.txt` indexes.
+- **Incremental builds:** reuses unchanged routes and revalidates API responses and downloaded
+  assets; cache locking and pruning are built in.
+- **Output and assets:** critical CSS, minification, preloads, CSP, local copies of third-party
+  assets, and captured CSS-in-JS, form and Ajax state.
+- **Auditing:** broken links, SEO, sitemap, CSP, duplicate content, content drift and JSON
+  reports.
 
 ## Build
 
