@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates
 the release tags; see the Git history for those changes.
 
+## [2.12.0] - 2026-11-08
+
+### Added
+
+- Opt-in `llmsTxt` artifact generation for LLM discovery. `llmsTxt: true` writes
+  `llms.txt` with sections, route titles, descriptions and absolute links; the object form
+  customises `file`, `title`, `description`, `include`, `exclude` and `maxRoutes`.
+- `--llms-txt`, `--llms-txt-file` and `--llms-txt-max-routes` CLI flags.
+- `report.llmsTxt` records the written file, route count, sections and listed URLs. The
+  artifact is rebuilt on every run, including all-cached incremental runs, and is skipped
+  for dry runs and non-HTML output.
+
 ## [2.11.4] - 2026-11-07
 
 ### Changed
