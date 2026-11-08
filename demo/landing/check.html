@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Free crawler and llms.txt checker — snappy-prerender</title>
+    <meta
+      name="description"
+      content="Enter a URL and see the title, description, Open Graph tags and llms.txt that search engines and AI crawlers receive. Free, no signup."
+    />
+    <meta name="robots" content="index,follow" />
+    <link rel="canonical" href="__DEMO_ORIGIN__/check/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="snappy-prerender" />
+    <meta property="og:title" content="Free crawler and llms.txt checker" />
+    <meta
+      property="og:description"
+      content="See the SEO metadata and llms.txt that search engines and AI crawlers receive from any URL."
+    />
+    <meta property="og:url" content="__DEMO_ORIGIN__/check/" />
+    <meta property="og:image" content="__DEMO_ORIGIN__/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="snappy-prerender site checker" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Free crawler and llms.txt checker" />
+    <meta
+      name="twitter:description"
+      content="See the SEO metadata and llms.txt that search engines and AI crawlers receive from any URL."
+    />
+    <meta name="twitter:image" content="__DEMO_ORIGIN__/og-card.png" />
+    <meta name="twitter:image:alt" content="snappy-prerender site checker" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      window.__SNAPPY_CHECK_API__ = "__CHECK_API_ORIGIN__";
+      try {
+        const savedTheme = localStorage.getItem('snappy-demo-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+          document.documentElement.dataset.theme = savedTheme;
+        }
+      } catch {}
+    </script>
+    <style>
+__SHARED_STYLE__
+
+      .check-hero { padding-bottom: 1.2rem; }
+      .check-form { max-width: 800px; margin-top: 1.4rem; }
+      .check-form label {
+        display: block;
+        margin-bottom: 0.4rem;
+        color: var(--muted);
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .check-form__row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+      .check-form input {
+        flex: 1 1 20rem;
+        min-width: 0;
+        padding: 0.7rem 0.85rem;
+        border: 1px solid var(--line);
+        border-radius: 0.6rem;
+        background: var(--panel);
+        color: var(--text);
+        font: inherit;
+        font-size: 0.9rem;
+      }
+      .check-form input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .check-form .button { border: 0; cursor: pointer; }
+      .check-form .button[disabled] { cursor: wait; opacity: 0.7; }
+      .check-hint { margin: 0.6rem 0 0; color: var(--muted); font-size: 0.72rem; }
+      .check-hint a { color: var(--accent); }
+      .check-status { min-height: 1.5rem; margin: 0.9rem 0 0; color: var(--muted); font-size: 0.8rem; }
+      .check-status[data-tone="error"] { color: var(--orange); }
+      #results { padding: 0.4rem 0 0.6rem; }
+      .result-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.2rem 0 0.8rem;
+        border-top: 1px solid var(--line);
+      }
+      .result-head h2 {
+        max-width: 24ch;
+        margin: 0.2rem 0 0;
+        font-size: clamp(1.3rem, 3vw, 1.9rem);
+        letter-spacing: -0.04em;
+        overflow-wrap: anywhere;
+      }
+      .result-url { margin: 0.3rem 0 0; color: var(--muted); font-size: 0.74rem; overflow-wrap: anywhere; }
+      .score { display: flex; align-items: baseline; gap: 0.45rem; color: var(--muted); font-size: 0.72rem; }
+      .score strong { color: var(--accent); font-size: 1.7rem; letter-spacing: -0.04em; }
+      .signal-list { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0 0 1rem; }
+      .signal { padding: 0.2rem 0.5rem; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 0.66rem; }
+      .signal--ok { border-color: var(--accent); color: var(--accent); }
+      .signal--missing { border-color: var(--orange); color: var(--orange); }
+      .check-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 0.8rem; align-items: start; }
+      .check-panel {
+        min-width: 0;
+        padding: 1rem;
+        border: 1px solid var(--line);
+        border-radius: 0.8rem;
+        background: var(--panel);
+      }
+      .check-panel h3 { margin: 0; font-size: 0.95rem; }
+      .panel-note { margin: 0.3rem 0 0.9rem; color: var(--muted); font-size: 0.76rem; }
+      .preview-search { padding: 0.8rem; border: 1px solid var(--line); border-radius: 0.6rem; background: var(--bg); }
+      .preview-url { display: block; color: var(--accent); font-size: 0.68rem; overflow-wrap: anywhere; }
+      .preview-title { display: block; margin-top: 0.2rem; font-size: 1rem; line-height: 1.3; overflow-wrap: anywhere; }
+      .preview-desc { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.76rem; overflow-wrap: anywhere; }
+      .check-social { margin-top: 0.7rem; }
+      .check-social .social-image-empty { aspect-ratio: auto; min-height: 5.5rem; }
+      .check-table { width: 100%; margin-top: 0.9rem; border-collapse: collapse; font-size: 0.74rem; }
+      .check-table th,
+      .check-table td { padding: 0.42rem 0.4rem; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+      .check-table th { width: 38%; color: var(--muted); font-weight: 400; }
+      .check-table td { overflow-wrap: anywhere; }
+      .check-ok { color: var(--accent); }
+      .check-missing { color: var(--orange); }
+      .llms-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+      .badge { padding: 0.16rem 0.45rem; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 0.62rem; }
+      .badge--ok { border-color: var(--accent); color: var(--accent); }
+      .badge--missing { border-color: var(--orange); color: var(--orange); }
+      .copy-llms {
+        margin-left: auto;
+        padding: 0.25rem 0.5rem;
+        border: 1px solid var(--line);
+        border-radius: 0.35rem;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.64rem;
+      }
+      .copy-llms:hover { border-color: var(--accent); color: var(--text); }
+      .llms-link { display: inline-block; margin-bottom: 0.6rem; color: var(--accent); font-size: 0.7rem; overflow-wrap: anywhere; }
+      .llms-pre {
+        max-height: 520px;
+        overflow: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 0.72rem;
+      }
+      .llms-empty { padding: 0.9rem; border: 1px dashed var(--line); border-radius: 0.6rem; color: var(--muted); font-size: 0.78rem; }
+      .llms-empty p { margin: 0 0 0.5rem; }
+      .llms-empty a { color: var(--accent); }
+
+      @media (max-width: 900px) {
+        .check-grid { grid-template-columns: 1fr; }
+        .check-cta { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 640px) {
+        .check-form .button { width: 100%; }
+        .result-head { align-items: flex-start; flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      __HEADER__
+
+      <main>
+        <section class="hero check-hero">
+          <p class="eyebrow">Free visibility check</p>
+          <h1>Is your website visible to crawlers and agents?</h1>
+          <p class="hero-tagline">
+            Enter a URL. See the title, description, Open Graph tags and <code>llms.txt</code> that
+            search engines and AI crawlers receive.
+          </p>
+          <form class="check-form" id="check-form" action="/check/" method="get">
+            <label for="url">Website URL</label>
+            <div class="check-form__row">
+              <input
+                id="url"
+                name="url"
+                type="text"
+                inputmode="url"
+                autocomplete="url"
+                spellcheck="false"
+                placeholder="https://your-site.com"
+                required
+              />
+              <button class="button button--primary" id="check-submit" type="submit">
+                Test your site free
+              </button>
+            </div>
+            <p class="check-hint">
+              Public http and https pages only. The page is fetched once and not stored.
+              <a href="#how">What this checks</a>
+            </p>
+          </form>
+          <p class="check-status" id="check-status" role="status" aria-live="polite"></p>
+        </section>
+
+        <section id="results" hidden>
+          <div class="result-head">
+            <div>
+              <p class="eyebrow">Result</p>
+              <h2 id="result-title">Checking…</h2>
+              <p class="result-url" id="result-url"></p>
+            </div>
+            <div class="score"><strong id="score-value">0/5</strong><span>signals found</span></div>
+          </div>
+          <div class="signal-list" id="signal-list" aria-label="Crawler signals"></div>
+          <div class="check-grid">
+            <article class="check-panel">
+              <h3>Crawler view</h3>
+              <p class="panel-note">What search engines and social cards read from the HTML.</p>
+              <div class="preview-search">
+                <span class="preview-url" id="search-url"></span>
+                <strong class="preview-title" id="search-title"></strong>
+                <p class="preview-desc" id="search-description"></p>
+              </div>
+              <div class="link-card check-social">
+                <img class="social-image" id="og-image" alt="" hidden />
+                <div class="social-image-empty" id="og-image-empty">No og:image</div>
+                <div class="link-copy">
+                  <span class="link-site" id="social-site"></span>
+                  <strong class="link-title" id="social-title"></strong>
+                  <p class="link-description" id="social-description"></p>
+                </div>
+              </div>
+              <table class="check-table" aria-label="Crawler metadata">
+                <tbody id="metadata-rows"></tbody>
+              </table>
+            </article>
+            <article class="check-panel">
+              <div class="llms-head">
+                <h3>LLM view</h3>
+                <span class="badge" id="llms-badge">Checking…</span>
+                <button class="copy-llms" id="copy-llms" type="button" hidden>Copy</button>
+              </div>
+              <p class="panel-note">What an AI crawler reads from <code>llms.txt</code> at the site root.</p>
+              <a class="llms-link" id="llms-link" target="_blank" rel="noreferrer" hidden>Open llms.txt ↗</a>
+              <pre class="llms-pre" id="llms-output" hidden></pre>
+              <div class="llms-empty" id="llms-empty" hidden></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="how">
+          <p class="eyebrow">What this checks</p>
+          <h2>One URL, two audiences.</h2>
+          <div class="benefit-grid">
+            <article class="benefit-card">
+              <h3>Crawler metadata</h3>
+              <p>Title, description, canonical, robots and Open Graph tags exactly as they appear in the served HTML.</p>
+            </article>
+            <article class="benefit-card">
+              <h3>llms.txt</h3>
+              <p>The plain-text route index an AI crawler finds at <code>/llms.txt</code>, or a clear missing-file result.</p>
+            </article>
+            <article class="benefit-card">
+              <h3>Link preview</h3>
+              <p>The social card built from <code>og:image</code>, <code>og:title</code> and <code>og:description</code>.</p>
+            </article>
+            <article class="benefit-card">
+              <h3>No signup</h3>
+              <p>Runs a single fetch with a short timeout. The checker does not store the page or the URL.</p>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      __FOOTER__
+    </div>
+
+    <script>
+      const form = document.getElementById('check-form');
+      const input = document.getElementById('url');
+      const submit = document.getElementById('check-submit');
+      const status = document.getElementById('check-status');
+      const results = document.getElementById('results');
+      const resultTitle = document.getElementById('result-title');
+      const resultUrl = document.getElementById('result-url');
+      const scoreValue = document.getElementById('score-value');
+      const signalList = document.getElementById('signal-list');
+      const searchUrl = document.getElementById('search-url');
+      const searchTitle = document.getElementById('search-title');
+      const searchDescription = document.getElementById('search-description');
+      const ogImage = document.getElementById('og-image');
+      const ogImageEmpty = document.getElementById('og-image-empty');
+      const socialSite = document.getElementById('social-site');
+      const socialTitle = document.getElementById('social-title');
+      const socialDescription = document.getElementById('social-description');
+      const metadataRows = document.getElementById('metadata-rows');
+      const llmsBadge = document.getElementById('llms-badge');
+      const llmsLink = document.getElementById('llms-link');
+      const llmsOutput = document.getElementById('llms-output');
+      const llmsEmpty = document.getElementById('llms-empty');
+      const copyLlms = document.getElementById('copy-llms');
+      let controller = null;
+      let llmsText = '';
+
+      /**
+       * Sets the live status line and its tone.
+       * @param {string} message
+       * @param {'muted' | 'error'} [tone]
+       */
+      function setStatus(message, tone = 'muted') {
+        status.textContent = message;
+        status.dataset.tone = tone;
+      }
+
+      /**
+       * Toggles the submit button while a check is in flight.
+       * @param {boolean} loading
+       */
+      function setLoading(loading) {
+        submit.disabled = loading;
+        submit.textContent = loading ? 'Checking…' : 'Test your site free';
+      }
+
+      /**
+       * Returns a host-and-path label for a URL without its scheme.
+       * @param {string} value
+       * @returns {string}
+       */
+      function hostPath(value) {
+        try {
+          const url = new URL(value);
+          return `${url.host}${url.pathname === '/' ? '' : url.pathname}`;
+        } catch {
+          return value;
+        }
+      }
+
+      /**
+       * Reports whether a string can be used as a preview image URL.
+       * @param {string | null} value
+       * @returns {boolean}
+       */
+      function isWebUrl(value) {
+        if (!value) return false;
+        try {
+          const url = new URL(value);
+          return url.protocol === 'http:' || url.protocol === 'https:';
+        } catch {
+          return false;
+        }
+      }
+
+      /**
+       * Appends one metadata row, showing missing values in the warning tone.
+       * @param {string} label
+       * @param {string | number | null | undefined} value
+       * @param {string} [fallback]
+       */
+      function appendRow(label, value, fallback = 'Missing') {
+        const row = document.createElement('tr');
+        const heading = document.createElement('th');
+        heading.textContent = label;
+        const cell = document.createElement('td');
+        if (value === null || value === undefined || value === '') {
+          const missing = document.createElement('span');
+          missing.className = 'check-missing';
+          missing.textContent = fallback;
+          cell.append(missing);
+        } else {
+          cell.textContent = String(value);
+        }
+        row.append(heading, cell);
+        metadataRows.append(row);
+      }
+
+      /**
+       * Renders the five high-level signals and the score.
+       * @param {object} data
+       */
+      function renderSignals(data) {
+        const signals = [
+          ['Title', Boolean(data.page.title)],
+          ['Description', Boolean(data.page.description)],
+          ['Canonical', Boolean(data.page.canonical)],
+          ['og:image', Boolean(data.page.og.image)],
+          ['llms.txt', Boolean(data.llms.found)],
+        ];
+        signalList.replaceChildren();
+        for (const [label, present] of signals) {
+          const item = document.createElement('span');
+          item.className = `signal ${present ? 'signal--ok' : 'signal--missing'}`;
+          item.textContent = `${present ? '✓' : '×'} ${label}`;
+          signalList.append(item);
+        }
+        const score = signals.filter(([, present]) => present).length;
+        scoreValue.textContent = `${score}/5`;
+      }
+
+      /**
+       * Renders the search result and social card from the crawler metadata.
+       * @param {object} data
+       */
+      function renderCrawler(data) {
+        const page = data.page;
+        const title = page.og.title || page.title || 'No title tag found';
+        const description = page.og.description || page.description || 'No meta description found.';
+        const image = page.og.image;
+        const imageSafe = page.og.imageSafe !== false;
+
+        resultTitle.textContent = title;
+        resultUrl.textContent = `${page.finalUrl} · HTTP ${page.status}`;
+        searchUrl.textContent = hostPath(page.finalUrl);
+        searchTitle.textContent = page.title || 'No title tag found';
+        searchDescription.textContent = page.description || 'No meta description found.';
+        socialSite.textContent = page.og.siteName || new URL(page.finalUrl).host;
+        socialTitle.textContent = title;
+        socialDescription.textContent = description;
+
+        if (isWebUrl(image) && imageSafe) {
+          ogImage.src = image;
+          ogImage.alt = page.og.title || page.title || '';
+          ogImage.hidden = false;
+          ogImageEmpty.hidden = true;
+          ogImage.onerror = () => {
+            ogImage.hidden = true;
+            ogImageEmpty.hidden = false;
+          };
+        } else {
+          ogImage.hidden = true;
+          ogImageEmpty.hidden = false;
+          ogImageEmpty.textContent = image && !imageSafe ? 'Preview image host blocked' : 'No og:image';
+        }
+
+        metadataRows.replaceChildren();
+        appendRow('Title', page.title, 'No title tag');
+        appendRow('Description', page.description, 'No meta description');
+        appendRow('Canonical', page.canonical, 'No canonical link');
+        appendRow('Robots', page.robots, 'No robots directive');
+        appendRow('og:title', page.og.title, 'Missing');
+        appendRow('og:description', page.og.description, 'Missing');
+        appendRow('og:image', page.og.image, 'Missing');
+        appendRow('og:type', page.og.type, 'Missing');
+        appendRow('twitter:card', page.twitter.card, 'Missing');
+        appendRow('H1 headings', page.h1Count);
+      }
+
+      /**
+       * Renders the llms.txt file, its status, and the missing-file guidance.
+       * @param {object} data
+       */
+      function renderLlms(data) {
+        const llms = data.llms;
+        llmsText = llms.found ? llms.content : '';
+        llmsLink.hidden = !isWebUrl(llms.url);
+        if (!llmsLink.hidden) llmsLink.href = llms.url;
+
+        if (llms.found) {
+          llmsBadge.className = 'badge badge--ok';
+          llmsBadge.textContent = `Found · ${formatBytes(llms.bytes)}`;
+          llmsOutput.hidden = false;
+          llmsOutput.textContent = llms.content;
+          llmsEmpty.hidden = true;
+          copyLlms.hidden = false;
+          return;
+        }
+
+        llmsBadge.className = 'badge badge--missing';
+        llmsBadge.textContent = llms.status ? `Not found · HTTP ${llms.status}` : 'Not found';
+        llmsOutput.hidden = true;
+        llmsEmpty.hidden = false;
+        copyLlms.hidden = true;
+        llmsEmpty.replaceChildren();
+        const message = document.createElement('p');
+        message.textContent = `No llms.txt found at ${llms.url}. AI crawlers will fall back to the HTML.`;
+        const help = document.createElement('p');
+        help.textContent = 'Generate one at build time with snappy-prerender’s llmsTxt option.';
+        const link = document.createElement('a');
+        link.href = 'https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/configuration.md';
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = 'Read the configuration docs ↗';
+        help.append(link);
+        llmsEmpty.append(message, help);
+      }
+
+      /**
+       * Formats a byte count for the llms.txt badge.
+       * @param {number} bytes
+       * @returns {string}
+       */
+      function formatBytes(bytes) {
+        if (bytes < 1024) return `${bytes} B`;
+        return `${(bytes / 1024).toFixed(1)} KB`;
+      }
+
+      /**
+       * Renders a complete checker response.
+       * @param {object} data
+       */
+      function render(data) {
+        renderSignals(data);
+        renderCrawler(data);
+        renderLlms(data);
+      }
+
+      /**
+       * Runs one check against the local API and renders the result.
+       * @param {string} value
+       */
+      async function runCheck(value) {
+        controller?.abort();
+        const current = new AbortController();
+        controller = current;
+        setLoading(true);
+        results.hidden = true;
+        setStatus(`Checking ${value}…`);
+
+        try {
+          const apiOrigin = String(window.__SNAPPY_CHECK_API__ ?? '').replace(/\/+$/, '');
+          const response = await fetch(`${apiOrigin}/api/check?url=${encodeURIComponent(value)}`, {
+            headers: { accept: 'application/json' },
+            signal: current.signal,
+          });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok || !payload?.success) {
+            throw new Error(payload?.error || 'The check failed.');
+          }
+          render(payload.data);
+          results.hidden = false;
+          setStatus(`Checked ${hostPath(payload.data.page.finalUrl)} just now.`);
+          results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (error) {
+          if (error.name === 'AbortError') return;
+          setStatus(error.message || 'The check failed.', 'error');
+        } finally {
+          if (controller === current) {
+            controller = null;
+            setLoading(false);
+          }
+        }
+      }
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const value = input.value.trim();
+        if (!value) {
+          setStatus('Enter a website URL to check.', 'error');
+          return;
+        }
+        const url = new URL(window.location.href);
+        url.searchParams.set('url', value);
+        window.history.replaceState(null, '', url);
+        runCheck(value);
+      });
+
+      copyLlms.addEventListener('click', async () => {
+        if (!llmsText) return;
+        try {
+          await navigator.clipboard.writeText(llmsText);
+          copyLlms.textContent = 'Copied';
+          setTimeout(() => {
+            copyLlms.textContent = 'Copy';
+          }, 1600);
+        } catch {
+          copyLlms.textContent = 'Copy failed';
+        }
+      });
+
+      const themeToggle = document.getElementById('theme-toggle');
+      const currentTheme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+      const themeLabel = `Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} theme`;
+      themeToggle.setAttribute('aria-label', themeLabel);
+      themeToggle.setAttribute('title', themeLabel);
+      themeToggle.addEventListener('click', () => {
+        const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = next;
+        try {
+          localStorage.setItem('snappy-demo-theme', next);
+        } catch {}
+        const label = `Switch to ${next === 'dark' ? 'light' : 'dark'} theme`;
+        themeToggle.setAttribute('aria-label', label);
+        themeToggle.setAttribute('title', label);
+      });
+
+      const initial = new URL(window.location.href).searchParams.get('url');
+      if (initial) {
+        input.value = initial;
+        runCheck(initial);
+      }
+    </script>
+  </body>
+</html>

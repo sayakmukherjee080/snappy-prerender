@@ -1,24 +1,24 @@
 :root {
   color-scheme: dark;
-  --bg: #000000;
-  --panel: #0a0a0a;
-  --panel-2: #121212;
-  --text: #ffffff;
-  --muted: #a3a3a3;
-  --line: #2a2a2a;
-  --accent: #ffffff;
-  --accent-ink: #000000;
+  --bg: #1e1e1e;
+  --panel: #252526;
+  --panel-2: #2d2d2d;
+  --text: #d4d4d4;
+  --muted: #858585;
+  --line: #3c3c3c;
+  --accent: #7ee787;
+  --accent-ink: #07120b;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #ffffff;
-  --panel: #f7f7f7;
-  --panel-2: #ededed;
-  --text: #000000;
-  --muted: #525252;
-  --line: #d4d4d4;
-  --accent: #000000;
+  --panel: #f3f3f3;
+  --panel-2: #ececec;
+  --text: #333333;
+  --muted: #6e7681;
+  --line: #e5e5e5;
+  --accent: #1a7f37;
   --accent-ink: #ffffff;
 }
 
@@ -28,6 +28,27 @@
 
 html {
   background: var(--bg);
+  scrollbar-color: var(--line) var(--bg);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid var(--bg);
+  border-radius: 999px;
+  background: var(--line);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
 
 body {
@@ -35,8 +56,7 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas,
-    monospace;
+  font-family: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
   line-height: 1.6;
 }
 
@@ -116,7 +136,7 @@ nav a[aria-current="page"] {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--accent);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-family: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
   font-size: 0.72rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -129,7 +149,7 @@ main {
 .eyebrow {
   margin: 0 0 0.9rem;
   color: var(--accent);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-family: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
   font-size: 0.75rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -145,7 +165,6 @@ h1 {
 }
 
 .lede {
-  max-width: 62ch;
   margin: 1.5rem 0 0;
   color: var(--muted);
   font-size: clamp(1rem, 2vw, 1.25rem);
@@ -177,6 +196,18 @@ h1 {
   font-size: 0.92rem;
 }
 
+.card a {
+  display: inline-block;
+  margin-top: 0.8rem;
+  color: var(--accent);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.card a:hover {
+  text-decoration: underline;
+}
+
 .feature-section {
   margin-top: 1rem;
 }
@@ -204,7 +235,6 @@ h1 {
 }
 
 .proof p:last-child {
-  max-width: 68ch;
   margin: 0;
   color: var(--muted);
 }

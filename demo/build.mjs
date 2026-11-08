@@ -5,24 +5,25 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { launchBrowser } from '../src/core/browser.js';
 import { resolveConfig } from '../src/core/config.js';
+import { prerender } from '../src/core/index.js';
 import { startStaticServer } from '../src/core/server.js';
 import { FEATURES } from './app/src/features.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..');
-const app = path.join(here, 'app');
+const testcase = path.join(repo, 'testcase', 'react');
 const site = path.join(here, 'site');
 const origin = process.env.DEMO_ORIGIN ?? 'https://snappy-demo.example';
 
 /**
- * Builds one variant of the demo app with the correct public base.
+ * Builds the React testcase under one public base. The before variant stays a plain SPA
+ * build; the after variant is prerendered in place by the CLI afterwards.
  * @param {'before' | 'after'} variant
  */
 async function buildVariant(variant) {
   await build({
-    root: app,
+    root: testcase,
     base: `/${variant}/`,
-    define: { __DEMO_ORIGIN__: JSON.stringify(origin) },
     logLevel: 'warn',
     build: {
       outDir: path.join(site, variant),
@@ -283,6 +284,9 @@ async function writeReleasesPage() {
     <meta name="twitter:image" content="${origin}/og-card.png" />
     <meta name="twitter:image:alt" content="snappy-prerender releases" />
     <link rel="icon" href="/logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script>
       try {
         const savedTheme = localStorage.getItem('snappy-demo-theme');
@@ -292,10 +296,15 @@ async function writeReleasesPage() {
       } catch {}
     </script>
     <style>
-      :root { color-scheme: dark; --bg:#000000; --panel:#0a0a0a; --panel-2:#121212; --text:#ffffff; --muted:#a3a3a3; --line:#2a2a2a; --accent:#ffffff; --accent-ink:#000000; --body:#d4d4d4; }
-      :root[data-theme="light"] { color-scheme: light; --bg:#ffffff; --panel:#f7f7f7; --panel-2:#ededed; --text:#000000; --muted:#525252; --line:#d4d4d4; --accent:#000000; --accent-ink:#ffffff; --body:#333333; }
+      :root { color-scheme: dark; --bg:#1e1e1e; --panel:#252526; --panel-2:#2d2d2d; --text:#d4d4d4; --muted:#858585; --line:#3c3c3c; --accent:#7ee787; --accent-ink:#07120b; --body:#d4d4d4; }
+      :root[data-theme="light"] { color-scheme: light; --bg:#ffffff; --panel:#f3f3f3; --panel-2:#ececec; --text:#333333; --muted:#6e7681; --line:#e5e5e5; --accent:#1a7f37; --accent-ink:#ffffff; --body:#333333; }
       * { box-sizing:border-box; }
-      body { margin:0; background:var(--bg); color:var(--text); font-family:ui-monospace,"SFMono-Regular","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace; line-height:1.6; }
+      html { scrollbar-color:var(--line) var(--bg); scrollbar-width:thin; }
+      *::-webkit-scrollbar { width:12px; height:12px; }
+      *::-webkit-scrollbar-track { background:var(--bg); }
+      *::-webkit-scrollbar-thumb { border:3px solid var(--bg); border-radius:999px; background:var(--line); }
+      *::-webkit-scrollbar-thumb:hover { background:var(--accent); }
+      body { margin:0; background:var(--bg); color:var(--text); font-family:"JetBrains Mono","Cascadia Code","SFMono-Regular",Menlo,Consolas,monospace; line-height:1.6; }
       a { color:inherit; }
       .page { width:min(1180px,calc(100% - 2rem)); margin:0 auto; }
       header { display:flex; align-items:center; justify-content:space-between; gap:1.5rem; padding:1.25rem 0; border-bottom:1px solid var(--line); }
@@ -306,20 +315,24 @@ async function writeReleasesPage() {
       .header-actions a, .header-actions button { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .7rem; border:1px solid var(--line); border-radius:999px; background:transparent; color:var(--muted); cursor:pointer; font:inherit; font-size:.82rem; text-decoration:none; }
       .header-actions a:hover, .header-actions button:hover { border-color:var(--accent); color:var(--text); }
       .header-actions svg { width:.95rem; height:.95rem; fill:currentColor; }
-      .npm-mark,.ph-mark { display:grid; height:1rem; min-width:1rem; place-items:center; border-radius:.25rem; font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.58rem; font-weight:800; }
-      .npm-mark { padding:0 .15rem; background:var(--panel-2); color:var(--text); }
-      .ph-mark { background:var(--panel-2); color:var(--text); }
+      .header-actions .icon-link { width:2.1rem; height:2.1rem; padding:0; justify-content:center; border-radius:50%; }
+      .header-actions .icon-link svg { width:1rem; height:1rem; }
+      .header-actions .icon-link .npm-mark { height:1.15rem; min-width:1.15rem; background:var(--panel-2); color:var(--text); }
+      .theme-icon--moon { display:none; }
+      :root[data-theme="light"] .theme-icon--sun { display:none; }
+      :root[data-theme="light"] .theme-icon--moon { display:block; }
+      .npm-mark { display:grid; height:1rem; min-width:1rem; padding:0 .15rem; place-items:center; border-radius:.25rem; background:var(--panel-2); color:var(--text); font-family:"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace; font-size:.58rem; font-weight:800; }
       .hero { padding:clamp(3rem,7vw,5.5rem) 0 2.5rem; }
-      .eyebrow { margin:0 0 .9rem; color:var(--accent); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.75rem; letter-spacing:.12em; text-transform:uppercase; }
+      .eyebrow { margin:0 0 .9rem; color:var(--accent); font-family:"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace; font-size:.75rem; letter-spacing:.12em; text-transform:uppercase; }
       h1 { max-width:16ch; margin:0; font-size:clamp(2.8rem,7vw,5.5rem); line-height:.95; letter-spacing:-.055em; }
-      .lede { max-width:64ch; margin:1.4rem 0 0; color:var(--muted); font-size:clamp(1rem,2vw,1.15rem); }
+      .lede { margin:1.4rem 0 0; color:var(--muted); font-size:clamp(1rem,2vw,1.15rem); }
       .features { padding:1.5rem 0 1rem; border-top:1px solid var(--line); }
       .features h2 { margin:.25rem 0 .7rem; font-size:1.4rem; letter-spacing:-.03em; }
-      .feature-list { display:grid; gap:.5rem; max-width:80ch; margin:0; padding-left:1.1rem; color:var(--body); font-size:.9rem; }
+      .feature-list { display:grid; gap:.5rem; margin:0; padding-left:1.1rem; color:var(--body); font-size:.9rem; }
       .feature-list strong { color:var(--accent); }
       .release-layout { display:grid; grid-template-columns:220px minmax(0,1fr); gap:2.5rem; padding-bottom:4rem; }
       .version-nav { position:sticky; top:1.5rem; align-self:start; display:flex; flex-direction:column; gap:.25rem; border-left:1px solid var(--line); padding-left:1rem; }
-      .version-nav a { display:flex; justify-content:space-between; gap:.6rem; padding:.35rem 0; color:var(--muted); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.75rem; text-decoration:none; }
+      .version-nav a { display:flex; justify-content:space-between; gap:.6rem; padding:.35rem 0; color:var(--muted); font-family:"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace; font-size:.75rem; text-decoration:none; }
       .version-nav a span { color:var(--muted); font-size:.65rem; }
       .version-nav a:hover,.version-nav a.active { color:var(--accent); }
       .release { padding:1.5rem 0 1.8rem; border-top:1px solid var(--line); }
@@ -327,18 +340,18 @@ async function writeReleasesPage() {
       .release header { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:0 0 1rem; border:0; }
       .release-version { display:block; font-size:1.4rem; font-weight:700; letter-spacing:-.04em; }
       .release--latest .release-version { color:var(--accent); }
-      .release time { display:block; margin-top:.15rem; color:var(--muted); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.68rem; }
-      .release header a { flex:none; color:var(--muted); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.66rem; text-decoration:none; }
+      .release time { display:block; margin-top:.15rem; color:var(--muted); font-family:"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace; font-size:.68rem; }
+      .release header a { flex:none; color:var(--muted); font-family:"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace; font-size:.66rem; text-decoration:none; }
       .release header a:hover { color:var(--accent); }
-      .release h3 { margin:1.35rem 0 .5rem; color:var(--accent); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; }
+      .release h3 { margin:1.35rem 0 .5rem; color:var(--accent); font-family:"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; }
       .release ul { margin:.3rem 0 .9rem; padding-left:1.1rem; }
       .release li { margin:.35rem 0; color:var(--body); font-size:.9rem; }
-      .release p { max-width:78ch; margin:.5rem 0; color:var(--body); font-size:.9rem; }
-      .release code { padding:.1rem .28rem; border-radius:.25rem; background:var(--panel-2); color:var(--accent); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.85em; }
+      .release p { margin:.5rem 0; color:var(--body); font-size:.9rem; }
+      .release code { padding:.1rem .28rem; border-radius:.25rem; background:var(--panel-2); color:var(--accent); font-family:"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace; font-size:.85em; }
       .release-note { padding:.8rem 1rem; border:1px solid var(--line); border-radius:.7rem; background:var(--panel-2); color:var(--muted)!important; }
       footer { display:flex; justify-content:space-between; gap:1rem; padding:1.25rem 0 2.5rem; border-top:1px solid var(--line); color:var(--muted); font-size:.8rem; }
       @media (max-width:800px) { .release-layout { grid-template-columns:1fr; gap:1.5rem; } .version-nav { position:static; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.35rem .9rem; border-left:0; border-bottom:1px solid var(--line); padding:0 0 .9rem; } .version-nav a { gap:.4rem; } }
-      @media (max-width:480px) { .header-actions a { display:none; } .release header { flex-direction:column; } }
+      @media (max-width:480px) { header { flex-wrap:wrap; } .header-actions { width:100%; } .header-actions a, .header-actions button { flex:1 1 auto; justify-content:center; } .header-actions .icon-link { flex:0 0 2.1rem; } .release header { flex-direction:column; } }
     </style>
   </head>
   <body>
@@ -347,10 +360,10 @@ async function writeReleasesPage() {
         <a class="brand" href="/"><img src="/logo.png" alt="" /><strong>snappy-prerender</strong></a>
         <div class="header-actions">
           <a href="/">Live demo</a>
-          <a href="https://github.com/sayakmukherjee080/snappy-prerender" target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.2.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.6 11.6 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.2c0 .4.2.7.8.6A11.5 11.5 0 0 0 12 .7Z"/></svg>GitHub</a>
-          <a href="https://www.npmjs.com/package/snappy-prerender" target="_blank" rel="noreferrer" aria-label="npm package"><span class="npm-mark" aria-hidden="true">npm</span></a>
-          <a href="https://www.producthunt.com/products/snappy-prerender" target="_blank" rel="noreferrer"><span class="ph-mark" aria-hidden="true">P</span>Product Hunt</a>
-          <button type="button" id="theme-toggle" aria-label="Switch to light theme">dark</button>
+          <a class="icon-link" href="https://github.com/sayakmukherjee080/snappy-prerender" target="_blank" rel="noreferrer" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.2.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.6 11.6 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.2c0 .4.2.7.8.6A11.5 11.5 0 0 0 12 .7Z"/></svg></a>
+          <a class="icon-link" href="https://www.npmjs.com/package/snappy-prerender" target="_blank" rel="noreferrer" aria-label="npm package" title="npm"><span class="npm-mark" aria-hidden="true">npm</span></a>
+          <a class="icon-link" href="https://www.producthunt.com/products/snappy-prerender" target="_blank" rel="noreferrer" aria-label="Product Hunt" title="Product Hunt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1.3 5h3.1a3.1 3.1 0 0 1 0 6.2h-1.5V17h-1.6V7Zm1.6 1.5v3.2h1.5a1.6 1.6 0 0 0 0-3.2h-1.5Z"/></svg></a>
+          <button class="icon-link" type="button" id="theme-toggle" aria-label="Switch to light theme" title="Switch to light theme"><svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></svg></button>
         </div>
       </header>
       <main>
@@ -379,14 +392,16 @@ async function writeReleasesPage() {
     <script>
       const themeToggle = document.getElementById('theme-toggle');
       const savedTheme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-      themeToggle.textContent = savedTheme;
-      themeToggle.setAttribute('aria-label', 'Switch to ' + (savedTheme === 'dark' ? 'light' : 'dark') + ' theme');
+      const savedLabel = 'Switch to ' + (savedTheme === 'dark' ? 'light' : 'dark') + ' theme';
+      themeToggle.setAttribute('aria-label', savedLabel);
+      themeToggle.setAttribute('title', savedLabel);
       themeToggle.addEventListener('click', () => {
         const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
         document.documentElement.dataset.theme = next;
         try { localStorage.setItem('snappy-demo-theme', next); } catch {}
-        themeToggle.textContent = next;
-        themeToggle.setAttribute('aria-label', 'Switch to ' + (next === 'dark' ? 'light' : 'dark') + ' theme');
+        const label = 'Switch to ' + (next === 'dark' ? 'light' : 'dark') + ' theme';
+        themeToggle.setAttribute('aria-label', label);
+        themeToggle.setAttribute('title', label);
       });
     </script>
   </body>
@@ -397,18 +412,45 @@ async function writeReleasesPage() {
 }
 
 /**
+ * Builds the site checker page from the landing shell so both pages share the same
+ * header, footer and theme styles.
+ * @param {string} origin
+ */
+async function writeCheckPage(origin) {
+  const landing = await fs.readFile(path.join(here, 'landing', 'index.html'), 'utf8');
+  const style = landing.match(/<style>([\s\S]*?)<\/style>/i)?.[1] ?? '';
+  const header = landing.match(/<header class="topbar">[\s\S]*?<\/header>/i)?.[0] ?? '';
+  const footer = landing.match(/<footer>[\s\S]*?<\/footer>/i)?.[0] ?? '';
+  const template = await fs.readFile(path.join(here, 'landing', 'check.html'), 'utf8');
+  const apiOrigin = (process.env.DEMO_API_ORIGIN ?? '').replace(/\/+$/, '');
+  const page = template
+    .replace('__SHARED_STYLE__', style)
+    .replace('__HEADER__', header)
+    .replace('__FOOTER__', footer)
+    .replaceAll('__DEMO_ORIGIN__', origin)
+    .replaceAll('__CHECK_API_ORIGIN__', apiOrigin);
+  await fs.mkdir(path.join(site, 'check'), { recursive: true });
+  await fs.writeFile(path.join(site, 'check', 'index.html'), page);
+}
+
+/**
  * Writes a root sitemap and robots.txt for the demo's crawlable pages.
  * @param {string} origin
  */
 async function writeDiscoveryFiles(origin) {
-  const routes = ['/', '/releases/', '/after/', '/after/pricing/', '/after/docs/'];
-  const urls = routes
-    .map((route) => `  <url><loc>${new URL(route, origin).href}</loc></url>`)
-    .join('\n');
-  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+  const afterSitemap = await fs.readFile(path.join(site, 'after', 'sitemap.xml'), 'utf8');
+  const afterUrls = (afterSitemap.match(/<url>[\s\S]*?<\/url>/g) ?? []).map(
+    (entry) => `  ${entry.replace(/\n\s*/g, '\n  ')}`,
+  );
+  const landingUrls = ['/', '/releases/', '/check/'].map(
+    (route) => `  <url><loc>${new URL(route, origin).href}</loc></url>`,
+  );
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${[...landingUrls, ...afterUrls].join('\n')}\n</urlset>\n`;
   await fs.writeFile(path.join(site, 'sitemap.xml'), sitemap);
   const robots = `User-agent: *\nAllow: /\nDisallow: /before/\nDisallow: /playback/\n\nSitemap: ${origin}/sitemap.xml\n`;
   await fs.writeFile(path.join(site, 'robots.txt'), robots);
+  const llms = `# snappy-prerender\n\n> Build-time static prerendering for existing single-page apps. MIT-licensed react-snap alternative.\n\n## Demo\n- [Home](${origin}/): before/after playback and the package overview.\n- [Site checker](${origin}/check/): see the crawler metadata and llms.txt for any URL.\n- [Releases](${origin}/releases/): release notes generated from CHANGELOG.md.\n- [Prerendered demo](${origin}/after/): the same SPA after snappy-prerender.\n- [Full route index](${origin}/after/llms.txt): every prerendered route with its title and description.\n- [Pricing demo](${origin}/after/pricing/): a second prerendered route.\n- [Docs demo](${origin}/after/docs/): how the two builds are made.\n\n## Project\n- [README](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/README.md)\n- [Configuration](https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/configuration.md)\n- [npm package](https://www.npmjs.com/package/snappy-prerender)\n`;
+  await fs.writeFile(path.join(site, 'llms.txt'), llms);
 }
 
 /**
@@ -429,6 +471,11 @@ function escapeHtml(value) {
 async function writeRawFrame(name, title, source) {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title><style>
     * { box-sizing: border-box; }
+    html { scrollbar-color: #3c3c3c #000000; scrollbar-width: thin; }
+    *::-webkit-scrollbar { width: 10px; height: 10px; }
+    *::-webkit-scrollbar-track { background: #000000; }
+    *::-webkit-scrollbar-thumb { border: 2px solid #000000; border-radius: 999px; background: #3c3c3c; }
+    *::-webkit-scrollbar-thumb:hover { background: #007acc; }
     html, body { margin: 0; min-height: 100%; background: #000000; color: #e5e5e5; }
     body { padding: 16px; font: 12px/1.65 ui-monospace, "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; }
     .meta { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #2a2a2a; color: #a3a3a3; font-size: 11px; }
@@ -445,9 +492,17 @@ async function writeRawFrame(name, title, source) {
  * @returns {string}
  */
 function snapshotHtml(html, basePath) {
+  const scrollbar = `<style>
+    html { overflow-y: scroll; }
+    *::-webkit-scrollbar { width: 10px; height: 10px; }
+    *::-webkit-scrollbar-track { background: #f2f0e9; }
+    *::-webkit-scrollbar-thumb { border: 2px solid #f2f0e9; border-radius: 999px; background: #b8b2a5; }
+    *::-webkit-scrollbar-thumb:hover { background: #b5522f; }
+  </style>`;
   return html
     .replace(/<script\b[\s\S]*?<\/script>/gi, '')
-    .replace(/<head([^>]*)>/i, `<head$1><base href="${basePath}">`);
+    .replace(/(href|src)="\/before\/assets\//gi, '$1="/after/assets/')
+    .replace(/<head([^>]*)>/i, `<head$1><base href="${basePath}">${scrollbar}`);
 }
 
 /**
@@ -456,18 +511,17 @@ function snapshotHtml(html, basePath) {
  * @param {string} beforeHtml
  * @param {string} afterHtml
  */
-async function capturePlayback(beforeHtml, afterHtml) {
+async function capturePlayback({ beforeHtml, afterHtml }) {
   const playbackDir = path.join(site, 'playback');
   await fs.mkdir(playbackDir, { recursive: true });
 
-  const write = async (name, html, basePath) => {
+  const write = async (name, html, basePath = '/') => {
     await fs.writeFile(path.join(playbackDir, name), snapshotHtml(html, basePath));
   };
-  await write('before-0.html', beforeHtml, '/before/');
-  await write('after-0.html', afterHtml, '/after/');
+  await write('before-0.html', beforeHtml);
+  await write('after-0.html', afterHtml);
 
   const config = resolveConfig({ logLevel: 'silent' });
-  const started = await startStaticServer({ dir: site, base: '/' });
   const { browser } = await launchBrowser(config, {
     info() {},
     warn() {},
@@ -477,26 +531,30 @@ async function capturePlayback(beforeHtml, afterHtml) {
   try {
     const page = await browser.newPage();
     await page.setViewportSize({ width: 1200, height: 900 });
-    await page.goto(`${started.origin}/before/?playback=1`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    });
-    await page.waitForSelector('.topbar', { timeout: 10000 });
-    await write('before-1.html', await page.content(), '/before/');
-    await page.waitForSelector('h1', { timeout: 10000 });
-    await write('before-2.html', await page.content(), '/before/');
-    await page.waitForSelector('.cards', { timeout: 10000 });
-    await write('before-3.html', await page.content(), '/before/');
+    const server = await startStaticServer({ dir: site, base: '/' });
+    try {
+      await page.goto(`${server.origin}/before/`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+      await page.waitForSelector('header', { timeout: 10000 });
+      await write('before-1.html', await page.content());
+      await page.waitForSelector('h1', { timeout: 10000 });
+      await write('before-2.html', await page.content());
+      await page.waitForSelector('footer', { timeout: 10000 });
+      await write('before-3.html', await page.content());
 
-    await page.goto(`${started.origin}/after/`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    });
-    await page.waitForSelector('.cards', { timeout: 10000 });
-    await write('after-1.html', await page.content(), '/after/');
+      await page.goto(`${server.origin}/after/`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+      await page.waitForSelector('footer', { timeout: 10000 });
+      await write('after-1.html', await page.content());
+    } finally {
+      await server.close();
+    }
   } finally {
     await browser.close();
-    await started.close();
   }
 
   const stages = [
@@ -541,6 +599,7 @@ async function capturePlayback(beforeHtml, afterHtml) {
  * @param {string} file
  */
 async function createOgImage(file) {
+  const logo = (await fs.readFile(path.join(repo, 'assets', 'snappy-logo.png'))).toString('base64');
   const config = resolveConfig({ logLevel: 'silent' });
   const { browser } = await launchBrowser(config, {
     info() {},
@@ -559,14 +618,14 @@ async function createOgImage(file) {
         color: #ffffff; font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
       }
       .card { display: flex; height: 100%; flex-direction: column; justify-content: space-between; padding: 64px; }
-      .brand { display: flex; align-items: center; gap: 16px; color: #ffffff; font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
-      .mark { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 12px; background: #ffffff; color: #000000; }
+      .brand { display: flex; align-items: center; gap: 24px; color: #ffffff; font-size: 34px; font-weight: 800; letter-spacing: -0.03em; }
+      .brand-logo { display: block; width: 190px; height: 190px; object-fit: contain; }
       h1 { max-width: 900px; margin: 0; font-size: 76px; line-height: 0.95; letter-spacing: -0.06em; }
       p { max-width: 760px; margin: 20px 0 0; color: #a3a3a3; font-size: 28px; line-height: 1.35; }
       .foot { display: flex; justify-content: space-between; color: #a3a3a3; font-family: ui-monospace, monospace; font-size: 18px; letter-spacing: 0.06em; text-transform: uppercase; }
       .accent { color: #ffffff; }
     </style></head><body><div class="card">
-      <div class="brand"><span class="mark">S</span> snappy-prerender</div>
+      <div class="brand"><img class="brand-logo" src="data:image/png;base64,${logo}" alt="" /> snappy-prerender</div>
       <div><h1>The page content<br />is in the HTML.</h1><p>The framework-agnostic react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs. Each route is static HTML at build time, so crawlers read it before the app script runs.</p></div>
       <div class="foot"><span>react-snap alternative</span><span>MIT · snappy-prerender</span></div>
     </div></body></html>`);
@@ -578,19 +637,27 @@ async function createOgImage(file) {
 
 await fs.rm(site, { recursive: true, force: true });
 await fs.mkdir(site, { recursive: true });
+await fs.copyFile(path.join(repo, 'assets', 'snappy-logo.png'), path.join(site, 'logo.png'));
+await createOgImage(path.join(site, 'og-card.png'));
 
 await buildVariant('before');
 await buildVariant('after');
+for (const variant of ['before', 'after']) {
+  await fs.copyFile(
+    path.join(repo, 'assets', 'snappy-logo.png'),
+    path.join(site, variant, 'logo.png'),
+  );
+  await fs.copyFile(path.join(site, 'og-card.png'), path.join(site, variant, 'og-card.png'));
+}
 
+const localCli = path.join(here, 'node_modules', '.bin', 'snappy-prerender');
+const cliPath = await fs
+  .access(localCli)
+  .then(() => localCli)
+  .catch(() => path.join(repo, 'src', 'cli.js'));
 const result = spawnSync(
   process.execPath,
-  [
-    path.join(repo, 'src', 'cli.js'),
-    '--config',
-    path.join(here, 'snappy.after.config.mjs'),
-    '--log-level',
-    'warn',
-  ],
+  [cliPath, '--config', path.join(here, 'snappy.after.config.mjs'), '--log-level', 'warn'],
   {
     cwd: here,
     env: { ...process.env, DEMO_ORIGIN: origin },
@@ -605,12 +672,11 @@ const beforeHtml = await fs.readFile(path.join(site, 'before', 'index.html'), 'u
 const afterHtml = await fs.readFile(path.join(site, 'after', 'index.html'), 'utf8');
 const before = measure(beforeHtml);
 const after = measure(afterHtml);
-await createOgImage(path.join(site, 'og-card.png'));
-await capturePlayback(beforeHtml, afterHtml);
+await capturePlayback({ beforeHtml, afterHtml });
 await writeRawFrame('raw-before.html', 'Without snappy-prerender: raw HTML', beforeHtml);
 await writeRawFrame('raw-after.html', 'With snappy-prerender: raw HTML', afterHtml);
-await fs.copyFile(path.join(repo, 'assets', 'snappy-logo.png'), path.join(site, 'logo.png'));
 await writeReleasesPage();
+await writeCheckPage(origin);
 await writeDiscoveryFiles(origin);
 
 const social = {
@@ -633,8 +699,32 @@ await fs.writeFile(
   path.join(site, 'comparison.json'),
   `${JSON.stringify({ before, after, social, origin }, null, 2)}\n`,
 );
+const featureCards = FEATURES.map(
+  ([title, copy, href]) =>
+    `<article class="benefit-card"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(copy)}</p><a href="${href}" target="_blank" rel="noreferrer">Read the docs ↗</a></article>`,
+).join('\n          ');
 const landing = await fs.readFile(path.join(here, 'landing', 'index.html'), 'utf8');
-await fs.writeFile(path.join(site, 'index.html'), landing.replaceAll('__DEMO_ORIGIN__', origin));
+await fs.writeFile(
+  path.join(site, 'index.html'),
+  landing.replaceAll('__DEMO_ORIGIN__', origin).replace('__FEATURES__', featureCards),
+);
+await prerender({
+  sourceDir: site,
+  include: ['/', '/check', '/releases'],
+  notFoundRoute: null,
+  crawl: false,
+  verify: false,
+  audit: false,
+  sitemap: false,
+  llmsTxt: false,
+  preloadManifest: false,
+  logLevel: 'warn',
+  metadata: { siteUrl: origin, siteName: 'snappy-prerender', trailingSlash: 'always' },
+  routeOverrides: [
+    { match: '/', waitFor: '.benefit-grid' },
+    { match: '/check', waitFor: '.check-form' },
+  ],
+});
 
 console.log('Built before, after, playback, raw source, releases, OG card and comparison page.');
 console.log(`Before: h1=${before.h1}, text=${before.textLength}, bytes=${before.htmlBytes}`);

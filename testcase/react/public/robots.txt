@@ -1,4 +1,2 @@
 User-agent: *
 Allow: /
-
-Sitemap: https://aethercompute.space/sitemap.xml

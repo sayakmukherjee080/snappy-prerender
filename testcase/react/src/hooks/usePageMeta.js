@@ -59,6 +59,7 @@ export function usePageMeta({
     if (!enabled) return;
     const defaults = readMetadataDefaults();
     const fullTitle = `${title} — ${SITE_NAME}`;
+    const image = assetUrl(defaults, defaults.defaultImage);
     document.title = fullTitle;
 
     setMetaTag('name', 'description', description);
@@ -67,9 +68,15 @@ export function usePageMeta({
     setMetaTag('property', 'og:description', description);
     setMetaTag('property', 'og:site_name', SITE_NAME);
     setMetaTag('property', 'og:type', 'website');
-    setMetaTag('name', 'twitter:card', 'summary');
+    setMetaTag('name', 'twitter:card', image ? 'summary_large_image' : 'summary');
     setMetaTag('name', 'twitter:title', fullTitle);
     setMetaTag('name', 'twitter:description', description);
+    if (image) {
+      setMetaTag('property', 'og:image', image);
+      setMetaTag('property', 'og:image:alt', fullTitle);
+      setMetaTag('name', 'twitter:image', image);
+      setMetaTag('name', 'twitter:image:alt', fullTitle);
+    }
     if (notFound) {
       document.head.querySelector('link[rel="canonical"]')?.remove();
       document.head.querySelector('meta[property="og:url"]')?.remove();
@@ -97,6 +104,15 @@ function canonicalUrl(defaults) {
     if (pathname !== '/' && !pathname.endsWith('/')) pathname = `${pathname}/`;
   }
   return new URL(`${base}${pathname}`, siteUrl).href;
+}
+
+// Resolves a metadata asset against the public site URL and base path.
+function assetUrl(defaults, value) {
+  if (!value) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('//')) return value;
+  const siteUrl = defaults.siteUrl ?? window.location.origin;
+  const base = defaults.base && defaults.base !== '/' ? defaults.base.replace(/\/$/, '') : '';
+  return new URL(`${base}${value.startsWith('/') ? value : `/${value}`}`, siteUrl).href;
 }
 
 // Creates or updates the canonical link so crawlers see one public URL per route.

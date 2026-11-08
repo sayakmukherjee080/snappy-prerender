@@ -1,0 +1,47 @@
+{
+  "info": {
+    "name": "snappy-prerender demo",
+    "description": "Site checker endpoint used by the demo's /check/ page. Requests must carry the site Origin.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Check a site",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Origin",
+            "value": "https://snappy-prerender.smoldev.com"
+          }
+        ],
+        "url": {
+          "raw": "https://psspsst.smolutils.in/api/check?url=https%3A%2F%2Fexample.com",
+          "host": ["psspsst", "smolutils", "in"],
+          "path": ["api", "check"],
+          "query": [
+            {
+              "key": "url",
+              "value": "https://example.com"
+            }
+          ]
+        },
+        "description": "Fetches a public page and its /llms.txt, returning crawler-visible metadata in a success envelope. Requests without the allowed Origin receive 403 FORBIDDEN_ORIGIN. Errors use { success: false, error, code }."
+      },
+      "response": []
+    },
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://psspsst.smolutils.in/health",
+          "host": ["psspsst", "smolutils", "in"],
+          "path": ["health"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

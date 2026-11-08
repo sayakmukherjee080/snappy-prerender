@@ -2,8 +2,27 @@ import { flushSync } from 'react-dom';
 
 const listeners = new Set();
 const navigationListeners = new Set();
+const BASE_PATH = (import.meta.env?.BASE_URL ?? '/').replace(/\/$/, '');
 
 let navigationPending = false;
+
+/**
+ * Adds the Vite public base to an app path for the browser address.
+ * @param {string} pathname
+ * @returns {string}
+ */
+export function withBase(pathname) {
+  if (!BASE_PATH || !pathname.startsWith('/')) return pathname;
+  if (pathname === BASE_PATH || pathname.startsWith(`${BASE_PATH}/`)) return pathname;
+  return pathname === '/' ? `${BASE_PATH}/` : `${BASE_PATH}${pathname}`;
+}
+
+// Removes the Vite public base before route matching.
+function stripBase(pathname) {
+  if (!BASE_PATH) return pathname;
+  if (pathname === BASE_PATH) return '/';
+  return pathname.startsWith(`${BASE_PATH}/`) ? pathname.slice(BASE_PATH.length) : pathname;
+}
 
 /**
  * Normalises a pathname so `/docs/` and `/docs` resolve to the same route.
@@ -11,8 +30,9 @@ let navigationPending = false;
  * @returns {string}
  */
 export function normalizePath(pathname) {
-  if (!pathname || pathname === '/') return '/';
-  return pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+  const appPath = stripBase(pathname);
+  if (!appPath || appPath === '/') return '/';
+  return appPath.endsWith('/') ? appPath.slice(0, -1) : appPath;
 }
 
 /**
@@ -88,7 +108,8 @@ export const locationStore = {
     if (typeof window === 'undefined') return false;
 
     const url = new URL(to, window.location.origin);
-    const nextAddress = `${url.pathname}${url.search}${url.hash}`;
+    const appPath = normalizePath(url.pathname);
+    const nextAddress = `${withBase(appPath)}${url.search}${url.hash}`;
     const currentAddress = `${window.location.pathname}${window.location.search}${window.location.hash}`;
 
     if (nextAddress === currentAddress) return false;
@@ -102,7 +123,7 @@ export const locationStore = {
       }
 
       currentLocation = {
-        path: normalizePath(url.pathname),
+        path: appPath,
         search: url.search,
         hash: url.hash,
         key,

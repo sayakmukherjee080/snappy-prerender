@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { withBase } from './store.js';
 
 /**
  * Catches failures inside a single route and offers a reset instead of blanking the shell.
@@ -50,7 +51,7 @@ export class RouteErrorBoundary extends Component {
             <button type="button" className="button" onClick={this.handleReset}>
               Retry route
             </button>
-            <a className="button button--ghost" href="/">
+            <a className="button button--ghost" href={withBase('/')}>
               Return home
             </a>
           </div>

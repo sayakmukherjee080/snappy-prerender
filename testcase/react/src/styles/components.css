@@ -85,6 +85,7 @@
 }
 
 .code {
+  min-width: 0;
   margin: 0;
   border: 1px solid var(--dark-line);
   background: #0a0e11;

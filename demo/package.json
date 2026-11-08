@@ -6,6 +6,18 @@
   "description": "Before/after demo for snappy-prerender: an SPA build and the same app prerendered.",
   "scripts": {
     "build": "node build.mjs",
-    "serve": "node serve.mjs"
+    "serve": "node serve.mjs",
+    "start": "node serve.mjs",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "sirv": "3.0.2",
+    "snappy-prerender": "file:.."
+  },
+  "devDependencies": {
+    "vite": "^7.3.7"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

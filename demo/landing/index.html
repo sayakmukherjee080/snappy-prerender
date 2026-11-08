@@ -3,67 +3,62 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>snappy-prerender demo: the framework-agnostic react-snap alternative</title>
+    <title>snappy-prerender: static prerendering for any SPA</title>
     <meta
       name="description"
-      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla apps."
+      content="Prerender every route of an existing SPA to static HTML at build time. No server renderer, no framework migration. MIT-licensed react-snap alternative."
     />
     <meta name="robots" content="index,follow" />
     <link rel="canonical" href="__DEMO_ORIGIN__/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="snappy-prerender" />
-    <meta property="og:title" content="snappy-prerender demo: react-snap alternative for React, Vue, Svelte and more" />
+    <meta property="og:title" content="snappy-prerender: static prerendering for any SPA" />
     <meta
       property="og:description"
-      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla apps."
+      content="Prerender every route of an existing SPA to static HTML at build time. No server renderer, no framework migration. MIT-licensed react-snap alternative."
     />
     <meta property="og:url" content="__DEMO_ORIGIN__/" />
     <meta property="og:image" content="__DEMO_ORIGIN__/og-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta
-      property="og:image:alt"
-      content="snappy-prerender demo: an SPA before and after prerendering"
-    />
+    <meta property="og:image:alt" content="snappy-prerender: static HTML for SPAs" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="snappy-prerender demo: react-snap alternative for every SPA" />
+    <meta name="twitter:title" content="snappy-prerender: static prerendering for any SPA" />
     <meta
       name="twitter:description"
-      content="See an SPA before and after prerendering. snappy-prerender is the maintained, MIT-licensed react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla apps."
+      content="Prerender every route of an existing SPA to static HTML at build time. No server renderer, no framework migration."
     />
     <meta name="twitter:image" content="__DEMO_ORIGIN__/og-card.png" />
-    <meta name="twitter:image:alt" content="snappy-prerender demo: an SPA before and after prerendering" />
+    <meta name="twitter:image:alt" content="snappy-prerender: static HTML for SPAs" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebPage",
-        "name": "snappy-prerender demo",
-        "description": "Before-and-after demo of snappy-prerender, the framework-agnostic react-snap alternative for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla single-page apps.",
+        "name": "snappy-prerender",
+        "description": "Build-time static prerendering for existing single-page apps.",
         "url": "__DEMO_ORIGIN__/",
         "mainEntity": {
           "@type": "SoftwareApplication",
           "name": "snappy-prerender",
-          "alternateName": "snappy",
           "applicationCategory": "DeveloperApplication",
           "operatingSystem": "Node.js",
-          "description": "MIT-licensed react-snap alternative that prerenders React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs to static HTML at build time with Playwright, hydration checks, per-route metadata and sitemap output.",
+          "description": "MIT-licensed react-snap alternative that prerenders React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla SPAs to static HTML at build time.",
           "url": "https://github.com/sayakmukherjee080/snappy-prerender",
           "sameAs": [
             "https://www.npmjs.com/package/snappy-prerender",
             "https://github.com/sayakmukherjee080/snappy-prerender"
           ],
-          "keywords": "react-snap alternative, react-snap replacement, SPA prerendering, prerender React, prerender Vue, prerender Svelte, prerender Preact, prerender Angular, prerender Solid, prerender Lit, prerender Ember, static HTML, hydration verification, per-route metadata, sitemap, critical CSS, preload hints, locales, hreflang, AI crawler",
-          "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
-          },
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
           "license": "https://opensource.org/licenses/MIT",
           "isAccessibleForFree": true
         }
       }
     </script>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2212%22 fill=%22%23000%22/><text x=%2250%22 y=%2262%22 font-family=%22monospace%22 font-size=%2238%22 font-weight=%22700%22 fill=%22%23fff%22 text-anchor=%22middle%22>%3E_</text></svg>" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script>
       try {
         const savedTheme = localStorage.getItem('snappy-demo-theme');
@@ -75,641 +70,611 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #000000;
-        --panel: #0a0a0a;
-        --panel-2: #121212;
-        --text: #ffffff;
-        --muted: #a3a3a3;
-        --line: #2a2a2a;
-        --accent: #ffffff;
-        --accent-ink: #000000;
-        --orange: #bdbdbd;
+        --bg: #1e1e1e;
+        --panel: #252526;
+        --panel-2: #2d2d2d;
+        --text: #d4d4d4;
+        --muted: #858585;
+        --line: #3c3c3c;
+        --accent: #7ee787;
+        --accent-ink: #07120b;
+        --orange: #ce9178;
+        --editor: #1e1e1e;
+        --syntax-keyword: #569cd6;
+        --syntax-string: #ce9178;
+        --syntax-comment: #6a9955;
+        --syntax-fn: #dcdcaa;
+        --syntax-number: #b5cea8;
+        --syntax-type: #4ec9b0;
+        --syntax-var: #9cdcfe;
       }
 
       :root[data-theme="light"] {
         color-scheme: light;
         --bg: #ffffff;
-        --panel: #f7f7f7;
-        --panel-2: #ededed;
-        --text: #000000;
-        --muted: #525252;
-        --line: #d4d4d4;
-        --accent: #000000;
+        --panel: #f3f3f3;
+        --panel-2: #ececec;
+        --text: #333333;
+        --muted: #6e7681;
+        --line: #e5e5e5;
+        --accent: #1a7f37;
         --accent-ink: #ffffff;
-        --orange: #666666;
+        --orange: #a31515;
+        --editor: #ffffff;
+        --syntax-keyword: #0000ff;
+        --syntax-string: #a31515;
+        --syntax-comment: #008000;
+        --syntax-fn: #795e26;
+        --syntax-number: #098658;
+        --syntax-type: #267f99;
+        --syntax-var: #001080;
       }
 
       * { box-sizing: border-box; }
-
+      html {
+        scrollbar-color: var(--line) var(--bg);
+        scrollbar-width: thin;
+      }
+      *::-webkit-scrollbar { width: 12px; height: 12px; }
+      *::-webkit-scrollbar-track { background: var(--bg); }
+      *::-webkit-scrollbar-thumb {
+        border: 3px solid var(--bg);
+        border-radius: 999px;
+        background: var(--line);
+      }
+      *::-webkit-scrollbar-thumb:hover { background: var(--accent); }
       body {
         margin: 0;
         background: var(--bg);
         color: var(--text);
-        font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+        font-family: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
         line-height: 1.6;
       }
-
       a { color: inherit; }
-
-      .page {
-        width: min(1180px, calc(100% - 2rem));
-        margin: 0 auto;
-      }
-
-      header {
+      .page { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
+      .topbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 1.5rem;
-        padding: 1.25rem 0;
+        gap: 1rem;
+        padding: 1.1rem 0;
         border-bottom: 1px solid var(--line);
       }
-
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 0.7rem;
-        text-decoration: none;
-      }
-
-      .brand-logo {
-        display: block;
-        width: auto;
-        height: 2rem;
-        border-radius: 0.4rem;
-      }
-
-      .brand-name {
-        font-size: 1.05rem;
-        letter-spacing: -0.03em;
-      }
-
-      .header-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-      .header-actions a, .header-actions button {
+      .brand { display: flex; align-items: center; gap: 0.65rem; text-decoration: none; }
+      .brand img { display: block; width: auto; height: 1.9rem; border-radius: 0.35rem; }
+      .brand strong { font-size: 1rem; letter-spacing: -0.03em; }
+      .header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+      .header-actions a,
+      .header-actions button {
         display: inline-flex;
         align-items: center;
-        gap: 0.4rem;
-        padding: 0.45rem 0.7rem;
+        gap: 0.35rem;
+        padding: 0.4rem 0.65rem;
         border: 1px solid var(--line);
         border-radius: 999px;
         background: transparent;
         color: var(--muted);
         cursor: pointer;
         font: inherit;
-        font-size: 0.82rem;
+        font-size: 0.78rem;
         text-decoration: none;
       }
-      .header-actions a:hover, .header-actions button:hover { border-color: var(--accent); color: var(--text); }
-      .header-actions svg { width: 0.95rem; height: 0.95rem; fill: currentColor; }
-      .npm-mark, .ph-mark {
+      .header-actions a:hover,
+      .header-actions button:hover { border-color: var(--accent); color: var(--text); }
+      .header-actions svg { width: 0.9rem; height: 0.9rem; fill: currentColor; }
+      .header-actions .icon-link {
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        justify-content: center;
+        border-radius: 50%;
+      }
+      .header-actions .icon-link svg { width: 1rem; height: 1rem; }
+      .header-actions .icon-link .npm-mark {
         display: grid;
-        height: 1rem;
-        min-width: 1rem;
+        height: 1.15rem;
+        min-width: 1.15rem;
         place-items: center;
-        border-radius: 0.25rem;
-        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-        font-size: 0.58rem;
+        border-radius: 0.2rem;
+        background: var(--panel-2);
+        color: var(--text);
+        font-size: 0.56rem;
         font-weight: 800;
       }
-      .npm-mark { padding: 0 0.15rem; background: var(--panel-2); color: var(--text); }
-      .ph-mark { background: var(--panel-2); color: var(--text); }
+      .theme-icon--moon { display: none; }
+      :root[data-theme="light"] .theme-icon--sun { display: none; }
+      :root[data-theme="light"] .theme-icon--moon { display: block; }
 
-      .hero { padding: clamp(1.5rem, 3vw, 2.5rem) 0 2rem; }
+      .hero { padding: clamp(2.2rem, 6vw, 4.8rem) 0 2.2rem; }
       .eyebrow {
         margin: 0 0 0.9rem;
         color: var(--accent);
-        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-        font-size: 0.75rem;
+        font-size: 0.72rem;
         letter-spacing: 0.12em;
         text-transform: uppercase;
       }
-
+      .hero h1 .accent-word { color: var(--accent); }
       h1 {
-        max-width: none;
+        max-width: 20ch;
         margin: 0;
-        font-size: clamp(2.7rem, 7vw, 5.8rem);
+        font-size: clamp(2.3rem, 5vw, 4rem);
         font-weight: 650;
         letter-spacing: -0.055em;
-        line-height: 0.95;
+        line-height: 0.98;
       }
-
       .hero-tagline {
-        margin: 0.8rem 0 0;
-        color: var(--accent);
-        font-size: clamp(1.1rem, 1.8vw, 1.45rem);
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-
-      .lede {
-        max-width: none;
-        margin: 1.5rem 0 0;
+        margin: 1rem 0 0;
         color: var(--muted);
-        font-size: clamp(1rem, 2vw, 1.2rem);
+        font-size: clamp(1rem, 2vw, 1.25rem);
+        font-weight: 400;
+        letter-spacing: 0;
       }
-
-      .timeline-controls {
+      .install-row {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 0.7rem;
-        margin-top: 2rem;
+        gap: 0.55rem;
+        margin-top: 1.6rem;
       }
-
-      .play-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.45rem;
-        border: 0;
-        border-radius: 999px;
-        padding: 0.55rem 0.9rem;
-        background: var(--accent);
-        color: var(--accent-ink);
-        cursor: pointer;
-        font: inherit;
-        font-size: 0.85rem;
-        font-weight: 700;
-      }
-
-      .play-button:hover { filter: brightness(1.05); }
-      .play-icon { font-size: 0.65rem; }
-      #timeline { width: min(320px, 42vw); accent-color: var(--accent); cursor: pointer; }
-
-      .segment {
-        display: inline-flex;
-        padding: 0.25rem;
+      .install-row code {
+        padding: 0.55rem 0.8rem;
         border: 1px solid var(--line);
-        border-radius: 999px;
+        border-radius: 0.55rem;
         background: var(--panel);
+        color: var(--accent);
+        font-size: 0.82rem;
       }
-
-      .segment button {
-        border: 0;
-        border-radius: 999px;
-        padding: 0.5rem 0.8rem;
+      .install-row button {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 0.55rem;
         background: transparent;
         color: var(--muted);
         cursor: pointer;
         font: inherit;
-        font-size: 0.85rem;
+        font-size: 0.78rem;
       }
-
-      .segment button[aria-pressed="true"] {
-        background: var(--accent);
-        color: var(--accent-ink);
-        font-weight: 700;
-      }
-
-      .mode-note { color: var(--muted); font-size: 0.85rem; }
-
-      .compare {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-        padding-bottom: 1rem;
-      }
-
-      .pane {
+      .install-row button:hover { border-color: var(--accent); color: var(--text); }
+      .hero-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; }
+      .check-cta {
         position: relative;
         overflow: hidden;
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+        gap: clamp(1.5rem, 4vw, 3rem);
+        align-items: center;
+        margin: 0 0 1.8rem;
+        padding: clamp(1.4rem, 3vw, 2rem);
         border: 1px solid var(--line);
-        border-radius: 1rem;
+        border-left: 3px solid var(--accent);
+        border-radius: 1.1rem;
         background: var(--panel);
       }
-
-      .pane-head {
+      .check-cta::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 12%;
+        right: 12%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        opacity: 0.55;
+      }
+      .check-cta .eyebrow { display: flex; align-items: center; gap: 0.5rem; }
+      .check-cta__pulse {
+        width: 0.42rem;
+        height: 0.42rem;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .check-cta h2 {
+        max-width: 22ch;
+        margin: 0;
+        font-size: clamp(1.4rem, 2.7vw, 1.95rem);
+        line-height: 1.12;
+        letter-spacing: -0.045em;
+      }
+      .check-cta h2 em { color: var(--accent); font-style: normal; }
+      .check-cta p { margin: 0.6rem 0 0; color: var(--muted); font-size: 0.84rem; }
+      .check-cta p code { color: var(--accent); }
+      .check-cta__signals {
         display: flex;
-        align-items: flex-start;
-        gap: 0.7rem;
-        padding: 0.9rem 1rem;
-        border-bottom: 1px solid var(--line);
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin: 1rem 0 0;
+        padding: 0;
+        list-style: none;
       }
-
-      .pane-icon {
-        display: grid;
-        width: 2rem;
-        height: 2rem;
-        flex: none;
-        place-items: center;
-        border: 1px solid var(--line);
-        border-radius: 0.6rem;
-        background: var(--panel-2);
-        color: var(--accent);
-      }
-
-      .pane-icon svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
-      .pane-icon--missing { color: var(--orange); }
-
-      .pane-title { display: block; max-width: 28ch; font-size: 0.95rem; line-height: 1.25; }
-      .pane-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.35rem; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.68rem; letter-spacing: 0.03em; }
-      .state-time { color: var(--muted); }
-      .state-chip {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.15rem 0.45rem;
+      .check-cta__signals li {
+        padding: 0.2rem 0.55rem;
         border: 1px solid var(--line);
         border-radius: 999px;
-        background: var(--panel-2);
+        background: var(--bg);
         color: var(--muted);
         font-size: 0.64rem;
       }
-      .state-chip.is-empty { border-color: var(--line); background: var(--panel-2); color: var(--orange); }
-      .state-chip.is-partial { border-color: var(--line); background: var(--panel-2); color: var(--accent); }
-      .state-chip.is-ready { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
-
-      iframe {
-        display: block;
-        width: 100%;
-        height: 590px;
-        border: 0;
-        background: var(--bg);
-      }
-
-      :root[data-theme="light"] iframe,
-      :root[data-theme="light"] .social-image {
-        filter: invert(1);
-      }
-
-      .playback-frame { pointer-events: none; }
-
-      .stage-labels {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 0.5rem;
-        margin-top: 0.8rem;
-        color: var(--muted);
-        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-        font-size: 0.63rem;
-        letter-spacing: 0.02em;
-      }
-
-      .stage-labels span {
-        padding-top: 0.4rem;
-        border-top: 1px solid var(--line);
-      }
-
-      .stage-labels span[aria-current="true"] {
-        color: var(--accent);
-        border-color: var(--accent);
-      }
-
-      .raw-section { padding: 2.5rem 0 2rem; }
-      .raw-heading { margin: 0.25rem 0 0; font-size: clamp(1.5rem, 3vw, 2rem); letter-spacing: -0.035em; }
-      .raw-lede { max-width: 68ch; margin: 0.5rem 0 1rem; color: var(--muted); font-size: 0.92rem; }
-      .raw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
-      .raw-pane { overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); }
-      .raw-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--line); }
-      .raw-head strong { font-size: 0.9rem; }
-      .raw-head a { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.66rem; text-decoration: none; }
-      .raw-frame { display: block; width: 100%; height: 340px; border: 0; background: var(--bg); }
-      .metrics {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 0.8rem;
-        padding: 1rem 0 3rem;
-      }
-
-      .metric {
+      .check-cta__signals li::before { content: "✓"; margin-right: 0.32rem; color: var(--accent); }
+      .check-cta__panel {
         padding: 1rem;
         border: 1px solid var(--line);
         border-radius: 0.85rem;
-        background: var(--panel);
+        background: var(--bg);
       }
-
-      .metric-label {
-        display: block;
-        margin-bottom: 0.4rem;
+      .check-cta__form { display: grid; gap: 0.45rem; }
+      .check-cta__form label {
         color: var(--muted);
-        font-size: 0.72rem;
-        letter-spacing: 0.08em;
+        font-size: 0.62rem;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
       }
-
-      .metric-values {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 0.6rem;
-        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      .check-cta__field { position: relative; }
+      .check-cta__field svg {
+        position: absolute;
+        top: 50%;
+        left: 0.72rem;
+        width: 0.95rem;
+        height: 0.95rem;
+        color: var(--muted);
+        pointer-events: none;
+        transform: translateY(-50%);
       }
+      .check-cta__form input {
+        width: 100%;
+        min-width: 0;
+        padding: 0.7rem 0.8rem 0.7rem 2.15rem;
+        border: 1px solid var(--line);
+        border-radius: 0.55rem;
+        background: var(--panel);
+        color: var(--text);
+        font: inherit;
+        font-size: 0.82rem;
+      }
+      .check-cta__form input::placeholder { color: var(--muted); }
+      .check-cta__form input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .check-cta__form .button { width: 100%; border: 0; cursor: pointer; }
+      .check-cta__fineprint {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.61rem;
+      }
+      .check-cta__fineprint::before {
+        content: "";
+        width: 0.34rem;
+        height: 0.34rem;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.6rem 0.9rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--text);
+        font-size: 0.82rem;
+        text-decoration: none;
+      }
+      .button--primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+      .button:hover { text-decoration: none; filter: brightness(1.05); }
 
-      .metric-values b { font-size: 1.2rem; }
-      .metric-values span { color: var(--muted); font-size: 0.72rem; }
+      .section { padding: 2.2rem 0; border-top: 1px solid var(--line); }
+      .section h2 { margin: 0.2rem 0 0; font-size: clamp(1.5rem, 3vw, 2.1rem); letter-spacing: -0.04em; }
+      .section > p,
+      .section-head p { margin: 0.6rem 0 0; color: var(--muted); font-size: 0.92rem; }
+
+      .timeline-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem; margin: 1.15rem 0 0.9rem; }
+      .play-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 0.8rem;
+        border: 0;
+        border-radius: 999px;
+        background: var(--accent);
+        color: var(--accent-ink);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+      #timeline { width: min(280px, 60vw); accent-color: var(--accent); }
+      .mode-note { color: var(--muted); font-size: 0.76rem; }
+      .stage-labels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; margin: 0 0 0.8rem; color: var(--muted); font-size: 0.62rem; }
+      .stage-labels span { padding-top: 0.35rem; border-top: 1px solid var(--line); }
+      .stage-labels span[aria-current="true"] { color: var(--accent); border-color: var(--accent); }
+
+      .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+      .pane { overflow: hidden; border: 1px solid var(--line); border-radius: 0.8rem; background: var(--panel); }
+      .pane-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--line); }
+      .pane-head strong { font-size: 0.82rem; }
+      .pane-head span { color: var(--muted); font-size: 0.68rem; }
+      .pane-head a { margin-left: auto; color: var(--accent); font-size: 0.66rem; text-decoration: none; }
+      .pane-body { position: relative; }
+      iframe { display: block; width: 100%; height: 420px; border: 0; background: #f2f0e9; }
+      .pane-empty {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+        background: var(--panel);
+        color: var(--muted);
+        font-size: 0.78rem;
+        text-align: center;
+      }
+      .pane-empty[hidden] { display: none; }
+
+
+      .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem; margin-top: 0.8rem; }
+      .metric { padding: 0.8rem; border: 1px solid var(--line); border-radius: 0.65rem; background: var(--panel); }
+      .metric-label { display: block; color: var(--muted); font-size: 0.64rem; letter-spacing: 0.07em; text-transform: uppercase; }
+      .metric-values { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.25rem; font-size: 0.82rem; }
       .metric-before { color: var(--orange); }
       .metric-after { color: var(--accent); }
 
-      .social-section { padding: 1rem 0 3rem; }
-      .social-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
-      .social-head h2 { margin: 0.25rem 0 0; font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -0.035em; }
-      .social-head p { max-width: 58ch; margin: 0.5rem 0 0; color: var(--muted); }
+      .social-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 1rem 0; }
+      .segment { display: inline-flex; padding: 0.2rem; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+      .segment button { padding: 0.4rem 0.65rem; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 0.75rem; }
+      .segment button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+      .social-note { color: var(--muted); font-size: 0.76rem; }
+      .social-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; }
+      .social-app { overflow: hidden; border: 1px solid var(--line); border-radius: 0.8rem; background: var(--panel); }
+      .social-app-head { display: flex; align-items: center; gap: 0.45rem; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--line); font-size: 0.75rem; }
+      .social-app-head small { margin-left: auto; color: var(--muted); font-size: 0.65rem; }
+      .social-body { padding: 0.7rem; }
+      .social-body > p { margin: 0 0 0.5rem; color: var(--text); font-size: 0.76rem; }
+      .link-card { overflow: hidden; border: 1px solid var(--line); border-radius: 0.55rem; background: var(--panel-2); }
+      .social-image,
+      .social-image-empty { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; }
+      .social-image[hidden],
+      .social-image-empty[hidden] { display: none; }
+      .social-image-empty { display: grid; place-items: center; border-bottom: 1px dashed var(--line); color: var(--muted); font-size: 0.65rem; }
+      .link-copy { padding: 0.5rem 0.6rem 0.6rem; }
+      .link-site { display: block; margin-bottom: 0.2rem; color: var(--muted); font-size: 0.6rem; letter-spacing: 0.04em; text-transform: uppercase; }
+      .link-title { display: block; font-size: 0.76rem; line-height: 1.3; }
+      .link-description { display: -webkit-box; overflow: hidden; margin: 0.25rem 0 0; color: var(--muted); font-size: 0.68rem; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+      .social-time { display: block; margin-top: 0.45rem; color: var(--muted); font-size: 0.6rem; text-align: right; }
 
-      .social-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; margin-bottom: 1rem; }
-      .social-note { color: var(--muted); font-size: 0.84rem; }
+      .tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 1rem 0 0; }
+      .tab { padding: 0.45rem 0.7rem; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 0.76rem; }
+      .tab[aria-selected="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+      .tab-panel { margin-top: 0.8rem; }
+      .tab-panel[hidden] { display: none; }
+      pre { overflow-x: auto; margin: 0; padding: 0.9rem; border: 1px solid var(--line); border-radius: 0.7rem; background: var(--editor); color: var(--text); font: inherit; font-size: 0.76rem; line-height: 1.55; }
+      .tok-comment { color: var(--syntax-comment); }
+      .tok-keyword { color: var(--syntax-keyword); }
+      .tok-string { color: var(--syntax-string); }
+      .tok-fn { color: var(--syntax-fn); }
+      .tok-number { color: var(--syntax-number); }
+      .tok-flag { color: var(--syntax-var); }
+      .tok-command { color: var(--syntax-type); }
+      .tok-attr { color: var(--syntax-var); }
+      p code, li code, .callout code { color: var(--accent); }
+      .callout { margin-top: 0.8rem; padding: 0.9rem; border: 1px solid var(--line); border-radius: 0.7rem; background: var(--panel); color: var(--muted); font-size: 0.82rem; }
+      .callout a { color: var(--accent); }
 
-      .social-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.9rem; }
-      .social-app {
-        overflow: hidden;
-        border: 1px solid var(--line);
-        border-radius: 1rem;
-        background: var(--panel);
-      }
+      .benefit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; margin-top: 1rem; }
+      .benefit-card { padding: 0.95rem; border: 1px solid var(--line); border-radius: 0.7rem; background: var(--panel); transition: border-color 120ms ease; }
+      .benefit-card:hover { border-color: var(--accent); }
+      .benefit-card h3 { margin: 0 0 0.4rem; font-size: 0.92rem; }
+      .benefit-card p { margin: 0; color: var(--muted); font-size: 0.82rem; }
+      .benefit-card a { display: inline-block; margin-top: 0.6rem; color: var(--accent); font-size: 0.72rem; text-decoration: none; }
+      .benefit-card a:hover { text-decoration: underline; }
 
-      .social-app-head { display: flex; align-items: center; gap: 0.55rem; padding: 0.75rem 0.85rem; border-bottom: 1px solid var(--line); }
-      .social-app-head strong { font-size: 0.85rem; }
-      .social-app-head small { margin-left: auto; color: var(--muted); font-size: 0.7rem; }
-      .app-icon { display: grid; width: 1.55rem; height: 1.55rem; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--panel-2); color: var(--text); font-size: 0.8rem; font-weight: 800; }
-      .app-icon svg { width: 1rem; height: 1rem; fill: currentColor; }
-      .app-icon--wa, .app-icon--x, .app-icon--fb { background: var(--panel-2); color: var(--text); }
-
-      .social-body { padding: 0.85rem; }
-      .social-body > p { margin: 0 0 0.65rem; font-size: 0.82rem; color: var(--text); }
-      .link-card { overflow: hidden; border: 1px solid var(--line); border-radius: 0.7rem; background: var(--panel-2); }
-      .social-image, .social-image-empty { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; }
-      .social-image[hidden], .social-image-empty[hidden] { display: none; }
-      .social-image-empty { display: grid; place-items: center; border: 1px dashed var(--line); background: var(--panel-2); color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.68rem; }
-      .link-copy { padding: 0.6rem 0.7rem 0.7rem; }
-      .link-site { display: block; margin-bottom: 0.25rem; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.62rem; letter-spacing: 0.03em; text-transform: uppercase; }
-      .link-title { display: block; font-size: 0.82rem; line-height: 1.3; }
-      .link-description { display: -webkit-box; overflow: hidden; margin: 0.3rem 0 0; color: var(--muted); font-size: 0.72rem; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-      .social-time { display: block; margin-top: 0.5rem; color: var(--muted); font-size: 0.65rem; text-align: right; }
-      .social-empty-note { display: block; margin-top: 0.5rem; color: var(--orange); font-family: ui-monospace, monospace; font-size: 0.65rem; }
-
-      .raw-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.75rem; font-size: 0.82rem; }
-      .raw-links a { color: var(--accent); text-decoration: none; }
-      .raw-links a:hover { text-decoration: underline; }
-
-      .seo-section { padding: 1.5rem 0 3rem; border-top: 1px solid var(--line); }
-      .seo-section h2 { max-width: 24ch; margin: 0.25rem 0 0; font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -0.04em; }
-      .seo-section > p { max-width: 72ch; margin: 0.75rem 0 0; color: var(--muted); font-size: 0.95rem; }
-      .seo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem; margin-top: 1.4rem; }
-      .seo-card { padding: 1.1rem; border: 1px solid var(--line); border-radius: 0.9rem; background: var(--panel); }
-      .seo-card h3 { margin: 0 0 0.55rem; font-size: 1.02rem; letter-spacing: -0.02em; }
-      .seo-card p { margin: 0; color: var(--muted); font-size: 0.9rem; }
-      .seo-section a { color: var(--accent); }
-      .seo-section > .seo-footer { margin-top: 1.2rem; }
-      .framework-heading { margin: 1.5rem 0 0.35rem; font-size: 1.15rem; letter-spacing: -0.02em; }
-      .framework-note { max-width: 72ch; margin: 0.35rem 0 0.75rem; color: var(--muted); font-size: 0.84rem; }
-      .framework-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 0.9rem; background: var(--panel); }
-      .framework-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 0.84rem; }
-      .framework-table caption { padding: 0.85rem 1rem 0.35rem; color: var(--muted); font-size: 0.76rem; text-align: left; }
-      .framework-table th, .framework-table td { padding: 0.6rem 0.8rem; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
-      .framework-table thead th { border-top: 0; color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
+      .framework-table-wrap { overflow-x: auto; margin-top: 0.8rem; border: 1px solid var(--line); border-radius: 0.8rem; background: var(--panel); }
+      .framework-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+      .framework-table th,
+      .framework-table td { padding: 0.5rem 0.7rem; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+      .framework-table thead th { border-top: 0; color: var(--muted); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; }
+      .framework-table tbody td:first-child { color: var(--text); }
       .framework-table tbody td { color: var(--muted); }
-      .framework-table tbody td:first-child { color: var(--text); white-space: nowrap; }
-      .framework-table code { font-size: 0.8em; }
+      .framework-table tbody td:last-child { color: var(--accent); }
+      .framework-note { margin: 0.7rem 0 0; color: var(--muted); font-size: 0.8rem; }
 
-      code { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 0.88em; }
+      .plain-list { display: grid; gap: 0.5rem; margin: 0.8rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.9rem; }
+      .faq { display: grid; gap: 1rem; margin-top: 1rem; }
+      .faq h3 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+      .faq p { margin: 0; color: var(--muted); font-size: 0.86rem; }
 
       footer {
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
         gap: 1rem;
-        padding: 1.25rem 0 2.5rem;
+        padding: 1.2rem 0 2.5rem;
         border-top: 1px solid var(--line);
         color: var(--muted);
-        font-size: 0.8rem;
+        font-size: 0.76rem;
       }
+      footer nav { display: flex; flex-wrap: wrap; gap: 0.9rem; }
+      footer a { text-decoration: none; }
+      footer a:hover { color: var(--accent); }
 
       @media (max-width: 900px) {
-        .compare, .social-grid, .raw-grid, .seo-grid { grid-template-columns: 1fr; }
+        .compare,
+        .social-grid,
+        .benefit-grid,
+        .check-cta { grid-template-columns: 1fr; }
         .metrics { grid-template-columns: 1fr 1fr; }
-        iframe { height: 480px; }
-        .raw-frame { height: 300px; }
+        iframe { height: 360px; }
       }
 
-      @media (max-width: 480px) {
+      @media (max-width: 640px) {
+        .topbar { flex-wrap: wrap; }
+        .header-actions { width: 100%; }
+        .header-actions a,
+        .header-actions button { flex: 1 1 auto; justify-content: center; }
+        .header-actions .icon-link { flex: 0 0 2rem; }
         .metrics { grid-template-columns: 1fr; }
-        .header-actions a { display: none; }
         .stage-labels { grid-template-columns: 1fr 1fr; }
+        .framework-table th,
+        .framework-table td { padding: 0.45rem 0.5rem; font-size: 0.75rem; }
       }
     </style>
   </head>
   <body>
     <div class="page">
-      <header>
-        <a class="brand" href="/" aria-label="snappy-prerender demo home">
-          <img class="brand-logo" src="/logo.png" alt="" />
-          <strong class="brand-name">snappy-prerender</strong>
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="snappy-prerender home">
+          <img src="/logo.png" alt="" />
+          <strong>snappy-prerender</strong>
         </a>
-        <div class="header-actions">
+        <nav class="header-actions" aria-label="Project links">
           <a href="/releases/">Releases</a>
-          <a href="https://github.com/sayakmukherjee080/snappy-prerender" target="_blank" rel="noreferrer">
+          <a href="https://github.com/sayakmukherjee080/snappy-prerender/blob/main/README.md">Docs</a>
+          <a class="icon-link" href="https://github.com/sayakmukherjee080/snappy-prerender" target="_blank" rel="noreferrer" aria-label="GitHub" title="GitHub">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.2.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.6 11.6 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.2c0 .4.2.7.8.6A11.5 11.5 0 0 0 12 .7Z"/></svg>
-            GitHub
           </a>
-          <a href="https://www.npmjs.com/package/snappy-prerender" target="_blank" rel="noreferrer" aria-label="npm package">
+          <a class="icon-link" href="https://www.npmjs.com/package/snappy-prerender" target="_blank" rel="noreferrer" aria-label="npm package" title="npm">
             <span class="npm-mark" aria-hidden="true">npm</span>
           </a>
-          <a href="https://www.producthunt.com/products/snappy-prerender" target="_blank" rel="noreferrer">
-            <span class="ph-mark" aria-hidden="true">P</span>
-            Product Hunt
+          <a class="icon-link" href="https://www.producthunt.com/products/snappy-prerender" target="_blank" rel="noreferrer" aria-label="Product Hunt" title="Product Hunt">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1.3 5h3.1a3.1 3.1 0 0 1 0 6.2h-1.5V17h-1.6V7Zm1.6 1.5v3.2h1.5a1.6 1.6 0 0 0 0-3.2h-1.5Z"/></svg>
           </a>
-          <button type="button" id="theme-toggle" aria-label="Switch to light theme">dark</button>
-        </div>
+          <button class="icon-link" type="button" id="theme-toggle" aria-label="Switch to light theme" title="Switch to light theme">
+            <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></svg>
+          </button>
+        </nav>
       </header>
 
       <main>
         <section class="hero">
-          <h1>snappy-prerender</h1>
-          <h3 class="hero-tagline">the framework-agnostic react-snap alternative</h3>
-          <p class="lede">snappy-prerender is the maintained, MIT-licensed react-snap alternative for existing single-page apps built with React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember or vanilla JavaScript. It prerenders your built SPA to static HTML at build time, verifies hydration, and produces output that Google and AI crawlers can read. No rewrite or runtime service is needed.</p>
-        </section>
-
-        <section class="seo-section" aria-label="snappy-prerender features">
-          <p class="eyebrow">Features</p>
-          <h2>What snappy-prerender does.</h2>
-          <div class="seo-grid">
-            <article class="seo-card">
-              <h3>Frameworks</h3>
-              <p>React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript, including React 16.8 through 19, Vite 6/7/8 and Create React App; any app that builds to a static directory works.</p>
-            </article>
-            <article class="seo-card">
-              <h3>SEO and discovery</h3>
-              <p>Per-route title, description, robots and canonical tags, Open Graph, Twitter cards, JSON-LD, a built-in Head layer that replaces React Helmet, client-side head reconciliation, sitemap and image sitemap output, sitemap lastmod, robots directives and AI-crawler-readable HTML.</p>
-            </article>
-            <article class="seo-card">
-              <h3>Prerendering</h3>
-              <p>Static HTML per route, directory or flat output, 404.html, route includes/excludes, crawl depth and route caps, route priority, route files, sitemap-seeded routes, per-route overrides, ready flag/selector/network settle, retries, traces and screenshots.</p>
-            </article>
-            <article class="seo-card">
-              <h3>Hydration</h3>
-              <p>Per-route hydration verification, framework detection, strict/re-render/skip policies, changed-only verification, verification-context reuse and per-route failure gates.</p>
-            </article>
-            <article class="seo-card">
-              <h3>Rendering</h3>
-              <p>Playwright with installed Chrome or Edge, hash-verified Chrome for Testing fallback, third-party blocking with host allowlists, authenticated storage state, custom viewport/user agent/HTTPS/launch arguments, scroll-to-load and animation freezing.</p>
-            </article>
-            <article class="seo-card">
-              <h3>Incremental builds</h3>
-              <p>Persistent route cache, API and vendor-asset revalidation, trust/maxAge/exclude modes, per-route opt-out, cache locking with stale-lock recovery and cache pruning for HTML, generated scripts and vendored assets.</p>
-            </article>
-            <article class="seo-card">
-              <h3>Locales</h3>
-              <p>Path and single-locale modes, hreflang and x-default, canonical and og:locale, per-locale routes, cookies/localStorage/storage state, and cookie/localStorage SEO-locale seeding.</p>
-            </article>
-            <article class="seo-card">
-              <h3>Output optimisation</h3>
-              <p>Inline or critical CSS, HTML/CSS minification, preconnect hints, font/image/module preload hints, preload manifest, strict/hash CSP, async and external scripts, tag/attribute surgery, build-origin metadata stripping and stale-route pruning.</p>
-            </article>
-            <article class="seo-card">
-              <h3>Assets and state</h3>
-              <p>Vendor localization for CSS, fonts, images and scripts with content hashing, SRI checks, byte/type limits and redirect/private-host rejection; CSS-in-JS and constructable stylesheet capture; form-state capture; Ajax replay through window.snapStore; self-contained asset gate.</p>
-            </article>
-            <article class="seo-card">
-              <h3>Auditing and operations</h3>
-              <p>Broken-link, SEO, sitemap and CSP audit; duplicate-content/title detection; empty-page and failed-request gates; content drift baselines; deterministic time/timezone/random seed; JSON reports; dry runs, destinations, base paths, serveCmd and bounded concurrency.</p>
-            </article>
-            <article class="seo-card">
-              <h3>Interfaces</h3>
-              <p>Vite plugin, CLI, interactive init wizard, react-snap config migration and programmatic API.</p>
-            </article>
+          <p class="eyebrow">MIT · build-time prerendering</p>
+          <h1>Your SPA, as static HTML crawlers can <span class="accent-word">read.</span></h1>
+          <h2 class="hero-tagline">Prerender every route at build time. Keep the app you already have.</h2>
+          <div class="install-row">
+            <code id="install-command">npm install --save-dev snappy-prerender</code>
+            <button type="button" id="copy-install">Copy</button>
+          </div>
+          <div class="hero-actions">
+            <a class="button button--primary" href="https://github.com/sayakmukherjee080/snappy-prerender" target="_blank" rel="noreferrer">GitHub</a>
+            <a class="button" href="https://www.npmjs.com/package/snappy-prerender" target="_blank" rel="noreferrer">npm</a>
+            <a class="button" href="#get-started">Get started</a>
           </div>
         </section>
 
-        <div class="timeline-controls">
-          <button type="button" class="play-button" id="play" aria-pressed="false">
-            <span class="play-icon" aria-hidden="true">▶</span>
-            <span id="play-label">Play loading sequence</span>
-          </button>
-          <input id="timeline" type="range" min="0" max="3" step="1" value="0" aria-label="Loading stage" />
-          <span class="mode-note" id="mode-note">t=0 ms · empty #root / HTML content</span>
-        </div>
-        <div class="stage-labels" id="stage-labels" aria-hidden="true">
-          <span data-stage-label="0" aria-current="true">0 ms · empty #root</span>
-          <span data-stage-label="1">500 ms · header</span>
-          <span data-stage-label="2">1,100 ms · hero</span>
-          <span data-stage-label="3">1,800 ms · full page</span>
-        </div>
-
-        <section class="compare" aria-label="Captured SPA and prerendered loading frames">
-          <article class="pane">
-            <div class="pane-head">
-              <span class="pane-icon pane-icon--missing" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4m-11-9 4 4m0-4-4 4"></path></svg>
-              </span>
-              <span>
-                <strong class="pane-title">Without snappy-prerender</strong>
-                <span class="pane-sub"><span class="state-time" id="before-time">t=0 ms</span><span class="state-chip is-empty" id="before-state">empty #root</span></span>
-              </span>
-            </div>
-            <iframe class="playback-frame" id="before-frame" title="Captured SPA load with an empty root" src="/playback/before-0.html" sandbox="allow-same-origin"></iframe>
-          </article>
-
-          <article class="pane">
-            <div class="pane-head">
-              <span class="pane-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4m-10-8 2 2 4-4"></path></svg>
-              </span>
-              <span>
-                <strong class="pane-title">With snappy-prerender</strong>
-                <span class="pane-sub"><span class="state-time" id="after-time">t=0 ms</span><span class="state-chip is-ready" id="after-state">HTML content</span></span>
-              </span>
-            </div>
-            <iframe class="playback-frame" id="after-frame" title="Captured prerendered load that hydrates" src="/playback/after-0.html" sandbox="allow-same-origin"></iframe>
-          </article>
+        <section class="check-cta" aria-labelledby="check-cta-title">
+          <div>
+            <p class="eyebrow"><span class="check-cta__pulse" aria-hidden="true"></span>Free site check</p>
+            <h2 id="check-cta-title">Is your website visible to crawlers <em>and agents?</em></h2>
+            <p>Test your site for free. See the title, description, Open Graph tags and <code>llms.txt</code> that crawlers receive.</p>
+            <ul class="check-cta__signals" aria-label="What the check reports">
+              <li>SEO metadata</li>
+              <li>Open Graph</li>
+              <li>llms.txt</li>
+            </ul>
+          </div>
+          <div class="check-cta__panel">
+            <form class="check-cta__form" action="/check/" method="get">
+              <label for="cta-url">Your website</label>
+              <div class="check-cta__field">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 12h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+                <input id="cta-url" name="url" type="text" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://your-site.com" aria-label="Website URL" required />
+              </div>
+              <button class="button button--primary" type="submit">Test your site free <span aria-hidden="true">→</span></button>
+              <p class="check-cta__fineprint">Free · No signup · Results in seconds</p>
+            </form>
+          </div>
         </section>
 
-        <section class="raw-section" aria-label="Raw crawler HTML">
-          <p class="eyebrow">Raw HTML</p>
-          <h2 class="raw-heading">The HTML a crawler receives.</h2>
-          <p class="raw-lede">These iframes show the raw HTML for the home page before a browser renders anything. The left file is the SPA build with an empty root. The right file is the same route after prerendering, with the content, title and metadata in the document.</p>
-          <div class="raw-grid">
-            <article class="raw-pane">
-              <div class="raw-head"><strong>Without snappy-prerender</strong><a href="/playback/raw-before.html" target="_blank" rel="noreferrer">open raw file ↗</a></div>
-              <iframe class="raw-frame" title="Raw SPA HTML with an empty root" src="/playback/raw-before.html" sandbox="allow-same-origin"></iframe>
+        <section class="section" id="proof">
+          <p class="eyebrow">Proof</p>
+          <h2>What Google and GPTBot receive from your SPA</h2>
+          <p>Captured from the React testcase. The left page is the SPA build. The right page is the same route after snappy-prerender. Both are served as ordinary HTML files.</p>
+          <div class="timeline-controls">
+            <button type="button" class="play-button" id="play" aria-pressed="false">
+              <span aria-hidden="true">▶</span>
+              <span id="play-label">Play loading sequence</span>
+            </button>
+            <input id="timeline" type="range" min="0" max="3" step="1" value="0" aria-label="Loading stage" />
+            <span class="mode-note" id="mode-note">t=0 ms · empty #root / HTML content</span>
+          </div>
+          <div class="stage-labels" id="stage-labels" aria-hidden="true">
+            <span data-stage-label="0" aria-current="true">0 ms · empty #root</span>
+            <span data-stage-label="1">500 ms · header</span>
+            <span data-stage-label="2">1,100 ms · hero</span>
+            <span data-stage-label="3">1,800 ms · full page</span>
+          </div>
+          <div class="compare">
+            <article class="pane">
+              <div class="pane-head">
+                <strong>SPA build</strong>
+                <span id="before-time">t=0 ms</span>
+                <span id="before-state">empty #root</span>
+                <a href="/playback/raw-before.html" target="_blank" rel="noreferrer">view source ↗</a>
+              </div>
+              <div class="pane-body">
+                <iframe class="playback-frame" id="before-frame" title="Captured SPA load with an empty root" src="/playback/before-0.html" sandbox="allow-same-origin"></iframe>
+                <div class="pane-empty" id="before-empty">Empty #root: JavaScript has not run yet</div>
+              </div>
             </article>
-            <article class="raw-pane">
-              <div class="raw-head"><strong>With snappy-prerender</strong><a href="/playback/raw-after.html" target="_blank" rel="noreferrer">open raw file ↗</a></div>
-              <iframe class="raw-frame" title="Raw prerendered HTML with page content" src="/playback/raw-after.html" sandbox="allow-same-origin"></iframe>
+            <article class="pane">
+              <div class="pane-head">
+                <strong>Prerendered build</strong>
+                <span id="after-time">t=0 ms</span>
+                <span id="after-state">HTML content</span>
+                <a href="/playback/raw-after.html" target="_blank" rel="noreferrer">view source ↗</a>
+              </div>
+              <iframe class="playback-frame" id="after-frame" title="Captured prerendered load that hydrates" src="/playback/after-0.html" sandbox="allow-same-origin"></iframe>
             </article>
           </div>
-          <p class="raw-links">
-            <a href="/before/">Open the live SPA build ↗</a>
-            <a href="/after/">Open the live prerendered build ↗</a>
-          </p>
-        </section>
-
-        <section class="metrics" aria-label="Crawler-visible metrics">
-          <div class="metric">
-            <span class="metric-label">H1 in HTML</span>
-            <div class="metric-values"><span class="metric-before" data-before="h1">0</span><span class="metric-after" data-after="h1">1</span></div>
-          </div>
-          <div class="metric">
-            <span class="metric-label">Text characters</span>
-            <div class="metric-values"><span class="metric-before" data-before="textLength">0</span><span class="metric-after" data-after="textLength">0</span></div>
-          </div>
-          <div class="metric">
-            <span class="metric-label">HTML bytes</span>
-            <div class="metric-values"><span class="metric-before" data-before="htmlBytes">0</span><span class="metric-after" data-after="htmlBytes">0</span></div>
-          </div>
-          <div class="metric">
-            <span class="metric-label">OG image in HTML</span>
-            <div class="metric-values"><span class="metric-before" data-before="ogImage">none</span><span class="metric-after" data-after="ogImage">none</span></div>
+          <div class="metrics" aria-label="Crawler-visible metrics">
+            <div class="metric"><span class="metric-label">H1 in HTML</span><div class="metric-values"><span class="metric-before" data-before="h1">0</span><span class="metric-after" data-after="h1">1</span></div></div>
+            <div class="metric"><span class="metric-label">Text characters</span><div class="metric-values"><span class="metric-before" data-before="textLength">0</span><span class="metric-after" data-after="textLength">0</span></div></div>
+            <div class="metric"><span class="metric-label">HTML bytes</span><div class="metric-values"><span class="metric-before" data-before="htmlBytes">0</span><span class="metric-after" data-after="htmlBytes">0</span></div></div>
+            <div class="metric"><span class="metric-label">OG image</span><div class="metric-values"><span class="metric-before" data-before="ogImage">none</span><span class="metric-after" data-after="ogImage">none</span></div></div>
           </div>
         </section>
 
-        <section class="social-section" aria-label="Social link previews">
-          <div class="social-head">
-            <div>
-              <p class="eyebrow">Link previews</p>
-              <h2>The same URL in three apps.</h2>
-              <p>WhatsApp, X and Facebook read the HTML for the title, description and image. AI crawlers read the same file. The SPA build has no Open Graph tags; the prerendered build does.</p>
-            </div>
-          </div>
+        <section class="section" id="previews">
+          <p class="eyebrow">Link previews</p>
+          <h2>What a link preview sees</h2>
+          <p>WhatsApp, X and Facebook read the HTML for the title, description and image. The default view below uses the metadata from the demo after build.</p>
           <div class="social-controls">
-            <div class="segment" role="group" aria-label="OG metadata state">
-              <button type="button" data-social="before" aria-pressed="true">Without OG tags</button>
-              <button type="button" data-social="after" aria-pressed="false">With OG tags</button>
+            <div class="segment" role="group" aria-label="Metadata state">
+              <button type="button" data-social="before" aria-pressed="false">Without metadata</button>
+              <button type="button" data-social="after" aria-pressed="true">With metadata</button>
             </div>
-            <span class="social-note" id="social-note">No og:image, og:description or twitter:card in the source.</span>
+            <span class="social-note" id="social-note">Title, description and image are in the source.</span>
           </div>
-
           <div class="social-grid">
             <article class="social-app">
-              <div class="social-app-head">
-                <span class="app-icon app-icon--wa" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3Zm0 16a7 7 0 0 1-3.6-1l-.3-.2-2.7.7.7-2.6-.2-.3A7 7 0 1 1 12 19Zm3.8-5.1c-.2-.1-1.2-.6-1.4-.7-.2-.1-.3-.1-.5.1l-.6.8c-.1.2-.3.2-.5.1a5.7 5.7 0 0 1-2.8-2.4c-.1-.2 0-.3.1-.5l.4-.5c.1-.2.1-.3 0-.5l-.6-1.4c-.2-.4-.4-.3-.5-.3h-.5c-.2 0-.5.1-.7.3-.2.3-.8.8-.8 1.9s.8 2.2 1 2.4c.1.2 1.6 2.5 4 3.5.6.2 1 .4 1.4.4.6.2 1.1.1 1.5.1.5-.1 1.2-.5 1.4-1 .2-.5.2-.9.1-1-.1-.1-.2-.2-.4-.3Z"/></svg></span>
-                <strong>WhatsApp</strong><small>now</small>
-              </div>
+              <div class="social-app-head"><strong>WhatsApp</strong><small>now</small></div>
               <div class="social-body">
-                <div class="wa-bubble">
-                  <p>Check the link preview.</p>
-                  <div class="link-card">
-                    <img class="social-image" data-social-image alt="" hidden />
-                    <div class="social-image-empty" data-social-empty>No og:image</div>
-                    <div class="link-copy"><span class="link-site" data-social-site>snappy-prerender</span><strong class="link-title" data-social-title>snappy-prerender</strong><p class="link-description" data-social-description>No og:description in the HTML.</p></div>
-                  </div>
-                  <span class="social-time">12:04</span>
+                <p>Check the link preview.</p>
+                <div class="link-card">
+                  <img class="social-image" data-social-image src="/og-card.png" alt="" />
+                  <div class="social-image-empty" data-social-empty hidden>No og:image</div>
+                  <div class="link-copy"><span class="link-site" data-social-site>snappy-prerender</span><strong class="link-title" data-social-title>snappy-prerender</strong><p class="link-description" data-social-description>Static prerendering for existing single-page apps.</p></div>
                 </div>
+                <span class="social-time">12:04</span>
               </div>
             </article>
-
             <article class="social-app">
-              <div class="social-app-head">
-                <span class="app-icon app-icon--x" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.2l-4.9-6.4L6.3 22H3.1l7.3-8.4L1.5 2h6.4l4.5 5.9L18.9 2Zm-1.1 18h1.7L7.4 3.9H5.6L17.8 20Z"/></svg></span>
-                <strong>X</strong><small>@snappy</small>
-              </div>
+              <div class="social-app-head"><strong>X</strong><small>@snappy</small></div>
               <div class="social-body">
                 <p>Testing the link preview on both builds.</p>
                 <div class="link-card">
-                  <img class="social-image" data-social-image alt="" hidden />
-                  <div class="social-image-empty" data-social-empty>No og:image</div>
-                  <div class="link-copy"><span class="link-site" data-social-site>snappy-prerender</span><strong class="link-title" data-social-title>snappy-prerender</strong><p class="link-description" data-social-description>No og:description in the HTML.</p></div>
+                  <img class="social-image" data-social-image src="/og-card.png" alt="" />
+                  <div class="social-image-empty" data-social-empty hidden>No og:image</div>
+                  <div class="link-copy"><span class="link-site" data-social-site>snappy-prerender</span><strong class="link-title" data-social-title>snappy-prerender</strong><p class="link-description" data-social-description>Static prerendering for existing single-page apps.</p></div>
                 </div>
                 <span class="social-time">12:04 · 1.2K views</span>
               </div>
             </article>
-
             <article class="social-app">
-              <div class="social-app-head">
-                <span class="app-icon app-icon--fb" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.5 1.6-1.5h1.7V5c-.3 0-1.3-.1-2.4-.1-2.4 0-4 1.4-4 4V11H7.7v3h2.7v8h3.1Z"/></svg></span>
-                <strong>Facebook</strong><small>Public</small>
-              </div>
+              <div class="social-app-head"><strong>Facebook</strong><small>Public</small></div>
               <div class="social-body">
-                <p>The feed reads the same Open Graph tags as the crawler.</p>
+                <p>The feed reads the same Open Graph tags.</p>
                 <div class="link-card">
-                  <img class="social-image" data-social-image alt="" hidden />
-                  <div class="social-image-empty" data-social-empty>No og:image</div>
-                  <div class="link-copy"><span class="link-site" data-social-site>snappy-prerender</span><strong class="link-title" data-social-title>snappy-prerender</strong><p class="link-description" data-social-description>No og:description in the HTML.</p></div>
+                  <img class="social-image" data-social-image src="/og-card.png" alt="" />
+                  <div class="social-image-empty" data-social-empty hidden>No og:image</div>
+                  <div class="link-copy"><span class="link-site" data-social-site>snappy-prerender</span><strong class="link-title" data-social-title>snappy-prerender</strong><p class="link-description" data-social-description>Static prerendering for existing single-page apps.</p></div>
                 </div>
                 <span class="social-time">Like · Comment · Share</span>
               </div>
@@ -717,88 +682,143 @@
           </div>
         </section>
 
-        
-
-        <section class="seo-section" aria-label="About snappy-prerender">
-          <p class="eyebrow">Why this matters</p>
-          <h2>Prerender a React SPA without SSR, or any other SPA.</h2>
-          <p>A client-rendered SPA ships an empty root and a JavaScript bundle. snappy-prerender runs after the build, opens every route in a real browser, and writes the settled DOM to static HTML. That is SPA prerendering without a server renderer, a framework migration or a runtime service. The same build works for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript.</p>
-          <div class="seo-grid">
-            <article class="seo-card">
-              <h3>Every major SPA framework</h3>
-              <p>Use the Vite plugin, the CLI or the init wizard to prerender Vite output, Create React App output or any static directory. The testcase matrix builds React 16.8 through 19, Vue 3.x, Svelte 3/5, Preact 10/11, Angular 10/22, Solid 0.20/1.9, Lit 1/3, Ember 3.22/7.3 and vanilla JavaScript.</p>
-            </article>
-            <article class="seo-card">
-              <h3>What AI crawlers see</h3>
-              <p>GPTBot, ClaudeBot and PerplexityBot fetch HTML without waiting for a browser render. The prerendered page gives them the content, title, description, canonical and Open Graph tags in the first response.</p>
-            </article>
-            <article class="seo-card">
-              <h3>A maintained react-snap replacement</h3>
-              <p>react-snap's last npm release was 2018 and its React 18 compatibility issue has been open since 2023. snappy-prerender keeps the build-time browser approach for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla JavaScript, with Playwright and per-route hydration verification.</p>
-            </article>
-            <article class="seo-card">
-              <h3>SPA SEO without SSR</h3>
-              <p>Prerendered HTML gives Google and AI crawlers a readable page on the first request for React, Vue, Svelte, Preact, Angular, Solid, Lit, Ember and vanilla apps. The client bundle still hydrates normally, so the app keeps its router and interactivity.</p>
-            </article>
+        <section class="section" id="get-started">
+          <p class="eyebrow">Get started</p>
+          <h2>Add it to your build</h2>
+          <div class="tabs" role="tablist" aria-label="Setup options">
+            <button class="tab" type="button" role="tab" id="tab-vite" aria-selected="true" aria-controls="panel-vite" data-tab="vite">Vite</button>
+            <button class="tab" type="button" role="tab" id="tab-cli" aria-selected="false" aria-controls="panel-cli" data-tab="cli">CLI</button>
+            <button class="tab" type="button" role="tab" id="tab-cra" aria-selected="false" aria-controls="panel-cra" data-tab="cra">Create React App</button>
           </div>
-          <h3 class="framework-heading">Validated frameworks and versions</h3>
-          <p class="framework-note">Validated on 2026-11-07 with snappy-prerender 2.11.4. The matrix builds the same 255-route site (254 public routes plus /404) with every implementation.</p>
+          <div class="tab-panel" id="panel-vite" role="tabpanel" aria-labelledby="tab-vite">
+            <pre><code><span class="tok-comment">// vite.config.js</span>
+<span class="tok-keyword">import</span> { defineConfig } <span class="tok-keyword">from</span> <span class="tok-string">'vite'</span>;
+<span class="tok-keyword">import</span> react <span class="tok-keyword">from</span> <span class="tok-string">'@vitejs/plugin-react'</span>;
+<span class="tok-keyword">import</span> snappy <span class="tok-keyword">from</span> <span class="tok-string">'snappy-prerender'</span>;
+
+<span class="tok-keyword">export default</span> <span class="tok-fn">defineConfig</span>({
+  plugins: [<span class="tok-fn">react</span>(), <span class="tok-fn">snappy</span>()],
+});</code></pre>
+          </div>
+          <div class="tab-panel" id="panel-cli" role="tabpanel" aria-labelledby="tab-cli" hidden>
+            <pre><code><span class="tok-command">npx</span> snappy-prerender <span class="tok-string">dist</span>
+<span class="tok-command">npx</span> snappy-prerender <span class="tok-string">dist</span> <span class="tok-flag">--sitemap</span> <span class="tok-flag">--llms-txt</span></code></pre>
+          </div>
+          <div class="tab-panel" id="panel-cra" role="tabpanel" aria-labelledby="tab-cra" hidden>
+            <pre><code>{
+  <span class="tok-attr">"scripts"</span>: {
+    <span class="tok-attr">"build"</span>: <span class="tok-string">"react-scripts build"</span>,
+    <span class="tok-attr">"postbuild"</span>: <span class="tok-string">"snappy-prerender build"</span>
+  }
+}</code></pre>
+          </div>
+          <p class="callout">Coming from react-snap? <a href="https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/react-snap-migration.md">Run the init wizard</a> to map your existing <code>reactSnap</code> block.</p>
+        </section>
+
+        <section class="section" id="benefits">
+          <p class="eyebrow">What you get</p>
+          <h2>Small build step. Crawler and LLM output.</h2>
+          <div class="benefit-grid" id="benefit-grid">__FEATURES__</div>
+        </section>
+
+        <section class="section" id="frameworks">
+          <p class="eyebrow">Frameworks</p>
+          <h2>Validated across the SPA stack</h2>
+          <p>The validation run builds the same 255-route site from the 18 implementations in <a href="https://github.com/sayakmukherjee080/snappy-prerender/tree/main/testcase">testcase/</a>. Oldest and newest validated versions:</p>
           <div class="framework-table-wrap">
             <table class="framework-table">
-              <caption>Acceptance-run versions and validation tiers.</caption>
-              <thead>
-                <tr><th>Framework</th><th>Version</th><th>Validation</th></tr>
-              </thead>
+              <thead><tr><th>Framework</th><th>Oldest</th><th>Newest</th></tr></thead>
               <tbody>
-                <tr><td>React</td><td>19.2.0</td><td>hydrated</td></tr>
-                <tr><td>Vue</td><td>3.5.44</td><td>boot verified / re-render allowed</td></tr>
-                <tr><td>Svelte</td><td>5.57.3</td><td>prerender-only</td></tr>
-                <tr><td>Preact</td><td>11.1.1</td><td>boot verified / re-render allowed</td></tr>
-                <tr><td>Angular</td><td>22.2.4</td><td>prerender-only</td></tr>
-                <tr><td>Solid</td><td>1.9.18</td><td>prerender-only</td></tr>
-                <tr><td>Lit</td><td>3.3.3</td><td>prerender-only</td></tr>
-                <tr><td>Ember</td><td>7.3.0</td><td>prerender-only</td></tr>
-                <tr><td>Vanilla</td><td>n/a</td><td>prerender-only</td></tr>
-                <tr><td>React</td><td>16.8.0</td><td>prerender-only</td></tr>
-                <tr><td>Vue</td><td>3.0.0</td><td>prerender-only</td></tr>
-                <tr><td>Preact</td><td>10.5.4</td><td>prerender-only</td></tr>
-                <tr><td>Svelte</td><td>3.29.0</td><td>prerender-only</td></tr>
-                <tr><td>Angular</td><td>10.1.6</td><td>prerender-only</td></tr>
-                <tr><td>Ember</td><td>3.22.0</td><td>prerender-only</td></tr>
-                <tr><td>Lit</td><td>1.3.0</td><td>prerender-only</td></tr>
-                <tr><td>Solid</td><td>0.20.3</td><td>prerender-only</td></tr>
-                <tr><td>React + Vite</td><td>19.2.0 + 6.0.0</td><td>hydrated</td></tr>
+                <tr><td>React</td><td>16.8.0</td><td>19.2.0</td></tr>
+                <tr><td>Vue</td><td>3.0.0</td><td>3.5.44</td></tr>
+                <tr><td>Svelte</td><td>3.29.0</td><td>5.57.3</td></tr>
+                <tr><td>Preact</td><td>10.5.4</td><td>11.1.1</td></tr>
+                <tr><td>Angular</td><td>10.1.6</td><td>22.2.4</td></tr>
+                <tr><td>Solid</td><td>0.20.3</td><td>1.9.18</td></tr>
+                <tr><td>Lit</td><td>1.3.0</td><td>3.3.3</td></tr>
+                <tr><td>Ember</td><td>3.22.0</td><td>7.3.0</td></tr>
+                <tr><td>Vanilla JavaScript</td><td>any</td><td>any</td></tr>
               </tbody>
             </table>
           </div>
-          <p class="seo-footer">Read the <a href="https://github.com/sayakmukherjee080/snappy-prerender#readme">README</a>, the <a href="https://github.com/sayakmukherjee080/snappy-prerender/blob/main/docs/react-snap-migration.md">react-snap migration guide</a>, or install with <code>npm install --save-dev snappy-prerender</code>.</p>
+          <p class="framework-note">React hydrates the prerendered markup, so the boot check reports real mismatches. Vue and Preact client-only builds replace it on boot and report an allowed re-render. Solid needs <code>framework: 'solid'</code>; some older Svelte and Lit builds need the option too. Per-version results are in the <a href="https://github.com/sayakmukherjee080/snappy-prerender/blob/main/testcase/README.md#validation-status">test matrix</a>.</p>
         </section>
 
+        <section class="section" id="not-for">
+          <p class="eyebrow">When not to use it</p>
+          <h2>Good fit, and bad fit</h2>
+          <ul class="plain-list">
+            <li>Your app already renders HTML on the server: Next.js, Remix, Astro, Nuxt, SvelteKit or Angular Universal.</li>
+            <li>The page depends on live per-request data or the logged-in user. Prerendered HTML is a build-time snapshot.</li>
+            <li>You need different HTML per visitor. Use a server renderer for that.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="faq">
+          <p class="eyebrow">FAQ</p>
+          <h2>Common questions</h2>
+          <div class="faq">
+            <div><h3>Is react-snap still maintained?</h3><p>No. Its last npm release was 1.23.0 in December 2018, its last source commit was in October 2019, and its React 18 compatibility issue has been open since April 2023.</p></div>
+            <div><h3>Can I get SEO for a React app without Next.js or server-side rendering?</h3><p>Yes. Prerendering gives crawlers full HTML for every route while the app stays a client-rendered SPA. It fits marketing pages, docs, blogs and CMS-backed content, but not pages that must differ per request.</p></div>
+            <div><h3>Do I need to change my app code?</h3><p>Usually not. If data loads after the first render, set <code>window.__prerenderReady = true</code> or pass a <code>waitFor</code> selector. Time and random values are frozen during the build.</p></div>
+            <div><h3>What if a page fetches data from an API?</h3><p>The data is fetched during the build and written into the HTML. With <code>cacheAjaxRequests</code>, responses are also written into the page so the client starts from the same data.</p></div>
+            <div><h3>Does it need Chrome?</h3><p>It uses installed Chrome or Edge when available. Otherwise it downloads Chrome for Testing once and caches it. You can pin the version and hash, or disable downloads.</p></div>
+            <div><h3>How is this different from a prerendering service?</h3><p>A service renders pages per request for bots on its own servers. snappy-prerender renders at build time and writes files any static host can serve.</p></div>
+          </div>
+        </section>
       </main>
 
       <footer>
-        <span>snappy-prerender: the framework-agnostic react-snap alternative</span>
-        <span>MIT · © smoldev</span>
+        <span>This page was prerendered with snappy-prerender.</span>
+        <nav aria-label="Footer">
+          <a href="/check/">Site checker</a>
+          <a href="/releases/">Releases</a>
+          <a href="https://github.com/sayakmukherjee080/snappy-prerender/blob/main/README.md">Docs</a>
+          <a href="https://github.com/sayakmukherjee080/snappy-prerender/blob/main/LICENSE">MIT license</a>
+          <a href="https://www.npmjs.com/package/snappy-prerender">npm</a>
+        </nav>
       </footer>
     </div>
 
     <script>
       const themeToggle = document.getElementById('theme-toggle');
-      const savedTheme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-      themeToggle.textContent = savedTheme;
-      themeToggle.setAttribute('aria-label', `Switch to ${savedTheme === 'dark' ? 'light' : 'dark'} theme`);
+      const currentTheme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+      const themeLabel = `Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} theme`;
+      themeToggle.setAttribute('aria-label', themeLabel);
+      themeToggle.setAttribute('title', themeLabel);
       themeToggle.addEventListener('click', () => {
         const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
         document.documentElement.dataset.theme = next;
-        try {
-          localStorage.setItem('snappy-demo-theme', next);
-        } catch {}
-        themeToggle.textContent = next;
-        themeToggle.setAttribute('aria-label', `Switch to ${next === 'dark' ? 'light' : 'dark'} theme`);
+        try { localStorage.setItem('snappy-demo-theme', next); } catch {}
+        const label = `Switch to ${next === 'dark' ? 'light' : 'dark'} theme`;
+        themeToggle.setAttribute('aria-label', label);
+        themeToggle.setAttribute('title', label);
       });
+
+      const copyButton = document.getElementById('copy-install');
+      copyButton.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText('npm install --save-dev snappy-prerender');
+          copyButton.textContent = 'Copied';
+          setTimeout(() => { copyButton.textContent = 'Copy'; }, 1600);
+        } catch {
+          copyButton.textContent = 'Copy failed';
+        }
+      });
+
+      for (const tab of document.querySelectorAll('[data-tab]')) {
+        tab.addEventListener('click', () => {
+          for (const other of document.querySelectorAll('[data-tab]')) {
+            const active = other === tab;
+            other.setAttribute('aria-selected', String(active));
+            document.getElementById(`panel-${other.dataset.tab}`).hidden = !active;
+          }
+        });
+      }
 
       const beforeFrame = document.getElementById('before-frame');
       const afterFrame = document.getElementById('after-frame');
+      const beforeEmpty = document.getElementById('before-empty');
       const beforeTime = document.getElementById('before-time');
       const afterTime = document.getElementById('after-time');
       const beforeState = document.getElementById('before-state');
@@ -809,72 +829,27 @@
       const modeNote = document.getElementById('mode-note');
       const stageLabels = [...document.querySelectorAll('[data-stage-label]')];
       const socialNote = document.getElementById('social-note');
-      let stages = [
-        {
-          time: 0,
-          afterTime: 0,
-          before: '/playback/before-0.html',
-          after: '/playback/after-0.html',
-          beforeState: 'empty #root',
-          afterState: 'HTML content',
-        },
-        {
-          time: 500,
-          afterTime: 0,
-          before: '/playback/before-1.html',
-          after: '/playback/after-0.html',
-          beforeState: 'header rendered',
-          afterState: 'HTML content',
-        },
-        {
-          time: 1100,
-          afterTime: 1100,
-          before: '/playback/before-2.html',
-          after: '/playback/after-1.html',
-          beforeState: 'hero rendered',
-          afterState: 'hydrated SPA',
-        },
-        {
-          time: 1800,
-          afterTime: 1100,
-          before: '/playback/before-3.html',
-          after: '/playback/after-1.html',
-          beforeState: 'full content',
-          afterState: 'hydrated SPA',
-        },
-      ];
+      let stages = [];
       let stageIndex = 0;
       let timers = [];
       let playing = false;
-      let comparison = null;
-      let socialMode = 'before';
+      let socialMode = 'after';
+      let autoplayed = false;
+      const isPrerender = navigator.userAgent === 'SnappyPrerender';
 
-      /**
-       * Moves both iframes to one captured stage.
-       * @param {number} index
-       */
       function setStage(index) {
         const stage = stages[index];
         if (!stage) return;
         stageIndex = index;
-        if (stage.beforeHtml) beforeFrame.srcdoc = stage.beforeHtml;
-        else beforeFrame.src = stage.before;
-        if (stage.afterHtml) afterFrame.srcdoc = stage.afterHtml;
-        else afterFrame.src = stage.after;
+        beforeFrame.srcdoc = stage.beforeHtml ?? '';
+        afterFrame.srcdoc = stage.afterHtml ?? '';
         const afterStageTime = stage.afterTime ?? stage.time;
         beforeTime.textContent = `t=${stage.time.toLocaleString()} ms`;
         afterTime.textContent = `t=${afterStageTime.toLocaleString()} ms`;
         beforeState.textContent = stage.beforeState;
         afterState.textContent = stage.afterState;
-        beforeState.className = `state-chip ${
-          index === 0 ? 'is-empty' : index === stages.length - 1 ? 'is-ready' : 'is-partial'
-        }`;
-        afterState.className = 'state-chip is-ready';
-        modeNote.textContent = `t=${stage.time.toLocaleString()} ms · ${
-          stage.beforeState
-        } / ${stage.afterState}${
-          afterStageTime === stage.time ? '' : ` at ${afterStageTime.toLocaleString()} ms`
-        }`;
+        beforeEmpty.hidden = index !== 0;
+        modeNote.textContent = `t=${stage.time.toLocaleString()} ms · ${stage.beforeState} / ${stage.afterState}`;
         timeline.value = String(index);
         for (const label of stageLabels) {
           const active = Number(label.dataset.stageLabel) === index;
@@ -883,9 +858,6 @@
         }
       }
 
-      /**
-       * Stops a running playback and resets the control.
-       */
       function stopPlayback() {
         playing = false;
         for (const timer of timers) clearTimeout(timer);
@@ -894,29 +866,21 @@
         playLabel.textContent = 'Play loading sequence';
       }
 
-      /**
-       * Replays the captured stages from t=0.
-       */
       function playTimeline() {
+        if (stages.length === 0) return;
         stopPlayback();
         playing = true;
         playButton.setAttribute('aria-pressed', 'true');
         playLabel.textContent = 'Pause playback';
         setStage(0);
         for (let index = 1; index < stages.length; index += 1) {
-          timers.push(
-            setTimeout(() => {
-              if (!playing) return;
-              setStage(index);
-              if (index === stages.length - 1) {
-                timers.push(
-                  setTimeout(() => {
-                    if (playing) stopPlayback();
-                  }, 700),
-                );
-              }
-            }, stages[index].time),
-          );
+          timers.push(setTimeout(() => {
+            if (!playing) return;
+            setStage(index);
+            if (index === stages.length - 1) {
+              timers.push(setTimeout(() => { if (playing) stopPlayback(); }, 700));
+            }
+          }, stages[index].time));
         }
       }
 
@@ -930,90 +894,85 @@
         setStage(Number(timeline.value));
       });
 
-      /**
-       * Applies one metadata state to all social cards.
-       * @param {'before' | 'after'} mode
-       */
+      function localImage(value) {
+        if (!value) return null;
+        try {
+          return new URL(value, window.location.href).pathname;
+        } catch {
+          return null;
+        }
+      }
+
       function setSocialMode(mode) {
         socialMode = mode;
         for (const button of document.querySelectorAll('[data-social]')) {
           button.setAttribute('aria-pressed', String(button.dataset.social === mode));
         }
-        const data = comparison?.social?.[mode] ?? {
-          title: 'snappy-prerender',
-          description: null,
-          image: null,
-          site: null,
-        };
-        const hasImage = Boolean(data.image);
+        const data = mode === 'after'
+          ? { title: 'snappy-prerender', description: 'Static prerendering for existing single-page apps.', image: localImage('/og-card.png'), site: 'snappy-prerender' }
+          : { title: 'snappy-prerender', description: null, image: null, site: 'snappy-prerender' };
         for (const image of document.querySelectorAll('[data-social-image]')) {
-          image.hidden = !hasImage;
-          if (hasImage) image.src = data.image;
+          image.hidden = !data.image;
+          if (data.image) image.src = data.image;
         }
-        for (const empty of document.querySelectorAll('[data-social-empty]')) {
-          empty.hidden = hasImage;
-        }
-        for (const node of document.querySelectorAll('[data-social-title]')) {
-          node.textContent = data.title || 'snappy-prerender';
-        }
-        for (const node of document.querySelectorAll('[data-social-description]')) {
-          node.textContent = data.description || 'No og:description in the HTML.';
-        }
-        for (const node of document.querySelectorAll('[data-social-site]')) {
-          node.textContent = data.site || 'snappy-prerender';
-        }
-        socialNote.textContent =
-          mode === 'after'
-            ? 'og:title, og:description, og:image and twitter:card are in the source.'
-            : 'No og:image, og:description or twitter:card in the source.';
+        for (const empty of document.querySelectorAll('[data-social-empty]')) empty.hidden = Boolean(data.image);
+        for (const node of document.querySelectorAll('[data-social-title]')) node.textContent = data.title;
+        for (const node of document.querySelectorAll('[data-social-description]')) node.textContent = data.description || 'No description in the HTML.';
+        for (const node of document.querySelectorAll('[data-social-site]')) node.textContent = data.site;
+        socialNote.textContent = mode === 'after'
+          ? 'Title, description and image are in the source.'
+          : 'No description or image in the source.';
       }
 
       for (const button of document.querySelectorAll('[data-social]')) {
         button.addEventListener('click', () => setSocialMode(button.dataset.social));
       }
 
+      setSocialMode('after');
+
       fetch('/playback.json')
         .then((response) => response.json())
         .then(async (data) => {
+          if (isPrerender) return;
           if (!Array.isArray(data.stages) || data.stages.length === 0) return;
-          stages = await Promise.all(
-            data.stages.map(async (stage) => ({
-              ...stage,
-              beforeHtml: await fetch(stage.before).then((response) => response.text()),
-              afterHtml: await fetch(stage.after).then((response) => response.text()),
-            })),
-          );
+          stages = await Promise.all(data.stages.map(async (stage) => ({
+            ...stage,
+            beforeHtml: await fetch(stage.before).then((response) => response.text()),
+            afterHtml: await fetch(stage.after).then((response) => response.text()),
+          })));
           timeline.max = String(stages.length - 1);
           setStage(0);
+          if (!isPrerender && !autoplayed) {
+            autoplayed = true;
+            setTimeout(playTimeline, 500);
+          }
         })
         .catch(() => {});
 
       fetch('/comparison.json')
         .then((response) => response.json())
         .then((data) => {
-          comparison = data;
           const values = {
-            before: {
-              h1: data.before.h1,
-              textLength: data.before.textLength,
-              htmlBytes: data.before.htmlBytes.toLocaleString(),
-              ogImage: data.before.ogImage ? 'present' : 'none',
-            },
-            after: {
-              h1: data.after.h1,
-              textLength: data.after.textLength,
-              htmlBytes: data.after.htmlBytes.toLocaleString(),
-              ogImage: data.after.ogImage ? 'present' : 'none',
-            },
+            before: { h1: data.before.h1, textLength: data.before.textLength, htmlBytes: data.before.htmlBytes.toLocaleString(), ogImage: data.social?.before?.image ? 'present' : 'none' },
+            after: { h1: data.after.h1, textLength: data.after.textLength, htmlBytes: data.after.htmlBytes.toLocaleString(), ogImage: data.social?.after?.image ? 'present' : 'none' },
           };
           for (const side of ['before', 'after']) {
             for (const [key, value] of Object.entries(values[side])) {
-              for (const node of document.querySelectorAll(`[data-${side}="${key}"]`)) {
-                node.textContent = value;
-              }
+              for (const node of document.querySelectorAll(`[data-${side}="${key}"]`)) node.textContent = value;
             }
           }
-          setSocialMode(socialMode);
+          if (data.social?.after) {
+            const after = data.social.after;
+            const imageSrc = localImage(after.image);
+            for (const node of document.querySelectorAll('[data-social-title]')) node.textContent = after.title || 'snappy-prerender';
+            for (const node of document.querySelectorAll('[data-social-description]')) node.textContent = after.description || 'No description in the HTML.';
+            for (const node of document.querySelectorAll('[data-social-site]')) node.textContent = after.site || 'snappy-prerender';
+            for (const image of document.querySelectorAll('[data-social-image]')) {
+              image.hidden = !imageSrc;
+              if (imageSrc) image.src = imageSrc;
+            }
+            for (const empty of document.querySelectorAll('[data-social-empty]')) empty.hidden = Boolean(imageSrc);
+          }
         })
         .catch(() => {});
     </script>

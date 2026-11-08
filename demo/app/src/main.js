@@ -235,10 +235,11 @@ function renderStage(path, stage) {
           <h2>What snappy-prerender does.</h2>
           <div class="cards">
             ${FEATURES.map(
-              ([title, copy]) => `
+              ([title, copy, href]) => `
                 <article class="card">
                   <h2>${title}</h2>
                   <p>${copy}</p>
+                  ${href ? `<a href="${href}" target="_blank" rel="noreferrer">Read the docs ↗</a>` : ''}
                 </article>`,
             ).join('')}
           </div>

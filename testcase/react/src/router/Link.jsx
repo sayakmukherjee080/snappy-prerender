@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useRouter } from './context.jsx';
+import { withBase } from './store.js';
 
 /**
  * Renders an in-app anchor with route prefetching, transition navigation, and browser-native
@@ -41,7 +42,7 @@ export function Link({ to, children, onClick, className, ...rest }) {
 
   return (
     <a
-      href={to}
+      href={withBase(to)}
       className={className}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}

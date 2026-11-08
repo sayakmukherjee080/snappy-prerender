@@ -150,6 +150,7 @@
 
 .arch__code {
   display: grid;
+  min-width: 0;
   gap: 1.25rem;
 }
 
