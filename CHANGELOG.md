@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Earlier history predates the release tags; see the Git history for those changes.
 
+## [2.12.3] - 2026-11-08
+
+### Changed
+
+- Rebuilt the README and added focused docs for configuration, head metadata, hydration, output, locales and audit. No runtime changes.
+
 ## [2.12.2] - 2026-11-08
 
 ### Changed
